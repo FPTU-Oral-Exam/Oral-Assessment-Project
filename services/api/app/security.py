@@ -56,7 +56,11 @@ def issue_tokens(db: Session, user: User):
 
 def current_user(request: Request, db: Session = Depends(get_db)):
     raw = request.headers.get("authorization", "")
-    token = raw[7:] if raw.startswith("Bearer ") else request.cookies.get("access_token")
+    # Check Bearer token first (Student App)
+    token = raw[7:] if raw.startswith("Bearer ") else None
+    # Fallback to HTTP-only cookie (Staff Portal)
+    if not token:
+        token = request.cookies.get("auth_token") or request.cookies.get("access_token")
     if not token:
         fail(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
     try:
@@ -127,8 +131,16 @@ def cookies(response, access, refresh):
 
     cfg = runtime_settings()
     secure = cfg.cookie_secure or cfg.public_origin.startswith("https://")
+
+    # HTTP-only cookie for Staff Portal (primary)
     response.set_cookie(
-        "access_token", access, httponly=True, secure=secure, samesite="lax", max_age=cfg.access_minutes * 60
+        "auth_token", access,
+        httponly=True, secure=secure, samesite="strict", max_age=cfg.access_minutes * 60
+    )
+    # Legacy cookies for backward compatibility
+    response.set_cookie(
+        "access_token", access,
+        httponly=True, secure=secure, samesite="lax", max_age=cfg.access_minutes * 60
     )
     response.set_cookie(
         "refresh_token",
