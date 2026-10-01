@@ -12,10 +12,13 @@
     "./utils": "./src/utils/index.ts"
   },
   "scripts": {
+    "test": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/node": "^22.20.2",
     "typescript": "^5.0.0",
+    "vitest": "^5.0.3",
     "zod": "^3.22.0"
   }
 }
