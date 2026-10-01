@@ -87,6 +87,9 @@ services:
     depends_on:
       api:
         condition: service_healthy
+  # IMPORTANT: When admin-web is renamed to staff-portal:
+  # - Update web.build.context to: apps/staff-portal
+  # - Update web.build.dockerfile to: apps/staff-portal/Dockerfile
   web:
     build:
       context: .

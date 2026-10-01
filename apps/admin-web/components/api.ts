@@ -1,98 +1,42 @@
-export type User = {
-  id: string;
-  username: string;
-  email?: string | null;
-  name: string;
-  role: "ADMIN" | "TEACHER" | "STUDENT" | "REVIEWER";
-};
-export type Course = {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  status: string;
-};
+// Import types from shared package
+import type {
+  User,
+  Course,
+  Topic,
+  Criterion,
+  Blueprint,
+  Exam,
+  Doc,
+  Chapter,
+  Workspace,
+  Sitting,
+  Chunk,
+  Assessment,
+  StudentExam,
+  ExamSession,
+} from "@oralai/shared";
+
+// Types that need to stay local (not yet in shared package)
 export type Outcome = {
   id: string;
   code: string;
   description: string;
   weight: number;
 };
-export type Topic = {
-  id: string;
-  name: string;
-  description: string;
-  learning_outcome_id: string;
-  learning_outcome_ids: string[];
-  chapter_ids: string[];
-  document_ids: string[];
-};
-export type Criterion = {
-  name: string;
-  description: string;
-  max_score: number;
-  weight: number;
-};
+
 export type Rubric = {
   id: string;
   name: string;
   version: number;
   criteria: Criterion[];
 };
-export type Blueprint = { topic_id: string; difficulty: string; count: number };
-export type Exam = {
-  max_attempts: number | null;
-  id: string;
-  name: string;
-  status: string;
-  time_limit: number;
-  blueprint: Blueprint[];
-  rubric_id: string;
-  questions?: {
-    text: string;
-    english_terms: { term: string; meaning: string }[];
-  }[];
-};
-export type Doc = {
-  id: string;
-  filename: string;
-  status: string;
-  error: string | null;
-  topic_id: string | null;
-  kind: "TEXTBOOK" | "SUPPLEMENT";
-  page_count: number | null;
-};
-export type Chapter = {
-  id: string;
-  document_id: string;
-  title: string;
-  level: number;
-  start_page: number;
-  end_page: number;
-  source: string;
-};
+
 export type SpeechPolicy = {
   provider: "local" | "google" | "gemini" | "local_server";
   preprocessing: "off" | "denoise";
   language: "vi" | "en";
 };
-export type Workspace = {
-  chapters: Chapter[];
-  outcomes: Outcome[];
-  topics: Topic[];
-  documents: Doc[];
-  rubrics: Rubric[];
-  exams: Exam[];
-};
-export type Sitting = {
-  id: string;
-  attempt_number: number;
-  status: string;
-  created_at: number;
-  started_at: number | null;
-  completed_at: number | null;
-  final_score: number | null;
-};
+
 export type Result = {
   attempt_number: number;
   created_at: number;
@@ -108,26 +52,7 @@ export type Result = {
   student_name: string;
   final_score: number | null;
 };
-export type Chunk = {
-  id: string;
-  content: string;
-  page: number;
-  document_id: string;
-  heading?: string | null;
-};
-export type Assessment = {
-  score: number | null;
-  confidence: number | null;
-  status?: "COMPLETED" | "FAILED" | "NOT_GRADED";
-  error?: string;
-  error_code?: string;
-  grading_exam_id?: string;
-  review_required: boolean;
-  reasoning_summary: string;
-  model: string;
-  criteria?: { name: string; score: number; comment: string }[];
-  retrieved_chunks?: Chunk[];
-};
+
 export type Review = Result & {
   history: Sitting[];
   snapshot: {
@@ -164,40 +89,23 @@ export type Review = Result & {
     }[];
   }[];
 };
-export type StudentExam = {
-  attempt_count: number;
-  remaining_attempts: number | null;
-  can_start_new: boolean;
-  history: Sitting[];
-  course_id?: string;
-  course_name?: string;
-  practice?: boolean;
-  id: string;
-  name: string;
-  time_limit: number;
-  question_count: number;
-  session_id: string | null;
-  status: string;
-};
-export type ExamSession = {
-  attempt_number: number;
-  practice?: boolean;
-  grading_message?: string | null;
-  id: string;
-  exam_name: string;
-  status: string;
-  started_at: number | null;
-  time_limit: number;
-  server_time: number;
-  final_score: number | null;
-  question_count: number;
-  answered_count: number;
-  current_attempt: {
-    id: string;
-    sequence: number;
-    text: string;
-    status: string;
-  } | null;
+
+// Re-export shared types for backward compatibility
+export type {
+  User,
+  Course,
+  Topic,
+  Criterion,
+  Blueprint,
+  Exam,
+  Doc,
+  Chapter,
+  Workspace,
+  Sitting,
+  Chunk,
+  Assessment,
+  StudentExam,
+  ExamSession,
 };
 
 let refreshing: Promise<Response> | null = null;

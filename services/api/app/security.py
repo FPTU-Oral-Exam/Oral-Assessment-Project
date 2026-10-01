@@ -56,7 +56,11 @@ def issue_tokens(db: Session, user: User):
 
 def current_user(request: Request, db: Session = Depends(get_db)):
     raw = request.headers.get("authorization", "")
-    token = raw[7:] if raw.startswith("Bearer ") else request.cookies.get("access_token")
+    # Check Bearer token first (Student App)
+    token = raw[7:] if raw.startswith("Bearer ") else None
+    # Fallback to HTTP-only cookie (Staff Portal)
+    if not token:
+        token = request.cookies.get("auth_token") or request.cookies.get("access_token")
     if not token:
         fail(401, "UNAUTHENTICATED", "Vui lòng đăng nhập")
     try:
@@ -92,23 +96,24 @@ def roles(*allowed):
     return guard
 
 
-staff = roles("ADMIN", "TEACHER", "REVIEWER")
-editor = roles("ADMIN", "TEACHER")
+staff = roles("SYSTEM_ADMIN", "EXAMINER", "TEACHER")
+editor = roles("SYSTEM_ADMIN", "EXAMINER", "TEACHER")
 student = roles("STUDENT")
-admin = roles("ADMIN")
+admin = roles("SYSTEM_ADMIN")
+examiner = roles("SYSTEM_ADMIN", "EXAMINER")
 
 
 def course_access(db, course_id, user):
     course = db.get(Course, course_id)
     if not course:
         fail(404, "NOT_FOUND", "Không tìm thấy môn học")
-    if user.role not in {"ADMIN", "REVIEWER"} and course.owner_id != user.id:
+    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"} and course.owner_id != user.id:
         fail(403, "FORBIDDEN", "Bạn không phụ trách môn học này")
     return course
 
 
 def public_user(user):
-    return {k: getattr(user, k) for k in ("id", "username", "name", "role", "status", "email")}
+    return {k: getattr(user, k) for k in ("id", "username", "name", "role", "status", "email", "roles")} | {"roles": [user.role]}
 
 
 def by_id(db, model, key, lock=False):
@@ -126,8 +131,16 @@ def cookies(response, access, refresh):
 
     cfg = runtime_settings()
     secure = cfg.cookie_secure or cfg.public_origin.startswith("https://")
+
+    # HTTP-only cookie for Staff Portal (primary)
     response.set_cookie(
-        "access_token", access, httponly=True, secure=secure, samesite="lax", max_age=cfg.access_minutes * 60
+        "auth_token", access,
+        httponly=True, secure=secure, samesite="strict", max_age=cfg.access_minutes * 60
+    )
+    # Legacy cookies for backward compatibility
+    response.set_cookie(
+        "access_token", access,
+        httponly=True, secure=secure, samesite="lax", max_age=cfg.access_minutes * 60
     )
     response.set_cookie(
         "refresh_token",

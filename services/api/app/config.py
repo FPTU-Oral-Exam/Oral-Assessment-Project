@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     access_minutes: int = 15
     refresh_days: int = 7
     cookie_secure: bool = False
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3000,http://localhost:5173"  # Staff Portal, Student App (dev)
     storage_backend: str = "local"
     data_dir: str = ".data"
     s3_endpoint: str = "http://minio:9000"

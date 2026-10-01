@@ -1,24 +1,22 @@
 {
   "name": "ai-oral-assessment-platform",
-  "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/admin-web",
-    "apps/desktop"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "dev": "npm run dev -w apps/admin-web",
-    "build": "npm run build -w apps/admin-web",
-    "typecheck": "npm run typecheck -w apps/admin-web",
-    "lint": "npm run lint -w apps/admin-web",
-    "desktop": "npm run start -w apps/desktop",
-    "test:e2e": "playwright test",
-    "test:audio": "node --experimental-strip-types --test tests/noise-check.test.mjs",
-    "test:desktop": "node --test tests/desktop-config.test.cjs tests/desktop-close.test.cjs",
-    "test:desktop-exit": "node --test tests/desktop-exit.integration.cjs"
+    "typecheck": "npm run typecheck -w packages/shared",
+    "build": "npm run build -w packages/shared",
+    "test": "npm run test -w packages/shared",
+    "desktop": "npm run desktop -w apps/desktop",
+    "test:e2e": "npm run test:e2e -w apps/desktop",
+    "test:audio": "npm run test:audio -w apps/desktop",
+    "test:desktop": "npm run test:desktop -w apps/desktop"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.1",
-    "prettier": "^3.9.6"
+    "@playwright/test": "^1.45.0",
+    "prettier": "^3.3.3"
   }
 }
