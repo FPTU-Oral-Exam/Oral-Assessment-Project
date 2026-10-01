@@ -15,7 +15,7 @@ class Login(Input):
 class UserIn(Login):
     password: str = Field(min_length=12, max_length=128)
     name: str = Field(min_length=1, max_length=150)
-    role: Literal["ADMIN", "TEACHER", "STUDENT", "REVIEWER"] = "STUDENT"
+    role: Literal["SYSTEM_ADMIN", "EXAMINER", "TEACHER", "STUDENT"] = "STUDENT"
 
 
 class CourseIn(Input):
@@ -188,4 +188,4 @@ class GradeOutput(Input):
 
 
 class RoleIn(Input):
-    role: Literal["ADMIN", "TEACHER", "STUDENT", "REVIEWER"]
+    role: Literal["SYSTEM_ADMIN", "EXAMINER", "TEACHER", "STUDENT"]

@@ -38,7 +38,7 @@ from .models import (
 )
 from .retakes import allowance, history_row, sessions_for
 from .runtime_settings import settings
-from .security import admin, by_id, course_access, editor, fail, hasher, public_user, staff
+from .security import admin, by_id, course_access, editor, examiner, fail, hasher, public_user, staff
 from .speech import google_ready, policy
 
 router = APIRouter()
@@ -50,8 +50,6 @@ def data(row, *fields):
 
 def course_list(db, user):
     query = select(Course).order_by(Course.created_at.desc())
-    if user.role == "TEACHER":
-        query = query.where(Course.owner_id == user.id)
     return db.scalars(query).all()
 
 
@@ -72,7 +70,7 @@ def dashboard(db: Session = Depends(get_db), user=Depends(staff)):
 @router.get("/users")
 def users(db: Session = Depends(get_db), user=Depends(staff)):
     query = select(User).order_by(User.created_at.desc())
-    if user.role != "ADMIN":
+    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"}:
         query = query.where(User.role == "STUDENT")
     return [public_user(u) for u in db.scalars(query)]
 
@@ -114,7 +112,7 @@ def delete_course(
     db: Session = Depends(get_db), user=Depends(editor),
 ):
     if body is not None:
-        if user.role != "ADMIN":
+        if user.role not in {"SYSTEM_ADMIN", "EXAMINER"}:
             fail(403, "FORBIDDEN", "Chỉ admin được xóa toàn bộ môn học và dữ liệu liên quan")
         return delete_course_tree(db, course_id, body.confirm_code, user)
     row = course_access(db, course_id, user)
@@ -436,7 +434,7 @@ def validate_exam(db, body, user):
 @router.post("/exams", status_code=201)
 def create_exam(body: s.ExamIn, db: Session = Depends(get_db), user=Depends(editor)):
     validate_exam(db, body, user)
-    if user.role != "ADMIN" and body.max_attempts != 1:
+    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"} and body.max_attempts != 1:
         fail(403, "FORBIDDEN", "Chỉ admin được cấu hình số lượt làm bài")
     row = Exam(**body.model_dump())
     db.add(row)
@@ -453,7 +451,7 @@ def update_exam(key: str, body: s.ExamIn, db: Session = Depends(get_db), user=De
     if body.course_id != row.course_id:
         fail(422, "CROSS_COURSE", "Không chuyển đề thi sang môn học khác")
     validate_exam(db, body, user)
-    if user.role != "ADMIN" and body.max_attempts != row.max_attempts:
+    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"} and body.max_attempts != row.max_attempts:
         fail(403, "FORBIDDEN", "Chỉ admin được cấu hình số lượt làm bài")
     for field, value in body.model_dump().items():
         setattr(row, field, value)
@@ -782,10 +780,10 @@ def request_transcription_review(key, body, db, user, provider):
 @router.put("/users/{key}/role")
 def change_role(key: str, body: s.RoleIn, db: Session = Depends(get_db), user=Depends(admin)):
     admins = db.scalars(
-        select(User).where(User.role == "ADMIN", User.status == "ACTIVE").order_by(User.id).with_for_update()
+        select(User).where(User.role == "SYSTEM_ADMIN", User.status == "ACTIVE").order_by(User.id).with_for_update()
     ).all()
     row = by_id(db, User, key, lock=True)
-    if row.role == "ADMIN" and body.role != "ADMIN" and row.status == "ACTIVE" and len(admins) <= 1:
+    if row.role == "SYSTEM_ADMIN" and body.role != "SYSTEM_ADMIN" and row.status == "ACTIVE" and len(admins) <= 1:
         fail(409, "LAST_ADMIN", "Cần giữ ít nhất một quản trị viên đang hoạt động")
     before = row.role
     row.role = body.role
