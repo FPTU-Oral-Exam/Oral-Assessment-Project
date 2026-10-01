@@ -18,7 +18,7 @@ from .grading import GradingError, check_config
 from .models import Assignment, Attempt, Audit, Course, CourseEnrollment, Exam, ExamSession, Upload
 from .practice import COURSE_ID
 from .retakes import ACTIVE, allowance, history_row, sessions_for
-from .security import by_id, course_access, current_user, fail
+from .security import by_id, course_access, current_user, fail, student
 from .worker import finalize
 
 router = APIRouter()
@@ -442,3 +442,80 @@ def evidence(key: str, request: Request, db: Session = Depends(get_db), user=Dep
     if status == 206:
         headers["Content-Range"] = f"bytes {start}-{end}/{row.size}"
     return StreamingResponse(stream(), status_code=status, media_type=row.mime_type, headers=headers)
+
+
+@router.get("/student/results")
+def student_results(db: Session = Depends(get_db), user=Depends(student)):
+    """Get all results for current student"""
+    sessions = db.scalars(
+        select(ExamSession)
+        .where(
+            ExamSession.student_id == user.id,
+            ExamSession.status.in_(["COMPLETED", "REVIEW_REQUIRED"]),
+            ExamSession.deleted_at.is_(None),
+        )
+        .order_by(ExamSession.completed_at.desc())
+    ).all()
+
+    result = []
+    for session in sessions:
+        exam = db.get(Exam, session.exam_id)
+        result.append({
+            "session_id": session.id,
+            "exam_id": session.exam_id,
+            "exam_name": exam.name,
+            "status": session.status,
+            "score": session.final_score,
+            "completed_at": session.completed_at,
+        })
+    return result
+
+
+@router.get("/student/results/{session_id}")
+def student_result_detail(
+    session_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(student)
+):
+    """Get specific result details for current student"""
+    session = owned_session(db, session_id, user)
+
+    if session.status not in ["COMPLETED", "REVIEW_REQUIRED"]:
+        fail(403, "NOT_FINISHED", "Kết quả chưa có sẵn")
+
+    exam = by_id(db, Exam, session.exam_id)
+    attempts = db.scalars(
+        select(Attempt)
+        .where(Attempt.session_id == session_id)
+        .order_by(Attempt.sequence)
+    ).all()
+
+    grading_message = None
+    if exam.snapshot.get("practice"):
+        grading_message = "Bài luyện tập không tính điểm."
+    elif session.status == "REVIEW_REQUIRED":
+        grading_message = "Bài cần giảng viên xem lại trước khi công bố điểm chính thức."
+
+    return {
+        "session_id": session.id,
+        "exam_name": exam.name,
+        "status": session.status,
+        "score": session.final_score,
+        "completed_at": session.completed_at,
+        "grading_message": grading_message,
+        "attempts": [
+            {
+                "sequence": a.sequence,
+                "question": a.question,
+                "transcript": a.transcript,
+                "stt_confidence": a.stt_confidence,
+                "status": a.status,
+                "question_score": a.assessment.get("score") if a.assessment else None,
+                "assessment": a.assessment,
+                "audio_url": f"/api/evidence/{u.id}/content" if (u := db.scalar(
+                    select(Upload).where(Upload.attempt_id == a.id, Upload.status == "COMPLETED")
+                )) else None,
+            }
+            for a in attempts
+        ],
+    }
