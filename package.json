@@ -8,6 +8,15 @@
   "scripts": {
     "dev": "npm run dev -w apps/admin-web",
     "typecheck": "npm run typecheck -w packages/shared",
-    "build": "npm run build -w packages/shared"
+    "build": "npm run build -w packages/shared",
+    "test": "npm run test -w packages/shared",
+    "desktop": "npm run desktop -w apps/desktop",
+    "test:e2e": "npm run test:e2e -w apps/desktop",
+    "test:audio": "npm run test:audio -w apps/desktop",
+    "test:desktop": "npm run test:desktop -w apps/desktop"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.0",
+    "prettier": "^3.3.3"
   }
 }
