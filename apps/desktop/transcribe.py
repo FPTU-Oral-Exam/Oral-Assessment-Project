@@ -1,4 +1,10 @@
-"""Offline PhoWhisper helper. The installer includes runtime and model weights."""
+"""Offline Whisper helper for desktop preview (English-only).
+
+PTE APPROACH:
+- Desktop is for PREVIEW ONLY (legacy)
+- Server handles all STT for actual grading
+- Desktop uses Whisper-large-v3-turbo for speed
+"""
 
 import json
 import math
@@ -15,6 +21,8 @@ try:
 except ModuleNotFoundError:
     from audio_processing import prepare_audio
 
+MODEL_NAME = "Whisper-large-v3-turbo"
+
 
 def model_path():
     default = (
@@ -25,7 +33,7 @@ def model_path():
     path = Path(os.getenv("ORAL_STT_MODEL", str(default)))
     if not (path / "model.bin").is_file():
         raise FileNotFoundError(
-            "Missing bundled PhoWhisper model. Reinstall the full desktop package."
+            "Missing bundled Whisper model. Reinstall the full desktop package."
         )
     return path
 
@@ -36,7 +44,7 @@ def main():
         str(path), device="cpu", compute_type="int8", local_files_only=True
     )
     if sys.argv[1:] == ["--check"]:
-        print(json.dumps({"ready": True, "model": "PhoWhisper-small", "offline": True}))
+        print(json.dumps({"ready": True, "model": MODEL_NAME, "offline": True}))
         return
     with tempfile.TemporaryDirectory(prefix="oral-desktop-stt-") as folder:
         clean = Path(folder) / "speech.wav"
@@ -44,7 +52,7 @@ def main():
         metadata = prepare_audio(Path(sys.argv[1]), clean, "off")
         segments, _ = model.transcribe(
             str(clean),
-            language=os.getenv("STT_LANGUAGE", "vi"),
+            language=os.getenv("STT_LANGUAGE", "en"),  # English-only for PTE
             task="transcribe",
             vad_filter=True,
             beam_size=5,
@@ -61,7 +69,7 @@ def main():
                 "transcript": text,
                 "stt_confidence": round(confidence, 4),
                 "provider": "local",
-                "model": "PhoWhisper-small",
+                "model": MODEL_NAME,
                 **metadata,
             },
             # Electron reads a pipe, which defaults to an ANSI code page on
