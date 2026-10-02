@@ -25,6 +25,8 @@
   "exclude": [
     "src/main.ts",
     "src/preload.ts",
+    "src/pages/ExamRoomPage.tsx",
+    "src/pages/DeviceCheckPage.tsx",
     "node_modules"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]

@@ -8,7 +8,7 @@ import { api } from './lib/api';
 type Page = 'login' | 'exam-list' | 'device-check';
 
 const App: React.FC = () => {
-  const { user, login, logout, isAuthenticated } = useAuth();
+  const { login, logout, isAuthenticated } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>('login');
   const [sessionId, setSessionId] = useState<string>('');
 
