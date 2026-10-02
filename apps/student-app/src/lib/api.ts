@@ -90,6 +90,22 @@ class StudentApiClient {
     );
   }
 
+  async submitAudio(attemptKey: string, uploadId: string, kind = 'AUDIO') {
+    const idempotencyKey = `${attemptKey}-audio-${Date.now()}`;
+    return this.client.post<{
+      status: string;
+      transcript: string;
+    }>(
+      `/api/question-attempts/${attemptKey}/submit-audio`,
+      { upload_id: uploadId, kind },
+      {
+        headers: {
+          'X-Idempotency-Key': idempotencyKey,
+        },
+      }
+    );
+  }
+
   async finishSession(sessionKey: string) {
     return this.client.post<ExamSession>(`/api/exam-sessions/${sessionKey}/finish`);
   }

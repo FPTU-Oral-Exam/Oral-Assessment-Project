@@ -3,6 +3,7 @@ import { RecordingControls, UploadProgress, QuestionNav } from '../components';
 import { useRecording } from '../hooks/useRecording';
 import { useChunkedUpload } from '../hooks/useChunkedUpload';
 import { useExamSession } from '../hooks/useExamSession';
+import { api } from '../lib/api';
 import { QuestionAttempt, AttemptStatus } from '@oralai/shared';
 
 interface ExamRoomPageProps {
@@ -21,7 +22,6 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     error,
     refreshSession,
     startAttempt,
-    submitAttempt,
     finishSession,
   } = useExamSession();
 
@@ -102,9 +102,8 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
           return prev.includes(seq) ? prev : [...prev, seq];
         });
 
-        // Submit the attempt with transcript placeholder and confidence
-        // Note: In a real app, you'd get STT results from the server after upload
-        await submitAttempt(attemptKey, '', 0.0);
+        // Submit audio for server-side STT processing
+        await api.submitAudio(attemptKey, uploadId, 'AUDIO');
 
         // Clear blobs and reset upload state
         clearBlobs();
@@ -113,7 +112,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     } catch (err) {
       console.error('Failed to process recording:', err);
     }
-  }, [currentAttempt, stopRecording, upload, submitAttempt, clearBlobs, resetUpload]);
+  }, [currentAttempt, stopRecording, upload, clearBlobs, resetUpload]);
 
   // Handle question navigation
   const handleSelectQuestion = useCallback(
