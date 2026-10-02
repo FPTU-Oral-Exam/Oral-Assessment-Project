@@ -87,13 +87,10 @@ services:
     depends_on:
       api:
         condition: service_healthy
-  # IMPORTANT: When admin-web is renamed to staff-portal:
-  # - Update web.build.context to: apps/staff-portal
-  # - Update web.build.dockerfile to: apps/staff-portal/Dockerfile
   web:
     build:
       context: .
-      dockerfile: apps/admin-web/Dockerfile
+      dockerfile: apps/staff-portal/Dockerfile
     ports:
       - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     depends_on:
