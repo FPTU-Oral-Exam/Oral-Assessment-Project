@@ -113,7 +113,17 @@ def course_access(db, course_id, user):
 
 
 def public_user(user):
-    return {k: getattr(user, k) for k in ("id", "username", "name", "role", "status", "email", "roles")} | {"roles": [user.role]}
+    # NOTE: User model has 'role' (singular string) after Phase 0 RBAC migration.
+    # We keep 'roles' (plural list) in the returned dict for Staff Portal UI compatibility.
+    return {
+        "id": user.id,
+        "username": user.username,
+        "name": user.name,
+        "role": user.role,
+        "status": user.status,
+        "email": user.email,
+        "roles": [user.role],
+    }
 
 
 def by_id(db, model, key, lock=False):
