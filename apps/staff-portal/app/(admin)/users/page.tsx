@@ -1,10 +1,17 @@
 import { requireRole } from '@/lib/auth';
-import { api } from '@oralai/shared';
+import { api } from '@/lib/api';
+
+interface AdminUser {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+}
 
 export default async function UsersPage() {
   await requireRole(['SYSTEM_ADMIN']);
 
-  const users = await api<any[]>('/api/admin/users');
+  const users = await api<AdminUser[]>('/api/admin/users').catch(() => []);
 
   return (
     <div>
