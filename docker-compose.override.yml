@@ -1,22 +1,19 @@
 # docker-compose.override.yml
 # Local development override - adds hot reload volumes
-version: "3.8"
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: apps/staff-portal/Dockerfile
-    volumes:
-      - ./apps/staff-portal:/app
-      - /app/node_modules
-      - /app/.next
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://api:8000
+      # NOTE: do NOT set NEXT_PUBLIC_API_URL here. NEXT_PUBLIC_* is inlined
+      # into the browser bundle at build time. The hostname 'api' only
+      # resolves inside the Docker internal network — NOT from the user's
+      # browser — which caused BUG-008: every client fetch() hung on DNS
+      # lookup and surfaced as "Failed to fetch" in the UI.
+      # Source code falls back to 'http://localhost:8000' which is
+      # reachable because docker-compose maps 127.0.0.1:8000 -> api:8000.
     ports:
       - "127.0.0.1:3000:3000"
-    command: npm run dev
 
   api:
     environment:
