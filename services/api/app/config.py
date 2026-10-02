@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     top_k: int = Field(default=5, ge=1, le=20)
     confidence_threshold: float = Field(default=0.85, ge=0, le=1)
     stt_provider: Literal["local", "local_server", "google", "gemini"] = "local_server"
-    stt_model: str = "base"
-    stt_language: str = "vi"
+    stt_model: str = "large-v3"  # Whisper-large-v3 for maximum accuracy (server-side batch)
+    stt_language: str = "en"  # English-only for PTE approach
     google_stt_credentials_file: str = ""
     google_login_enabled: bool = False
     google_client_id: str = ""

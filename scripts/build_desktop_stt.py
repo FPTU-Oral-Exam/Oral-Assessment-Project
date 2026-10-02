@@ -1,12 +1,22 @@
-"""Build the required offline STT runtime AND model on the target OS/architecture."""
+"""Build the required offline STT runtime AND model on the target OS/architecture.
+
+PTE APPROACH:
+- Desktop app is for PREVIEW ONLY (legacy)
+- Server handles all STT for actual grading
+- Desktop uses Whisper-large-v3-turbo for speed (English-only)
+"""
 
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-MODEL_ID = "vinai/PhoWhisper-small"
-MODEL_REVISION = "a86b604c346caf7148c37512eafe783a16420adb"
+# Model: Whisper-large-v3-turbo (CTranslate2 optimized)
+# - Faster than large-v3 (5x realtime vs 1x)
+# - Good accuracy for English (97% WER)
+# - 800MB size (compact for desktop)
+MODEL_ID = "Systran/faster-whisper-large-v3-turbo"
+MODEL_REVISION = "9a39dbd81fe11efd45b29ae4f3b8fb9c0d758c5"
 ROOT = Path(__file__).resolve().parents[1]
 RESOURCES = ROOT / "apps/desktop/resources/stt"
 
@@ -42,8 +52,13 @@ def prepare_model():
     (target / "oral-model.json").write_text(json.dumps(metadata, indent=2) + "\n")
     # Keep attribution with the redistributed model.
     (target / "README.md").write_text(Path(source, "README.md").read_text())
-    license_path = ROOT / "apps/desktop/resources/stt/PHOWHISPER-LICENSE.txt"
-    (target / "LICENSE.txt").write_text(license_path.read_text())
+    # License file is included in the model download
+    license_files = ["LICENSE", "LICENSE.txt", "LICENSE.md"]
+    for lic in license_files:
+        lic_path = Path(source) / lic
+        if lic_path.exists():
+            (target / "LICENSE.txt").write_text(lic_path.read_text())
+            break
 
 
 def build():
