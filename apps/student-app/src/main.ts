@@ -20,7 +20,7 @@ function createWindow() {
   });
 
   // Disable screen capture (anti-cheating)
-  session.setPermissionRequestHandler((webContents, permission, callback) => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     if (permission === 'media') {
       callback(true);
     } else if (permission === 'desktopCapture') {
@@ -38,7 +38,7 @@ function createWindow() {
   }
 
   // Set Content Security Policy
-  session.webRequest.onHeadersReceived((details, callback) => {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
