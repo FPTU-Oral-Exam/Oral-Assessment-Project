@@ -9,6 +9,10 @@ directories:
 files:
   - dist/**/*
   - dist-electron/**/*
+  - package.json
+
+asar: true
+compression: maximum
 
 win:
   target:
