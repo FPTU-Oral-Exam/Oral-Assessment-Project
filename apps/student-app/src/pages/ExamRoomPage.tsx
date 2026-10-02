@@ -16,13 +16,13 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
 
   const {
     session,
+    currentAttempt,
     isLoading,
     error,
     refreshSession,
     startAttempt,
     submitAttempt,
     finishSession,
-    goToQuestion,
   } = useExamSession();
 
   const {
@@ -59,20 +59,22 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
 
   // Handle starting a new attempt
   const handleStartRecording = useCallback(async () => {
-    if (!session?.current_attempt) {
-      // Start a new attempt for the current question
-      const currentSeq = session?.current_attempt?.sequence || 1;
-      try {
-        await startAttempt(currentSeq);
-      } catch (err) {
-        console.error('Failed to start attempt:', err);
-      }
+    if (!currentAttempt) {
+      // Need to start an attempt first - we need an attempt key
+      // In practice, the session should have current_attempt populated by refreshSession
+      console.error('No current attempt available');
+      return;
     }
     await startRecording();
-  }, [session, startAttempt, startRecording]);
+  }, [currentAttempt, startRecording]);
 
   // Handle stopping and uploading
   const handleStopRecording = useCallback(async () => {
+    if (!currentAttempt) {
+      console.error('No current attempt to submit');
+      return;
+    }
+
     try {
       const blobs = await stopRecording();
 
@@ -87,28 +89,22 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
         type: 'audio/webm;codecs=opus',
       });
 
-      // Get attempt ID - need to start attempt if not already started
-      let attemptId = session?.current_attempt?.id;
+      // Get attempt key from current attempt
+      const attemptKey = currentAttempt.id;
 
-      if (!attemptId) {
-        const attempt = await startAttempt(session?.current_attempt?.sequence || 1);
-        attemptId = attemptId = attempt.id;
-      }
-
-      if (attemptId) {
-        // Upload the file
-        await upload(audioFile, attemptId, 'AUDIO', 'audio/webm;codecs=opus');
+      if (attemptKey) {
+        // Upload the file - get upload ID from result
+        const uploadId = await upload(audioFile, attemptKey, 'AUDIO', 'audio/webm;codecs=opus');
 
         // Mark question as answered
-        if (session?.current_attempt) {
-          setAnsweredQuestions((prev) => {
-            const seq = session.current_attempt!.sequence;
-            return prev.includes(seq) ? prev : [...prev, seq];
-          });
-        }
+        setAnsweredQuestions((prev) => {
+          const seq = currentAttempt.sequence;
+          return prev.includes(seq) ? prev : [...prev, seq];
+        });
 
-        // Submit the attempt
-        await submitAttempt(attemptId, 'pending'); // Upload ID would come from upload result
+        // Submit the attempt with transcript placeholder and confidence
+        // Note: In a real app, you'd get STT results from the server after upload
+        await submitAttempt(attemptKey, '', 0.0);
 
         // Clear blobs and reset upload state
         clearBlobs();
@@ -117,19 +113,15 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     } catch (err) {
       console.error('Failed to process recording:', err);
     }
-  }, [session, stopRecording, startAttempt, upload, submitAttempt, clearBlobs, resetUpload]);
+  }, [currentAttempt, stopRecording, upload, submitAttempt, clearBlobs, resetUpload]);
 
   // Handle question navigation
   const handleSelectQuestion = useCallback(
     async (sequence: number) => {
-      try {
-        await goToQuestion(sequence);
-        // In a real app, we'd also fetch the question text
-      } catch (err) {
-        console.error('Failed to navigate to question:', err);
-      }
+      // TODO: Implement question navigation - need backend endpoint for this
+      console.log('Question navigation not implemented, selected:', sequence);
     },
-    [goToQuestion]
+    []
   );
 
   // Handle finishing the session
