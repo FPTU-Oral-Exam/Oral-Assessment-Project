@@ -1,0 +1,25 @@
+# docker-compose.override.yml
+# Local development override - adds hot reload volumes
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/staff-portal/Dockerfile
+    volumes:
+      - ./apps/staff-portal:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://api:8000
+    ports:
+      - "3000:3000"
+    command: npm run dev
+
+  api:
+    environment:
+      - DEBUG=true
+    ports:
+      - "8000:8000"
