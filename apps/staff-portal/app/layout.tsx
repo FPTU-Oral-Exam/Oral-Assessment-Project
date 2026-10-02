@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
 import { UserProvider } from '@/hooks/useUser';
 import { getUser } from '@/lib/auth';
-import Sidebar from '@/components/Sidebar';
-import Header from '@/components/Header';
+import PortalShell from '@/components/PortalShell';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Staff Portal - OralAI',
-  description: 'AI Oral Assessment Platform',
+  description: 'AI Oral Assessment Platform for Teachers and Examiners',
 };
 
 export default async function RootLayout({
@@ -19,17 +18,9 @@ export default async function RootLayout({
 
   return (
     <html lang="vi">
-      <body>
+      <body className="antialiased bg-slate-50 text-slate-900 min-h-screen">
         <UserProvider user={user}>
-          <div className="flex h-screen">
-            <Sidebar />
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <Header />
-              <main className="flex-1 overflow-y-auto p-6">
-                {children}
-              </main>
-            </div>
-          </div>
+          <PortalShell>{children}</PortalShell>
         </UserProvider>
       </body>
     </html>

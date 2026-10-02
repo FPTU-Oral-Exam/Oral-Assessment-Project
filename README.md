@@ -21,6 +21,7 @@ Desktop ghi audio/video, lọc nhiễu RNNoise và nhận dạng **PhoWhisper-sm
 | Hiểu độ tin cậy AI và thao tác chấm lại | [Độ tin cậy và chấm lại](docs/architecture/grading-confidence.md) |
 | Nạp bộ câu hỏi mẫu môn Kiểm thử phần mềm | [Bộ dữ liệu Software Testing](data/software-testing-istqb/README.md) |
 | Xem kiến trúc ban đầu và kế hoạch phát triển | [Giai đoạn 1](docs/architecture/phase-1.md), [Project Guide](AI_Oral_Assessment_PROJECT_GUIDE.md) |
+| Xem thiết kế CSDL, sơ đồ ERD và từ điển dữ liệu | [Thiết kế CSDL & ERD](docs/architecture/database-schema.md) |
 | Xem những gì đã kiểm thử và giới hạn còn lại | [Biên bản kiểm thử](docs/validation.md) |
 
 Để bắt đầu: chạy server theo mục bên dưới, sau đó làm theo hướng dẫn desktop. Project Guide và biên bản kiểm thử có các phần lịch sử; đọc ghi chú cập nhật trước khi áp dụng.

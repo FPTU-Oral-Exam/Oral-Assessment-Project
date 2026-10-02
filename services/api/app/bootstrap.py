@@ -10,7 +10,12 @@ from .security import hasher
 def bootstrap():
     cfg = settings()
     with SessionLocal() as db:
-        if db.scalar(select(User).where(User.role == "ADMIN")):
+        if db.scalar(
+            select(User).where(
+                (User.role.in_(["SYSTEM_ADMIN", "ADMIN"]))
+                | (User.username == cfg.bootstrap_admin)
+            )
+        ):
             ensure_practice(db)
             return
         if len(cfg.bootstrap_password) < 12:
@@ -19,7 +24,7 @@ def bootstrap():
             User(
                 username=cfg.bootstrap_admin,
                 name="Quản trị viên",
-                role="ADMIN",
+                role="SYSTEM_ADMIN",
                 password_hash=hasher.hash(cfg.bootstrap_password),
             )
         )

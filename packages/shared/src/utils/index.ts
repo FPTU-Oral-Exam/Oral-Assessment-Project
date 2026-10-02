@@ -1,6 +1,6 @@
 // packages/shared/src/utils/index.ts
 
-export * from "./validation.js";
+export * from "./validation";
 export type {
   LoginInput,
   CreateExamInput,
@@ -9,4 +9,4 @@ export type {
   GradeOutputInput,
   CourseInInput,
   RubricInInput,
-} from "./validation.js";
+} from "./validation";

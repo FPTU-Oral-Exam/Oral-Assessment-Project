@@ -11,7 +11,11 @@ EXAM_ID = "00000000-0000-4000-8000-000000000002"
 def ensure_practice(db):
     if db.get(Course, COURSE_ID):
         return
-    owner = db.scalar(select(User).where(User.role == "ADMIN").order_by(User.created_at))
+    owner = db.scalar(
+        select(User)
+        .where(User.role.in_(["SYSTEM_ADMIN", "ADMIN"]))
+        .order_by(User.created_at)
+    )
     if not owner:
         return
     course = Course(
