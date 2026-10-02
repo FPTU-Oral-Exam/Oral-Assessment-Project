@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/staff-portal",
+    "apps/student-app"
   ],
   "scripts": {
     "dev": "npm run dev -w apps/admin-web",
@@ -11,7 +12,7 @@
     "build": "npm run build -w packages/shared",
     "test": "npm run test -w packages/shared",
     "desktop": "npm run desktop -w apps/desktop",
-    "test:e2e": "npm run test:e2e -w apps/desktop",
+    "test:e2e": "playwright test --config=playwright.config.ts",
     "test:audio": "npm run test:audio -w apps/desktop",
     "test:desktop": "npm run test:desktop -w apps/desktop"
   },
