@@ -1,226 +1,362 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useExamSession } from '../hooks/useExamSession';
+import React, { useEffect, useState, useCallback } from 'react';
+import { RecordingControls, UploadProgress, QuestionNav } from '../components';
 import { useRecording } from '../hooks/useRecording';
 import { useChunkedUpload } from '../hooks/useChunkedUpload';
-import { RecordingControls } from '../components/RecordingControls';
-import { UploadProgress } from '../components/UploadProgress';
-import { QuestionNav } from '../components/QuestionNav';
+import { useExamSession } from '../hooks/useExamSession';
+import { QuestionAttempt, AttemptStatus } from '@oralai/shared';
 
 interface ExamRoomPageProps {
   sessionId: string;
-  token: string;
   onFinish: () => void;
 }
 
-export function ExamRoomPage({ sessionId, token, onFinish }: ExamRoomPageProps) {
-  const { session, currentAttempt, startAttempt, submitAttempt, finishSession, refreshSession } =
-    useExamSession();
-  const { isRecording, duration, startRecording, stopRecording } = useRecording();
-  const { isUploading, progress, error: uploadError, upload } = useChunkedUpload();
-
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1);
+export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish }) => {
+  const [currentQuestionText, setCurrentQuestionText] = useState<string>('');
   const [answeredQuestions, setAnsweredQuestions] = useState<number[]>([]);
-  const [recordingDuration, setRecordingDuration] = useState(0);
 
+  const {
+    session,
+    isLoading,
+    error,
+    refreshSession,
+    startAttempt,
+    submitAttempt,
+    finishSession,
+    goToQuestion,
+  } = useExamSession();
+
+  const {
+    isRecording,
+    duration,
+    startRecording,
+    stopRecording,
+    audioBlobs,
+    clearBlobs,
+  } = useRecording();
+
+  const {
+    isUploading,
+    progress,
+    error: uploadError,
+    upload,
+    reset: resetUpload,
+  } = useChunkedUpload();
+
+  // Load session on mount
   useEffect(() => {
-    if (sessionId && token) {
-      refreshSession(sessionId);
+    if (sessionId) {
+      refreshSession(sessionId).catch(console.error);
     }
-  }, [sessionId, token, refreshSession]);
+  }, [sessionId, refreshSession]);
 
+  // Update answered questions when session changes
+  useEffect(() => {
+    if (session) {
+      // In a real implementation, we'd track which questions have been answered
+      // For now, we'll track locally when submissions happen
+    }
+  }, [session]);
+
+  // Handle starting a new attempt
   const handleStartRecording = useCallback(async () => {
-    if (!currentAttempt) {
-      return;
+    if (!session?.current_attempt) {
+      // Start a new attempt for the current question
+      const currentSeq = session?.current_attempt?.sequence || 1;
+      try {
+        await startAttempt(currentSeq);
+      } catch (err) {
+        console.error('Failed to start attempt:', err);
+      }
     }
     await startRecording();
-    setRecordingDuration(0);
-    const interval = setInterval(() => {
-      setRecordingDuration((d) => d + 1);
-    }, 1000);
-    (window as any).__recordingInterval = interval;
-  }, [currentAttempt, startRecording]);
+  }, [session, startAttempt, startRecording]);
 
+  // Handle stopping and uploading
   const handleStopRecording = useCallback(async () => {
-    const interval = (window as any).__recordingInterval;
-    if (interval) {
-      clearInterval(interval);
-      delete (window as any).__recordingInterval;
+    try {
+      const blobs = await stopRecording();
+
+      if (blobs.length === 0) {
+        console.error('No audio recorded');
+        return;
+      }
+
+      // Create a file from the blobs
+      const audioBlob = new Blob(blobs, { type: 'audio/webm;codecs=opus' });
+      const audioFile = new File([audioBlob], 'recording.webm', {
+        type: 'audio/webm;codecs=opus',
+      });
+
+      // Get attempt ID - need to start attempt if not already started
+      let attemptId = session?.current_attempt?.id;
+
+      if (!attemptId) {
+        const attempt = await startAttempt(session?.current_attempt?.sequence || 1);
+        attemptId = attemptId = attempt.id;
+      }
+
+      if (attemptId) {
+        // Upload the file
+        await upload(audioFile, attemptId, 'AUDIO', 'audio/webm;codecs=opus');
+
+        // Mark question as answered
+        if (session?.current_attempt) {
+          setAnsweredQuestions((prev) => {
+            const seq = session.current_attempt!.sequence;
+            return prev.includes(seq) ? prev : [...prev, seq];
+          });
+        }
+
+        // Submit the attempt
+        await submitAttempt(attemptId, 'pending'); // Upload ID would come from upload result
+
+        // Clear blobs and reset upload state
+        clearBlobs();
+        resetUpload();
+      }
+    } catch (err) {
+      console.error('Failed to process recording:', err);
     }
+  }, [session, stopRecording, startAttempt, upload, submitAttempt, clearBlobs, resetUpload]);
 
-    if (!currentAttempt) {
-      return;
-    }
+  // Handle question navigation
+  const handleSelectQuestion = useCallback(
+    async (sequence: number) => {
+      try {
+        await goToQuestion(sequence);
+        // In a real app, we'd also fetch the question text
+      } catch (err) {
+        console.error('Failed to navigate to question:', err);
+      }
+    },
+    [goToQuestion]
+  );
 
-    const blobs = await stopRecording();
-    if (blobs.length === 0) {
-      return;
-    }
-
-    const audioBlob = new Blob(blobs, { type: 'audio/webm;codecs=opus' });
-    const file = new File([audioBlob], 'recording.webm', { type: 'audio/webm;codecs=opus' });
-
-    await upload(file, currentAttempt.id, 'AUDIO', 'audio/webm');
-
-    await submitAttempt(currentAttempt.id, recordingDuration);
-
-    if (!answeredQuestions.includes(currentQuestionIndex)) {
-      setAnsweredQuestions((prev) => [...prev, currentQuestionIndex]);
-    }
-  }, [currentAttempt, stopRecording, upload, submitAttempt, recordingDuration, currentQuestionIndex, answeredQuestions]);
-
-  const handleNextQuestion = useCallback(async () => {
-    if (!session) return;
-    const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex <= session.questions.length) {
-      const attempt = await startAttempt(
-        session.questions[nextIndex - 1].attempt_id
-      );
-      setCurrentQuestionIndex(nextIndex);
-      setRecordingDuration(0);
-    }
-  }, [session, currentQuestionIndex, startAttempt]);
-
-  const handleSelectQuestion = useCallback(async (sequence: number) => {
-    if (!session) return;
-    const attempt = await startAttempt(session.questions[sequence - 1].attempt_id);
-    setCurrentQuestionIndex(sequence);
-    setRecordingDuration(0);
-  }, [session, startAttempt]);
-
+  // Handle finishing the session
   const handleFinish = useCallback(async () => {
-    await finishSession(sessionId);
-    onFinish();
-  }, [finishSession, sessionId, onFinish]);
+    try {
+      await finishSession(sessionId);
+      onFinish();
+    } catch (err) {
+      console.error('Failed to finish session:', err);
+    }
+  }, [sessionId, finishSession, onFinish]);
 
-  if (!session) {
+  // Loading state
+  if (isLoading && !session) {
     return (
-      <div style={styles.loading}>
-        <p>Đang tải...</p>
+      <div style={styles.loadingContainer}>
+        <div style={styles.loadingText}>Loading exam...</div>
       </div>
     );
   }
 
-  const currentQuestion = session.questions[currentQuestionIndex - 1];
+  // Error state
+  if (error) {
+    return (
+      <div style={styles.errorContainer}>
+        <div style={styles.errorText}>Error: {error}</div>
+        <button style={styles.retryButton} onClick={() => refreshSession(sessionId)}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div style={styles.errorContainer}>
+        <div style={styles.errorText}>No session found</div>
+      </div>
+    );
+  }
+
+  const currentSequence = session.current_attempt?.sequence || 1;
 
   return (
     <div style={styles.container}>
+      {/* Header */}
       <header style={styles.header}>
-        <div>
+        <div style={styles.headerLeft}>
           <h1 style={styles.examName}>{session.exam_name}</h1>
-          <p style={styles.progress}>
-            Câu {currentQuestionIndex}/{session.questions.length}
-          </p>
+        </div>
+        <div style={styles.headerRight}>
+          <span style={styles.progress}>
+            Question {session.answered_count + 1} of {session.question_count}
+          </span>
         </div>
       </header>
 
-      <div style={styles.main}>
-        <div style={styles.content}>
+      {/* Main Content */}
+      <div style={styles.mainContent}>
+        {/* Question Area */}
+        <div style={styles.questionArea}>
           <div style={styles.questionCard}>
-            <h2 style={styles.questionLabel}>Câu hỏi {currentQuestionIndex}</h2>
-            <p style={styles.questionText}>{currentQuestion?.question_text}</p>
+            <h2 style={styles.questionTitle}>
+              Question {currentSequence}
+            </h2>
+            <p style={styles.questionText}>
+              {session.current_attempt?.text || 'Question text would be displayed here...'}
+            </p>
           </div>
 
-          <RecordingControls
-            isRecording={isRecording}
-            duration={recordingDuration}
-            onStart={handleStartRecording}
-            onStop={handleStopRecording}
-            disabled={isUploading}
+          {/* Recording Controls */}
+          <div style={styles.recordingArea}>
+            <RecordingControls
+              isRecording={isRecording}
+              duration={duration}
+              disabled={isUploading}
+              onStartRecording={handleStartRecording}
+              onStopRecording={handleStopRecording}
+            />
+          </div>
+
+          {/* Upload Progress */}
+          <UploadProgress
+            progress={progress}
+            error={uploadError}
+            isUploading={isUploading}
           />
-
-          {isUploading && <UploadProgress progress={progress} error={uploadError} />}
-
-          <div style={styles.navigation}>
-            <button
-              onClick={handleNextQuestion}
-              disabled={currentQuestionIndex >= session.questions.length || isRecording}
-              style={styles.nextBtn}
-            >
-              Câu tiếp theo
-            </button>
-          </div>
         </div>
 
+        {/* Sidebar */}
         <aside style={styles.sidebar}>
           <QuestionNav
-            totalQuestions={session.questions.length}
-            currentQuestion={currentQuestionIndex}
+            totalQuestions={session.question_count}
+            currentQuestion={currentSequence}
             answeredQuestions={answeredQuestions}
             onSelectQuestion={handleSelectQuestion}
-            onFinish={handleFinish}
           />
+
+          <button style={styles.finishButton} onClick={handleFinish}>
+            Finish Exam
+          </button>
         </aside>
       </div>
     </div>
   );
-}
+};
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
+    height: '100vh',
+    backgroundColor: '#f3f4f6',
   },
-  loading: {
+  loadingContainer: {
     display: 'flex',
-    justifyContent: 'center',
     alignItems: 'center',
-    minHeight: '100vh',
+    justifyContent: 'center',
+    height: '100vh',
   },
-  header: {
-    padding: '1rem 2rem',
-    background: '#2563eb',
-    color: 'white',
+  loadingText: {
+    fontSize: '18px',
+    color: '#6b7280',
   },
-  examName: {
-    fontSize: '1.25rem',
-    marginBottom: '0.25rem',
-  },
-  progress: {
-    opacity: 0.9,
-  },
-  main: {
-    display: 'flex',
-    flex: 1,
-    gap: '1rem',
-    padding: '1rem',
-  },
-  content: {
-    flex: 1,
+  errorContainer: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1rem',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100vh',
+    gap: '16px',
   },
-  sidebar: {
-    width: '280px',
+  errorText: {
+    fontSize: '16px',
+    color: '#dc2626',
   },
-  questionCard: {
-    background: 'white',
-    padding: '1.5rem',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-  },
-  questionLabel: {
-    fontSize: '0.875rem',
-    color: '#64748b',
-    marginBottom: '0.5rem',
-  },
-  questionText: {
-    fontSize: '1.125rem',
-    lineHeight: 1.6,
-  },
-  navigation: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-  },
-  nextBtn: {
-    padding: '0.75rem 1.5rem',
-    background: '#2563eb',
+  retryButton: {
+    padding: '8px 16px',
+    backgroundColor: '#2563eb',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
-    fontWeight: 600,
     cursor: 'pointer',
+    fontSize: '14px',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 24px',
+    backgroundColor: 'white',
+    borderBottom: '1px solid #e5e7eb',
+  },
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  examName: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: '#111827',
+    margin: 0,
+  },
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  progress: {
+    fontSize: '14px',
+    color: '#6b7280',
+  },
+  mainContent: {
+    display: 'flex',
+    flex: 1,
+    overflow: 'hidden',
+  },
+  questionArea: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+    padding: '24px',
+    overflowY: 'auto',
+  },
+  questionCard: {
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    padding: '24px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  },
+  questionTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#111827',
+    margin: '0 0 12px 0',
+  },
+  questionText: {
+    fontSize: '16px',
+    color: '#374151',
+    lineHeight: 1.6,
+    margin: 0,
+  },
+  recordingArea: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '20px 0',
+  },
+  sidebar: {
+    width: '280px',
+    padding: '24px',
+    backgroundColor: 'white',
+    borderLeft: '1px solid #e5e7eb',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+  },
+  finishButton: {
+    padding: '14px 24px',
+    backgroundColor: '#059669',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    marginTop: 'auto',
+    transition: 'background-color 0.2s',
   },
 };
 
