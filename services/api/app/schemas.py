@@ -141,6 +141,11 @@ class TranscriptIn(Input):
     stt_confidence: float = Field(ge=0, le=1)
 
 
+class SubmitAudioIn(Input):
+    upload_id: str
+    kind: Literal["AUDIO", "VIDEO"] = "AUDIO"
+
+
 class UploadIn(Input):
     attempt_id: str
     kind: Literal["AUDIO", "VIDEO"]

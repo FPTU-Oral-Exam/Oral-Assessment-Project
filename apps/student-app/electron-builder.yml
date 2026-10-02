@@ -1,0 +1,30 @@
+appId: com.oralai.student
+productName: OralAI Student
+copyright: Copyright 2024
+
+directories:
+  output: dist-electron
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+asar: true
+compression: maximum
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: "${productName}-${version}-Setup.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: true
+
+extraMetadata:
+  main: dist-electron/main.js

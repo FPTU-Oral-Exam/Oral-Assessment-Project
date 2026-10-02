@@ -11,6 +11,7 @@ node_modules/
 .next/
 out/
 dist/
+dist-electron/
 *.tsbuildinfo
 .data/
 *.db
@@ -23,5 +24,12 @@ google-stt*.json
 apps/desktop/resources/stt/oral-stt/
 
 apps/admin-web/public/audio/
+apps/staff-portal/node_modules/
+apps/staff-portal/.next/
+apps/staff-portal/out/
 apps/desktop/resources/stt/model/
 .venv-stt/
+
+GEMINI.md
+
+docs/superpowers/

@@ -243,6 +243,52 @@ def submit(
     return {"status": attempt.status}
 
 
+@router.post("/question-attempts/{key}/submit-audio")
+def submit_audio(
+    key: str,
+    body: s.SubmitAudioIn,
+    idempotency_key: str = Header(min_length=8, max_length=100),
+    db: Session = Depends(get_db),
+    user=Depends(current_user),
+):
+    """Submit audio upload ID for server-side STT processing."""
+    attempt, session = owned_attempt(db, key, user, lock=True)
+
+    if attempt.submit_key:
+        if attempt.submit_key == idempotency_key:
+            return {"status": attempt.status, "transcript": attempt.transcript}
+        fail(409, "ALREADY_SUBMITTED", "Câu trả lời đã được nộp")
+
+    if session.status != "IN_PROGRESS" or attempt.status != "STARTED":
+        fail(409, "INVALID_STATE", "Câu trả lời chưa bắt đầu hoặc bài đã nộp")
+
+    # Verify upload exists and is complete
+    upload = db.scalar(
+        select(Upload).where(
+            Upload.attempt_id == attempt.id,
+            Upload.kind == body.kind,
+            Upload.status == "COMPLETED"
+        )
+    )
+    if not upload:
+        fail(409, "UPLOAD_NOT_READY", "Audio chưa được tải lên hoặc chưa hoàn tất")
+
+    # Store placeholder - server will update after STT
+    attempt.transcript = "AWAITING_STT"
+    attempt.stt_confidence = None
+    attempt.submit_key = idempotency_key
+    attempt.finished_at = time.time()
+    attempt.status = "SUBMITTED"
+
+    db.add(Audit(user_id=user.id, event="AUDIO_SUBMITTED", details={
+        "attempt_id": key,
+        "upload_id": upload.id
+    }))
+    db.commit()
+
+    return {"status": attempt.status, "transcript": "AWAITING_STT"}
+
+
 @router.post("/exam-sessions/{key}/finish")
 def finish(key: str, db: Session = Depends(get_db), user=Depends(current_user)):
     session = owned_session(db, key, user, lock=True)
