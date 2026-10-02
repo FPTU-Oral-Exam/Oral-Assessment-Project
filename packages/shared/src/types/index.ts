@@ -4,7 +4,7 @@ export type {
   User,
   Student,
   AuthResponse,
-} from "./user.js";
+} from "./user";
 export type {
   ExamStatus,
   SessionStatus,
@@ -15,7 +15,7 @@ export type {
   Sitting,
   ExamSession,
   QuestionAttempt,
-} from "./exam.js";
+} from "./exam";
 export type {
   Course,
   LearningOutcome,
@@ -23,11 +23,11 @@ export type {
   Doc,
   Chapter,
   Workspace,
-} from "./course.js";
+} from "./course";
 export type {
   Criterion,
   CriterionScore,
   Chunk,
   Assessment,
   Evidence,
-} from "./assessment.js";
+} from "./assessment";

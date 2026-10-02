@@ -12,7 +12,6 @@ RUN npm install
 COPY . .
 
 WORKDIR /app/apps/staff-portal
-RUN npm run build
 
 EXPOSE 3000
 

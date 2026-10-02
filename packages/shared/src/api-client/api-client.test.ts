@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ApiClient } from "./client.js";
-import { ApiError } from "./errors.js";
+import { ApiClient } from "./client";
+import { ApiError } from "./errors";
 
 describe("ApiClient", () => {
   let mockFetch: ReturnType<typeof vi.fn>;

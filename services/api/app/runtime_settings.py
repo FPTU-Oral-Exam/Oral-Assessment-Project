@@ -115,9 +115,12 @@ def save_settings(body: PlatformIn, db: Session = Depends(get_db), user=Depends(
     # Serialize configuration updates across API processes using the admin rows.
     from sqlalchemy import select
 
-    from .models import User
-
-    db.scalars(select(User).where(User.role == "ADMIN").order_by(User.id).with_for_update()).all()
+    db.scalars(
+        select(User)
+        .where(User.role.in_(["SYSTEM_ADMIN", "ADMIN"]))
+        .order_by(User.id)
+        .with_for_update()
+    ).all()
     cfg = settings(fresh=True)
     values = body.model_dump(
         exclude={"gemini_api_key", "google_client_secret", "clear_gemini_key", "clear_google_secret"}
