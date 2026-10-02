@@ -1,41 +1,38 @@
-import { useState, useCallback } from 'react';
-import { ExamSession, QuestionAttempt, SessionStatus, AttemptStatus } from '@oralai/shared';
+// apps/student-app/src/hooks/useExamSession.ts
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '../lib/api';
+import type { ExamSession, QuestionAttempt } from '@oralai/shared';
 
 export interface UseExamSessionResult {
   session: ExamSession | null;
+  currentAttempt: QuestionAttempt | null;
   isLoading: boolean;
   error: string | null;
-  refreshSession: (sessionId: string) => Promise<void>;
-  startAttempt: (questionSequence: number) => Promise<QuestionAttempt>;
-  submitAttempt: (attemptId: string, uploadId: string) => Promise<void>;
-  finishSession: (sessionId: string) => Promise<void>;
-  goToQuestion: (sequence: number) => Promise<void>;
+  refreshSession: (sessionKey: string) => Promise<void>;
+  startAttempt: (attemptKey: string) => Promise<QuestionAttempt>;
+  submitAttempt: (
+    attemptKey: string,
+    transcript: string,
+    sttConfidence: number
+  ) => Promise<void>;
+  finishSession: (sessionKey: string) => Promise<void>;
 }
 
 export function useExamSession(): UseExamSessionResult {
   const [session, setSession] = useState<ExamSession | null>(null);
+  const [currentAttempt, setCurrentAttempt] = useState<QuestionAttempt | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getBaseUrl = (): string => {
-    return import.meta.env.VITE_API_URL || 'http://localhost:8000';
-  };
-
-  const refreshSession = useCallback(async (sessionId: string): Promise<void> => {
+  const refreshSession = useCallback(async (sessionKey: string): Promise<void> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${getBaseUrl()}/api/sessions/${sessionId}`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch session');
-      }
-
-      const data = await response.json();
+      const data = await api.getSession(sessionKey);
       setSession(data);
+      // Set current attempt from session response
+      setCurrentAttempt(data.current_attempt || null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load session';
       setError(errorMessage);
@@ -45,43 +42,14 @@ export function useExamSession(): UseExamSessionResult {
     }
   }, []);
 
-  const startAttempt = useCallback(async (questionSequence: number): Promise<QuestionAttempt> => {
-    if (!session) {
-      throw new Error('No active session');
-    }
-
+  const startAttempt = useCallback(async (attemptKey: string): Promise<QuestionAttempt> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `${getBaseUrl()}/api/sessions/${session.id}/questions/${questionSequence}/attempts`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to start attempt');
-      }
-
-      const attempt: QuestionAttempt = await response.json();
-
-      // Update session with new current attempt
-      setSession((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          current_attempt: attempt,
-          answered_count: prev.answered_count + 1,
-        };
-      });
-
-      return attempt;
+      const result = await api.startAttempt(attemptKey);
+      setCurrentAttempt(result);
+      return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to start attempt';
       setError(errorMessage);
@@ -89,61 +57,44 @@ export function useExamSession(): UseExamSessionResult {
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, []);
 
-  const submitAttempt = useCallback(async (attemptId: string, uploadId: string): Promise<void> => {
+  const submitAttempt = useCallback(
+    async (
+      attemptKey: string,
+      transcript: string,
+      sttConfidence: number
+    ): Promise<void> => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Generate idempotency key
+        const idempotencyKey = `${attemptKey}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        await api.submitAttempt(attemptKey, transcript, sttConfidence, idempotencyKey);
+
+        // Clear current attempt after submit
+        setCurrentAttempt(null);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to submit attempt';
+        setError(errorMessage);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  const finishSession = useCallback(async (sessionKey: string): Promise<void> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `${getBaseUrl()}/api/attempts/${attemptId}/submit`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ upload_id: uploadId }),
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to submit attempt');
-      }
-
-      // Refresh session to get updated attempt status
-      if (session) {
-        await refreshSession(session.id);
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to submit attempt';
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [session, refreshSession]);
-
-  const finishSession = useCallback(async (sessionId: string): Promise<void> => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(
-        `${getBaseUrl()}/api/sessions/${sessionId}/finish`,
-        {
-          method: 'POST',
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to finish session');
-      }
-
-      // Clear session
-      setSession(null);
+      await api.finishSession(sessionKey);
+      // Refresh to get final status
+      await refreshSession(sessionKey);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to finish session';
       setError(errorMessage);
@@ -151,54 +102,16 @@ export function useExamSession(): UseExamSessionResult {
     } finally {
       setIsLoading(false);
     }
-  }, []);
-
-  const goToQuestion = useCallback(async (sequence: number): Promise<void> => {
-    if (!session) {
-      throw new Error('No active session');
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(
-        `${getBaseUrl()}/api/sessions/${session.id}/questions/${sequence}`,
-        {
-          credentials: 'include',
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to load question');
-      }
-
-      const questionAttempt: QuestionAttempt = await response.json();
-
-      setSession((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          current_attempt: questionAttempt,
-        };
-      });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to go to question';
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [session]);
+  }, [refreshSession]);
 
   return {
     session,
+    currentAttempt,
     isLoading,
     error,
     refreshSession,
     startAttempt,
     submitAttempt,
     finishSession,
-    goToQuestion,
   };
 }
