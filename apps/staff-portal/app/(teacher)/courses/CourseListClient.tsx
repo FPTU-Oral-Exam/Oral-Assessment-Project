@@ -94,7 +94,7 @@ export default function CourseListClient() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-slate-900">Quản lý môn học</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Môn học phụ trách</h1>
         <button
           onClick={() => setIsModalOpen(true)}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
