@@ -5,7 +5,7 @@ export interface UseChunkedUploadResult {
   isUploading: boolean;
   progress: UploadProgress | null;
   error: string | null;
-  upload: (file: File, attemptId: string, kind: 'AUDIO' | 'VIDEO', mimeType: string) => Promise<string>;
+  upload: (file: File, attemptId: string, kind: 'AUDIO' | 'VIDEO', mimeType: string, token: string) => Promise<string>;
   reset: () => void;
 }
 
@@ -22,7 +22,7 @@ export function useChunkedUpload(): UseChunkedUploadResult {
   };
 
   const upload = useCallback(
-    async (file: File, attemptId: string, kind: 'AUDIO' | 'VIDEO', mimeType: string): Promise<string> => {
+    async (file: File, attemptId: string, kind: 'AUDIO' | 'VIDEO', mimeType: string, token: string): Promise<string> => {
       setIsUploading(true);
       setError(null);
       setProgress(null);
@@ -31,6 +31,11 @@ export function useChunkedUpload(): UseChunkedUploadResult {
         // Create new uploader instance with current base URL
         const baseUrl = getBaseUrl();
         const uploader = new ChunkedUploader(baseUrl);
+
+        // BUG FIX: Set token getter so ChunkedUploader can get the token dynamically
+        // Without this, the token won't be sent with upload requests, causing 401 errors
+        uploader.setTokenGetter(() => token);
+
         uploaderRef.current = uploader;
 
         const options: UploadOptions = {

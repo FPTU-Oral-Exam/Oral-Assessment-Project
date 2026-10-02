@@ -3,6 +3,7 @@ import { RecordingControls, UploadProgress, QuestionNav } from '../components';
 import { useRecording } from '../hooks/useRecording';
 import { useChunkedUpload } from '../hooks/useChunkedUpload';
 import { useExamSession } from '../hooks/useExamSession';
+import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
 import { QuestionAttempt, AttemptStatus } from '@oralai/shared';
 
@@ -24,6 +25,9 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     startAttempt,
     finishSession,
   } = useExamSession();
+
+  // Get token from auth for upload requests
+  const { token } = useAuth();
 
   const {
     isRecording,
@@ -93,8 +97,8 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       const attemptKey = currentAttempt.id;
 
       if (attemptKey) {
-        // Upload the file - get upload ID from result
-        const uploadId = await upload(audioFile, attemptKey, 'AUDIO', 'audio/webm;codecs=opus');
+        // Upload the file with token for authentication
+        const uploadId = await upload(audioFile, attemptKey, 'AUDIO', 'audio/webm;codecs=opus', token || '');
 
         // Mark question as answered
         setAnsweredQuestions((prev) => {
