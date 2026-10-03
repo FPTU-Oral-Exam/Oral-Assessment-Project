@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { RecordingControls, UploadProgress, QuestionNav, CameraPreview } from '../components';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { UploadProgress, QuestionNav, CameraPreview } from '../components';
 import { useRecording } from '../hooks/useRecording';
 import { useChunkedUpload } from '../hooks/useChunkedUpload';
 import { useExamSession } from '../hooks/useExamSession';
@@ -14,6 +14,8 @@ interface ExamRoomPageProps {
 
 export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish }) => {
   const [answeredQuestions, setAnsweredQuestions] = useState<number[]>([]);
+  const [recordedAudio, setRecordedAudio] = useState<{ blob: Blob; url: string } | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
 
   const {
     session,
@@ -26,18 +28,19 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   } = useExamSession();
 
   // Media stream for live student proctoring camera
-  const { stream, requestPermissions } = useMediaDevices();
+  const { stream, requestPermissions, stopAllMedia } = useMediaDevices();
 
   // Get token from auth for upload requests
   const { token } = useAuth();
 
+  // Recording hook bound to active microphone stream
   const {
     isRecording,
     duration,
     startRecording,
     stopRecording,
     clearBlobs,
-  } = useRecording();
+  } = useRecording(stream);
 
   const {
     isUploading,
@@ -47,7 +50,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     reset: resetUpload,
   } = useChunkedUpload();
 
-  // Initialize camera preview on mount
+  // Ensure camera & mic permissions on mount
   useEffect(() => {
     requestPermissions().catch(console.error);
   }, [requestPermissions]);
@@ -58,6 +61,22 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       initSession(sessionId).catch(console.error);
     }
   }, [sessionId, initSession]);
+
+  // Cleanup preview audio URL on unmount
+  useEffect(() => {
+    return () => {
+      if (recordedAudio) {
+        URL.revokeObjectURL(recordedAudio.url);
+      }
+    };
+  }, [recordedAudio]);
+
+  // Format timer MM:SS
+  const formatTimer = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Handle starting a new attempt recording
   const handleStartRecording = useCallback(async () => {
@@ -74,74 +93,83 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       }
     }
 
-    await startRecording();
-  }, [currentAttempt, startRecording]);
-
-  // Handle stopping recording and uploading audio
-  const handleStopRecording = useCallback(async () => {
-    if (!currentAttempt) {
-      console.error('No current attempt to submit');
-      return;
+    if (recordedAudio) {
+      URL.revokeObjectURL(recordedAudio.url);
+      setRecordedAudio(null);
     }
 
+    await startRecording();
+  }, [currentAttempt, startRecording, recordedAudio]);
+
+  // Handle stopping recording - creates local preview for student to review
+  const handleStopRecordingClick = useCallback(async () => {
     try {
       const blobs = await stopRecording();
+      if (blobs.length === 0) return;
 
-      if (blobs.length === 0) {
-        console.error('No audio recorded');
-        return;
-      }
+      const audioBlob = new Blob(blobs, { type: 'audio/webm' });
+      const url = URL.createObjectURL(audioBlob);
+      setRecordedAudio({ blob: audioBlob, url });
+    } catch (err) {
+      console.error('Failed to stop recording:', err);
+    }
+  }, [stopRecording]);
 
-      // Create a file from the blobs
-      const audioBlob = new Blob(blobs, { type: 'audio/webm;codecs=opus' });
-      const audioFile = new File([audioBlob], 'recording.webm', {
-        type: 'audio/webm;codecs=opus',
+  // Handle submitting recorded answer and advancing to the next question
+  const handleSubmitAndNext = useCallback(async () => {
+    if (!currentAttempt || !recordedAudio) return;
+
+    try {
+      const audioFile = new File([recordedAudio.blob], 'recording.webm', {
+        type: 'audio/webm',
       });
-
       const attemptKey = currentAttempt.id;
 
-      if (attemptKey) {
-        // Upload the file with token for authentication
-        const uploadId = await upload(audioFile, attemptKey, 'AUDIO', 'audio/webm;codecs=opus', token || '');
+      // 1. Upload chunks to MinIO storage through API
+      const uploadId = await upload(audioFile, attemptKey, 'AUDIO', 'audio/webm', token || '');
 
-        // Mark question as answered
-        setAnsweredQuestions((prev) => {
-          const seq = currentAttempt.sequence;
-          return prev.includes(seq) ? prev : [...prev, seq];
-        });
+      // 2. Submit audio for server-side Whisper Large-v3 STT processing
+      await api.submitAudio(attemptKey, uploadId, 'AUDIO');
 
-        // Submit audio for server-side STT processing (Whisper Large-v3)
-        await api.submitAudio(attemptKey, uploadId, 'AUDIO');
+      // 3. Mark sequence as answered
+      setAnsweredQuestions((prev) => {
+        const seq = currentAttempt.sequence;
+        return prev.includes(seq) ? prev : [...prev, seq];
+      });
 
-        // Clear blobs and reset upload state
-        clearBlobs();
-        resetUpload();
+      // 4. Clean up recording preview
+      URL.revokeObjectURL(recordedAudio.url);
+      setRecordedAudio(null);
+      clearBlobs();
+      resetUpload();
 
-        // Refresh session to transition to the next question
-        await refreshSession(sessionId);
-      }
+      // 5. Fetch next question from server
+      await refreshSession(sessionId);
     } catch (err) {
-      console.error('Failed to process recording:', err);
+      console.error('Failed to submit recording:', err);
     }
-  }, [currentAttempt, stopRecording, upload, clearBlobs, resetUpload, refreshSession, sessionId, token]);
+  }, [currentAttempt, recordedAudio, upload, token, clearBlobs, resetUpload, refreshSession, sessionId]);
 
-  // Handle question navigation
-  const handleSelectQuestion = useCallback(
-    async (sequence: number) => {
-      console.log('Selected question sequence:', sequence);
-    },
-    []
-  );
+  // Handle re-recording
+  const handleRerecord = useCallback(() => {
+    if (recordedAudio) {
+      URL.revokeObjectURL(recordedAudio.url);
+      setRecordedAudio(null);
+    }
+    clearBlobs();
+    resetUpload();
+  }, [recordedAudio, clearBlobs, resetUpload]);
 
   // Handle finishing the session
   const handleFinish = useCallback(async () => {
     try {
       await finishSession(sessionId);
+      stopAllMedia();
       onFinish();
     } catch (err) {
       console.error('Failed to finish session:', err);
     }
-  }, [sessionId, finishSession, onFinish]);
+  }, [sessionId, finishSession, stopAllMedia, onFinish]);
 
   // Loading state
   if (isLoading && !session) {
@@ -173,7 +201,9 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   }
 
   const currentSequence = currentAttempt?.sequence || session.current_attempt?.sequence || 1;
-  const questionText = currentAttempt?.text || session.current_attempt?.text || 'Đang tải nội dung câu hỏi...';
+  const questionText = currentAttempt?.text || session.current_attempt?.text || '';
+  const isAllAnswered = !currentAttempt && !session.current_attempt;
+  const isLastQuestion = currentSequence >= session.question_count;
 
   return (
     <div style={styles.container}>
@@ -185,43 +215,112 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
         </div>
         <div style={styles.headerRight}>
           <span style={styles.progress}>
-            Câu {currentSequence} / {session.question_count}
+            {isAllAnswered ? (
+              <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Đã trả lời {session.question_count}/{session.question_count} câu</span>
+            ) : (
+              <span>Câu hỏi <strong>{currentSequence}</strong> / {session.question_count}</span>
+            )}
           </span>
         </div>
       </header>
 
       {/* Main Content */}
       <div style={styles.mainContent}>
-        {/* Question Area */}
+        {/* Question & Answer Area */}
         <div style={styles.questionArea}>
-          <div style={styles.questionCard}>
-            <div style={styles.questionCardHeader}>
-              <h2 style={styles.questionTitle}>
-                Câu hỏi {currentSequence}
+          {isAllAnswered ? (
+            <div style={{ ...styles.questionCard, textAlign: 'center', padding: '40px 24px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+              <h2 style={{ ...styles.questionTitle, fontSize: '22px', marginBottom: '8px' }}>
+                Bạn đã hoàn thành tất cả câu hỏi!
               </h2>
+              <p style={{ color: '#64748b', fontSize: '15px', marginBottom: '24px' }}>
+                Tất cả các bản ghi âm đã được tải lên máy chủ MinIO và đang được AI xử lý.
+              </p>
+              <button style={styles.finishExamBtn} onClick={handleFinish}>
+                Nộp bài &amp; Xem kết quả
+              </button>
             </div>
-            <p style={styles.questionText}>
-              {questionText}
-            </p>
-          </div>
+          ) : (
+            <div style={styles.questionCard}>
+              <div style={styles.questionCardHeader}>
+                <h2 style={styles.questionTitle}>
+                  Câu hỏi {currentSequence}
+                </h2>
+                <span style={styles.questionSeqBadge}>Câu {currentSequence}/{session.question_count}</span>
+              </div>
+              <p style={styles.questionText}>
+                {questionText || 'Đang tải nội dung câu hỏi...'}
+              </p>
+            </div>
+          )}
 
-          {/* Recording Controls */}
-          <div style={styles.recordingArea}>
-            <RecordingControls
-              isRecording={isRecording}
-              duration={duration}
-              disabled={isUploading}
-              onStartRecording={handleStartRecording}
-              onStopRecording={handleStopRecording}
-            />
-          </div>
+          {!isAllAnswered && (
+            <div style={styles.recordingArea}>
+              {/* Timer Display */}
+              <div style={styles.timerDisplay}>
+                <span style={styles.timerLabel}>
+                  {isRecording ? 'Thời gian ghi âm: ' : recordedAudio ? 'Thời lượng câu trả lời: ' : 'Thời gian: '}
+                </span>
+                <span style={{ ...styles.timerValue, color: isRecording ? '#dc2626' : '#1e293b' }}>
+                  {formatTimer(duration)}
+                </span>
+              </div>
 
-          {/* Upload Progress */}
-          <UploadProgress
-            progress={progress}
-            error={uploadError}
-            isUploading={isUploading}
-          />
+              {/* State 1: Ready to record */}
+              {!isRecording && !recordedAudio && !isUploading && (
+                <div style={styles.actionCenter}>
+                  <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 16px 0' }}>
+                    Dành thời gian suy nghĩ câu hỏi, sau đó bấm <strong>&quot;Bắt đầu trả lời&quot;</strong> để ghi âm.
+                  </p>
+                  <button style={styles.startRecordBtn} onClick={handleStartRecording}>
+                    <span>🎙️</span>
+                    <span>Bắt đầu trả lời</span>
+                  </button>
+                </div>
+              )}
+
+              {/* State 2: Currently recording */}
+              {isRecording && (
+                <div style={styles.actionCenter}>
+                  <p style={{ color: '#dc2626', fontWeight: 600, fontSize: '14px', margin: '0 0 16px 0' }}>
+                    ● Đang thu âm giọng nói của bạn... Hãy nói to rõ vào micro.
+                  </p>
+                  <button style={styles.stopRecordBtn} onClick={handleStopRecordingClick}>
+                    <span>⏹️</span>
+                    <span>Kết thúc trả lời</span>
+                  </button>
+                </div>
+              )}
+
+              {/* State 3: Recorded, ready to submit or re-record */}
+              {!isRecording && recordedAudio && !isUploading && (
+                <div style={styles.reviewCard}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
+                    🎧 Nghe lại câu trả lời vừa ghi âm:
+                  </div>
+                  <audio ref={audioPreviewRef} controls src={recordedAudio.url} style={{ width: '100%', marginBottom: '16px' }} />
+
+                  <div style={styles.reviewActions}>
+                    <button style={styles.submitNextBtn} onClick={handleSubmitAndNext}>
+                      <span>{isLastQuestion ? 'Nộp câu trả lời & Nộp bài' : `Nộp câu ${currentSequence} & Sang câu tiếp theo →`}</span>
+                    </button>
+
+                    <button style={styles.rerecordBtn} onClick={handleRerecord}>
+                      <span>🔄 Thu âm lại</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Progress */}
+              <UploadProgress
+                progress={progress}
+                error={uploadError}
+                isUploading={isUploading}
+              />
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -243,10 +342,10 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
             totalQuestions={session.question_count}
             currentQuestion={currentSequence}
             answeredQuestions={answeredQuestions}
-            onSelectQuestion={handleSelectQuestion}
+            onSelectQuestion={() => {}}
           />
 
-          <button style={styles.finishButton} onClick={handleFinish}>
+          <button style={styles.finishSidebarButton} onClick={handleFinish}>
             Hoàn thành bài thi
           </button>
         </aside>
@@ -326,7 +425,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   progress: {
     fontSize: '14px',
-    fontWeight: 500,
     color: '#475569',
   },
   mainContent: {
@@ -361,6 +459,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#0f172a',
     margin: 0,
   },
+  questionSeqBadge: {
+    fontSize: '12px',
+    fontWeight: 500,
+    color: '#64748b',
+    background: '#f1f5f9',
+    padding: '3px 8px',
+    borderRadius: '4px',
+  },
   questionText: {
     fontSize: '17px',
     color: '#1e293b',
@@ -369,8 +475,97 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   recordingArea: {
     display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '20px',
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+  },
+  timerDisplay: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px',
+    marginBottom: '16px',
+  },
+  timerLabel: {
+    fontSize: '14px',
+    color: '#64748b',
+  },
+  timerValue: {
+    fontSize: '32px',
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
+  actionCenter: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  startRecordBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '14px 28px',
+    backgroundColor: '#dc2626',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50px',
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
+    transition: 'all 0.2s',
+  },
+  stopRecordBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '14px 28px',
+    backgroundColor: '#334155',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50px',
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(51, 65, 85, 0.3)',
+    transition: 'all 0.2s',
+  },
+  reviewCard: {
+    width: '100%',
+    maxWidth: '500px',
+    padding: '16px',
+    backgroundColor: '#f8fafc',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+  },
+  reviewActions: {
+    display: 'flex',
+    gap: '12px',
     justifyContent: 'center',
-    padding: '20px 0',
+  },
+  submitNextBtn: {
+    flex: 1,
+    padding: '12px 20px',
+    backgroundColor: '#2563eb',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+  },
+  rerecordBtn: {
+    padding: '12px 18px',
+    backgroundColor: '#ffffff',
+    color: '#475569',
+    border: '1px solid #cbd5e1',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
   },
   sidebar: {
     width: '300px',
@@ -426,7 +621,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  finishButton: {
+  finishSidebarButton: {
     padding: '12px 20px',
     backgroundColor: '#059669',
     color: 'white',
@@ -437,6 +632,17 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     marginTop: 'auto',
     transition: 'background-color 0.2s',
+  },
+  finishExamBtn: {
+    padding: '14px 28px',
+    backgroundColor: '#059669',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    boxShadow: '0 4px 6px rgba(5, 150, 105, 0.2)',
   },
 };
 

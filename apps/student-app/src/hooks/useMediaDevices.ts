@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface MediaDevice {
   deviceId: string;
@@ -18,6 +18,17 @@ export interface UseMediaDevicesResult {
   requestPermissions: () => Promise<void>;
   selectCamera: (deviceId: string) => void;
   selectMicrophone: (deviceId: string) => void;
+  stopAllMedia: () => void;
+}
+
+// Module-level global stream to keep camera & mic alive across pages
+let globalStream: MediaStream | null = null;
+
+export function stopGlobalMedia() {
+  if (globalStream) {
+    globalStream.getTracks().forEach((track) => track.stop());
+    globalStream = null;
+  }
 }
 
 export function useMediaDevices(): UseMediaDevicesResult {
@@ -25,11 +36,13 @@ export function useMediaDevices(): UseMediaDevicesResult {
   const [microphones, setMicrophones] = useState<MediaDevice[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
   const [selectedMicrophone, setSelectedMicrophone] = useState<string | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  
+  const isGlobalActive = !!globalStream && globalStream.active && globalStream.getTracks().some(t => t.readyState === 'live');
+  const [stream, setStream] = useState<MediaStream | null>(isGlobalActive ? globalStream : null);
+  const [hasVideo, setHasVideo] = useState<boolean>(isGlobalActive ? (globalStream?.getVideoTracks().length ?? 0) > 0 : false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [hasVideo, setHasVideo] = useState(false);
-  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [permissionsGranted, setPermissionsGranted] = useState(isGlobalActive);
 
   // Load available devices
   const loadDevices = useCallback(async () => {
@@ -55,7 +68,6 @@ export function useMediaDevices(): UseMediaDevicesResult {
       setCameras(videoDevices);
       setMicrophones(audioDevices);
 
-      // Auto-select first devices if none selected
       if (!selectedCamera && videoDevices.length > 0) {
         setSelectedCamera(videoDevices[0].deviceId);
       }
@@ -74,9 +86,13 @@ export function useMediaDevices(): UseMediaDevicesResult {
       setError(null);
       setWarning(null);
 
-      // Stop existing stream if any
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      // If global stream is already active and healthy, reuse it!
+      if (globalStream && globalStream.active && globalStream.getTracks().some(t => t.readyState === 'live')) {
+        setStream(globalStream);
+        setHasVideo(globalStream.getVideoTracks().length > 0);
+        setPermissionsGranted(true);
+        await loadDevices();
+        return;
       }
 
       let newStream: MediaStream | null = null;
@@ -90,14 +106,14 @@ export function useMediaDevices(): UseMediaDevicesResult {
         });
         videoAcquired = newStream.getVideoTracks().length > 0;
       } catch (mediaErr) {
-        console.warn('Camera failed or unavailable, falling back to audio only:', mediaErr);
-        // 2. Fallback: acquire audio only for oral exam
+        console.warn('Camera failed or in use, trying microphone only:', mediaErr);
+        // 2. Fallback: acquire audio only
         try {
           newStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
           });
           setWarning(
-            'Không thể kích hoạt Camera (thiết bị đang bận hoặc không có camera). Hệ thống chuyển sang chế độ thi chỉ dùng Microphone.'
+            'Không thể kích hoạt Camera (thiết bị đang bận hoặc không có camera). Hệ thống chuyển sang chỉ dùng Microphone.'
           );
         } catch (audioErr) {
           console.error('Microphone also failed:', audioErr);
@@ -112,6 +128,7 @@ export function useMediaDevices(): UseMediaDevicesResult {
       }
 
       if (newStream) {
+        globalStream = newStream;
         setStream(newStream);
         setHasVideo(videoAcquired);
         setPermissionsGranted(true);
@@ -122,18 +139,14 @@ export function useMediaDevices(): UseMediaDevicesResult {
       const errorMessage = err instanceof Error ? err.message : 'Lỗi không xác định';
       setError(`Không thể truy cập thiết bị: ${errorMessage}`);
     }
-  }, [stream, loadDevices]);
+  }, [loadDevices]);
 
   // Update stream when selected devices change
   useEffect(() => {
     const updateStream = async () => {
-      if (!permissionsGranted) return;
+      if (!permissionsGranted || !selectedCamera && !selectedMicrophone) return;
 
       try {
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
-        }
-
         const constraints: MediaStreamConstraints = {
           audio: selectedMicrophone
             ? { deviceId: { exact: selectedMicrophone } }
@@ -145,39 +158,21 @@ export function useMediaDevices(): UseMediaDevicesResult {
         }
 
         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (globalStream && globalStream !== newStream) {
+          globalStream.getTracks().forEach((track) => track.stop());
+        }
+        globalStream = newStream;
         setStream(newStream);
         setHasVideo(newStream.getVideoTracks().length > 0);
       } catch (err) {
-        console.error('Error updating stream:', err);
-        if (selectedMicrophone) {
-          try {
-            const audioOnlyStream = await navigator.mediaDevices.getUserMedia({
-              audio: { deviceId: { exact: selectedMicrophone } },
-            });
-            setStream(audioOnlyStream);
-            setHasVideo(false);
-            return;
-          } catch (audioOnlyErr) {
-            console.error('Audio only also failed:', audioOnlyErr);
-          }
-        }
-        setError('Không thể đổi thiết bị đã chọn');
+        console.error('Error updating stream device:', err);
       }
     };
 
-    if (selectedCamera || selectedMicrophone) {
+    if (permissionsGranted && (selectedCamera || selectedMicrophone)) {
       updateStream();
     }
-  }, [selectedCamera, selectedMicrophone, permissionsGranted]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [stream]);
+  }, [selectedCamera, selectedMicrophone, permissionsGranted, hasVideo]);
 
   const selectCamera = useCallback((deviceId: string) => {
     setSelectedCamera(deviceId);
@@ -185,6 +180,12 @@ export function useMediaDevices(): UseMediaDevicesResult {
 
   const selectMicrophone = useCallback((deviceId: string) => {
     setSelectedMicrophone(deviceId);
+  }, []);
+
+  const stopAllMedia = useCallback(() => {
+    stopGlobalMedia();
+    setStream(null);
+    setHasVideo(false);
   }, []);
 
   return {
@@ -199,5 +200,6 @@ export function useMediaDevices(): UseMediaDevicesResult {
     requestPermissions,
     selectCamera,
     selectMicrophone,
+    stopAllMedia,
   };
 }

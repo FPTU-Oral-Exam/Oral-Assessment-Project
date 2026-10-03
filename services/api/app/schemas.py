@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Input(BaseModel):
@@ -149,9 +149,18 @@ class SubmitAudioIn(Input):
 class UploadIn(Input):
     attempt_id: str
     kind: Literal["AUDIO", "VIDEO"]
-    mime_type: Literal["audio/webm", "video/webm", "audio/mp4", "video/mp4", "audio/ogg"]
+    mime_type: str = Field(min_length=3, max_length=100)
     size: int = Field(gt=0)
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @field_validator("mime_type")
+    @classmethod
+    def clean_mime(cls, v: str) -> str:
+        base = v.split(";")[0].strip()
+        allowed = {"audio/webm", "video/webm", "audio/mp4", "video/mp4", "audio/ogg"}
+        if base not in allowed:
+            raise ValueError(f"MIME type {base} không được hỗ trợ")
+        return base
 
 
 class EnglishTerm(Input):

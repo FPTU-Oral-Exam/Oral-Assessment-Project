@@ -52,6 +52,8 @@ export class ChunkedUploader {
   async upload(file: File, options: UploadOptions): Promise<{ id: string }> {
     const { attemptId, kind, mimeType, onProgress, onChunkComplete } = options;
 
+    const cleanMimeType = (mimeType || 'audio/webm').split(';')[0].trim();
+
     // Step 1: Initialize upload
     const initResponse = await fetch(`${this.baseUrl}/api/uploads/init`, {
       method: "POST",
@@ -64,13 +66,20 @@ export class ChunkedUploader {
         kind,
         size: file.size,
         sha256: await this.computeFileHash(file),
-        mime_type: mimeType,
+        mime_type: cleanMimeType,
       }),
       credentials: "include",
     });
 
     if (!initResponse.ok) {
-      throw new Error("Failed to initialize upload");
+      let errMsg = "Failed to initialize upload";
+      try {
+        const errJson = await initResponse.json();
+        errMsg = errJson.message || errJson.detail || errMsg;
+      } catch {
+        // ignore
+      }
+      throw new Error(`Upload Failed: ${errMsg}`);
     }
 
     const { id: uploadId, chunk_size } = (await initResponse.json()) as UploadInitResponse;
