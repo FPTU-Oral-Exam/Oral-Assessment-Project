@@ -1,6 +1,7 @@
 export type ExamStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 
 export type SessionStatus =
+  | "ASSIGNED"
   | "DEVICE_CHECK"
   | "IN_PROGRESS"
   | "UPLOADING"
