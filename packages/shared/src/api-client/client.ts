@@ -38,11 +38,13 @@ export class ApiClient {
       headers.set("Authorization", `Bearer ${token}`);
     }
 
+    const { headers: _customHeaders, ...restOptions } = options || {};
+
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers,
       credentials: "include",
-      ...options,
+      ...restOptions,
     });
 
     if (response.status === 401 && !options?.skipAuthRefresh && this.refreshing === null) {
