@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { RecordingControls, UploadProgress, QuestionNav } from '../components';
+import { RecordingControls, UploadProgress, QuestionNav, CameraPreview } from '../components';
 import { useRecording } from '../hooks/useRecording';
 import { useChunkedUpload } from '../hooks/useChunkedUpload';
 import { useExamSession } from '../hooks/useExamSession';
+import { useMediaDevices } from '../hooks/useMediaDevices';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
-import { QuestionAttempt, AttemptStatus } from '@oralai/shared';
 
 interface ExamRoomPageProps {
   sessionId: string;
@@ -13,7 +13,6 @@ interface ExamRoomPageProps {
 }
 
 export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish }) => {
-  const [currentQuestionText, setCurrentQuestionText] = useState<string>('');
   const [answeredQuestions, setAnsweredQuestions] = useState<number[]>([]);
 
   const {
@@ -21,10 +20,13 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     currentAttempt,
     isLoading,
     error,
+    initSession,
     refreshSession,
-    startAttempt,
     finishSession,
   } = useExamSession();
+
+  // Media stream for live student proctoring camera
+  const { stream, requestPermissions } = useMediaDevices();
 
   // Get token from auth for upload requests
   const { token } = useAuth();
@@ -34,7 +36,6 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     duration,
     startRecording,
     stopRecording,
-    audioBlobs,
     clearBlobs,
   } = useRecording();
 
@@ -46,33 +47,37 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     reset: resetUpload,
   } = useChunkedUpload();
 
-  // Load session on mount
+  // Initialize camera preview on mount
+  useEffect(() => {
+    requestPermissions().catch(console.error);
+  }, [requestPermissions]);
+
+  // Transition session to IN_PROGRESS and load current attempt on mount
   useEffect(() => {
     if (sessionId) {
-      refreshSession(sessionId).catch(console.error);
+      initSession(sessionId).catch(console.error);
     }
-  }, [sessionId, refreshSession]);
+  }, [sessionId, initSession]);
 
-  // Update answered questions when session changes
-  useEffect(() => {
-    if (session) {
-      // In a real implementation, we'd track which questions have been answered
-      // For now, we'll track locally when submissions happen
-    }
-  }, [session]);
-
-  // Handle starting a new attempt
+  // Handle starting a new attempt recording
   const handleStartRecording = useCallback(async () => {
     if (!currentAttempt) {
-      // Need to start an attempt first - we need an attempt key
-      // In practice, the session should have current_attempt populated by refreshSession
       console.error('No current attempt available');
       return;
     }
+
+    if (currentAttempt.status === 'READY') {
+      try {
+        await api.startAttempt(currentAttempt.id);
+      } catch (err) {
+        console.warn('startAttempt notice:', err);
+      }
+    }
+
     await startRecording();
   }, [currentAttempt, startRecording]);
 
-  // Handle stopping and uploading
+  // Handle stopping recording and uploading audio
   const handleStopRecording = useCallback(async () => {
     if (!currentAttempt) {
       console.error('No current attempt to submit');
@@ -93,7 +98,6 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
         type: 'audio/webm;codecs=opus',
       });
 
-      // Get attempt key from current attempt
       const attemptKey = currentAttempt.id;
 
       if (attemptKey) {
@@ -106,23 +110,25 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
           return prev.includes(seq) ? prev : [...prev, seq];
         });
 
-        // Submit audio for server-side STT processing
+        // Submit audio for server-side STT processing (Whisper Large-v3)
         await api.submitAudio(attemptKey, uploadId, 'AUDIO');
 
         // Clear blobs and reset upload state
         clearBlobs();
         resetUpload();
+
+        // Refresh session to transition to the next question
+        await refreshSession(sessionId);
       }
     } catch (err) {
       console.error('Failed to process recording:', err);
     }
-  }, [currentAttempt, stopRecording, upload, clearBlobs, resetUpload]);
+  }, [currentAttempt, stopRecording, upload, clearBlobs, resetUpload, refreshSession, sessionId, token]);
 
   // Handle question navigation
   const handleSelectQuestion = useCallback(
     async (sequence: number) => {
-      // TODO: Implement question navigation - need backend endpoint for this
-      console.log('Question navigation not implemented, selected:', sequence);
+      console.log('Selected question sequence:', sequence);
     },
     []
   );
@@ -141,7 +147,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   if (isLoading && !session) {
     return (
       <div style={styles.loadingContainer}>
-        <div style={styles.loadingText}>Loading exam...</div>
+        <div style={styles.loadingText}>Đang tải câu hỏi bài thi...</div>
       </div>
     );
   }
@@ -150,9 +156,9 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   if (error) {
     return (
       <div style={styles.errorContainer}>
-        <div style={styles.errorText}>Error: {error}</div>
-        <button style={styles.retryButton} onClick={() => refreshSession(sessionId)}>
-          Retry
+        <div style={styles.errorText}>Lỗi: {error}</div>
+        <button style={styles.retryButton} onClick={() => initSession(sessionId)}>
+          Thử lại
         </button>
       </div>
     );
@@ -161,12 +167,13 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   if (!session) {
     return (
       <div style={styles.errorContainer}>
-        <div style={styles.errorText}>No session found</div>
+        <div style={styles.errorText}>Không tìm thấy phiên làm bài</div>
       </div>
     );
   }
 
-  const currentSequence = session.current_attempt?.sequence || 1;
+  const currentSequence = currentAttempt?.sequence || session.current_attempt?.sequence || 1;
+  const questionText = currentAttempt?.text || session.current_attempt?.text || 'Đang tải nội dung câu hỏi...';
 
   return (
     <div style={styles.container}>
@@ -174,10 +181,11 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <h1 style={styles.examName}>{session.exam_name}</h1>
+          {session.practice && <span style={styles.practiceTag}>Luyện tập</span>}
         </div>
         <div style={styles.headerRight}>
           <span style={styles.progress}>
-            Question {session.answered_count + 1} of {session.question_count}
+            Câu {currentSequence} / {session.question_count}
           </span>
         </div>
       </header>
@@ -187,11 +195,13 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
         {/* Question Area */}
         <div style={styles.questionArea}>
           <div style={styles.questionCard}>
-            <h2 style={styles.questionTitle}>
-              Question {currentSequence}
-            </h2>
+            <div style={styles.questionCardHeader}>
+              <h2 style={styles.questionTitle}>
+                Câu hỏi {currentSequence}
+              </h2>
+            </div>
             <p style={styles.questionText}>
-              {session.current_attempt?.text || 'Question text would be displayed here...'}
+              {questionText}
             </p>
           </div>
 
@@ -216,6 +226,19 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
 
         {/* Sidebar */}
         <aside style={styles.sidebar}>
+          {/* Student Proctoring Camera Feed */}
+          <div style={styles.cameraBox}>
+            <div style={styles.cameraHeader}>
+              <span style={styles.cameraLabel}>📹 Camera giám sát</span>
+              <span style={isRecording ? styles.recActive : styles.recPreview}>
+                {isRecording ? '● ĐANG GHI' : 'Xem trước'}
+              </span>
+            </div>
+            <div style={styles.cameraFrame}>
+              <CameraPreview stream={stream} />
+            </div>
+          </div>
+
           <QuestionNav
             totalQuestions={session.question_count}
             currentQuestion={currentSequence}
@@ -224,7 +247,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
           />
 
           <button style={styles.finishButton} onClick={handleFinish}>
-            Finish Exam
+            Hoàn thành bài thi
           </button>
         </aside>
       </div>
@@ -237,7 +260,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#f8fafc',
   },
   loadingContainer: {
     display: 'flex',
@@ -247,7 +270,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   loadingText: {
     fontSize: '18px',
-    color: '#6b7280',
+    color: '#64748b',
   },
   errorContainer: {
     display: 'flex',
@@ -276,17 +299,26 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     padding: '16px 24px',
     backgroundColor: 'white',
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: '1px solid #e2e8f0',
   },
   headerLeft: {
     display: 'flex',
     alignItems: 'center',
+    gap: '12px',
   },
   examName: {
     fontSize: '20px',
     fontWeight: '600',
-    color: '#111827',
+    color: '#0f172a',
     margin: 0,
+  },
+  practiceTag: {
+    backgroundColor: '#e0f2fe',
+    color: '#0369a1',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: 500,
   },
   headerRight: {
     display: 'flex',
@@ -294,7 +326,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   progress: {
     fontSize: '14px',
-    color: '#6b7280',
+    fontWeight: 500,
+    color: '#475569',
   },
   mainContent: {
     display: 'flex',
@@ -313,18 +346,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: 'white',
     borderRadius: '8px',
     padding: '24px',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+    border: '1px solid #e2e8f0',
+  },
+  questionCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
   },
   questionTitle: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#111827',
-    margin: '0 0 12px 0',
+    color: '#0f172a',
+    margin: 0,
   },
   questionText: {
-    fontSize: '16px',
-    color: '#374151',
-    lineHeight: 1.6,
+    fontSize: '17px',
+    color: '#1e293b',
+    lineHeight: 1.7,
     margin: 0,
   },
   recordingArea: {
@@ -333,21 +373,66 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '20px 0',
   },
   sidebar: {
-    width: '280px',
-    padding: '24px',
+    width: '300px',
+    padding: '20px',
     backgroundColor: 'white',
-    borderLeft: '1px solid #e5e7eb',
+    borderLeft: '1px solid #e2e8f0',
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    gap: '20px',
+    overflowY: 'auto',
+  },
+  cameraBox: {
+    backgroundColor: '#ffffff',
+    borderRadius: '8px',
+    border: '1px solid #cbd5e1',
+    overflow: 'hidden',
+  },
+  cameraHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 12px',
+    backgroundColor: '#f1f5f9',
+    borderBottom: '1px solid #e2e8f0',
+  },
+  cameraLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#334155',
+  },
+  recActive: {
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#ef4444',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#fee2e2',
+  },
+  recPreview: {
+    fontSize: '11px',
+    fontWeight: 500,
+    color: '#64748b',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: '#e2e8f0',
+  },
+  cameraFrame: {
+    width: '100%',
+    height: '160px',
+    backgroundColor: '#0f172a',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   finishButton: {
-    padding: '14px 24px',
+    padding: '12px 20px',
     backgroundColor: '#059669',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
-    fontSize: '16px',
+    fontSize: '15px',
     fontWeight: '600',
     cursor: 'pointer',
     marginTop: 'auto',

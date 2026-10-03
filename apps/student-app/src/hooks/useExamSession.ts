@@ -8,6 +8,7 @@ export interface UseExamSessionResult {
   currentAttempt: QuestionAttempt | null;
   isLoading: boolean;
   error: string | null;
+  initSession: (sessionKey: string) => Promise<void>;
   refreshSession: (sessionKey: string) => Promise<void>;
   startAttempt: (attemptKey: string) => Promise<QuestionAttempt>;
   submitAttempt: (
@@ -23,6 +24,34 @@ export function useExamSession(): UseExamSessionResult {
   const [currentAttempt, setCurrentAttempt] = useState<QuestionAttempt | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const initSession = useCallback(async (sessionKey: string): Promise<void> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // 1. Try to start the session (transitions from DEVICE_CHECK to IN_PROGRESS)
+      try {
+        const startData = await api.startSession(sessionKey);
+        setSession(startData);
+        setCurrentAttempt(startData.current_attempt || null);
+        return;
+      } catch (startErr) {
+        console.warn('startSession notice (might already be started):', startErr);
+      }
+
+      // 2. Fetch session data
+      const data = await api.getSession(sessionKey);
+      setSession(data);
+      setCurrentAttempt(data.current_attempt || null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load session';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const refreshSession = useCallback(async (sessionKey: string): Promise<void> => {
     setIsLoading(true);
@@ -109,6 +138,7 @@ export function useExamSession(): UseExamSessionResult {
     currentAttempt,
     isLoading,
     error,
+    initSession,
     refreshSession,
     startAttempt,
     submitAttempt,
