@@ -318,8 +318,8 @@ def finish(key: str, db: Session = Depends(get_db), user=Depends(current_user)):
             kinds = set(
                 db.scalars(select(Upload.kind).where(Upload.attempt_id == a.id, Upload.status == "COMPLETED"))
             )
-            if not {"AUDIO", "VIDEO"} <= kinds:
-                fail(409, "EVIDENCE_PENDING", "Chờ tải đủ audio/video trước khi nộp bài")
+            if not {"AUDIO"} <= kinds:
+                fail(409, "EVIDENCE_PENDING", "Chờ tải đủ audio trước khi nộp bài")
     session.status, session.completed_at = "SUBMITTED", time.time()
     db.flush()
     finalize(db, session)
