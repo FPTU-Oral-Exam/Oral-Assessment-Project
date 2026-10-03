@@ -13,6 +13,8 @@ export interface UseMediaDevicesResult {
   selectedMicrophone: string | null;
   stream: MediaStream | null;
   error: string | null;
+  warning: string | null;
+  hasVideo: boolean;
   requestPermissions: () => Promise<void>;
   selectCamera: (deviceId: string) => void;
   selectMicrophone: (deviceId: string) => void;
@@ -25,6 +27,8 @@ export function useMediaDevices(): UseMediaDevicesResult {
   const [selectedMicrophone, setSelectedMicrophone] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [hasVideo, setHasVideo] = useState(false);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
 
   // Load available devices
@@ -60,7 +64,7 @@ export function useMediaDevices(): UseMediaDevicesResult {
       }
     } catch (err) {
       console.error('Error enumerating devices:', err);
-      setError('Failed to enumerate devices');
+      setError('Không thể liệt kê thiết bị');
     }
   }, [selectedCamera, selectedMicrophone]);
 
@@ -68,30 +72,55 @@ export function useMediaDevices(): UseMediaDevicesResult {
   const requestPermissions = useCallback(async () => {
     try {
       setError(null);
+      setWarning(null);
 
       // Stop existing stream if any
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
 
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      let newStream: MediaStream | null = null;
+      let videoAcquired = false;
 
-      setStream(newStream);
-      setPermissionsGranted(true);
-      await loadDevices();
+      // 1. Try to acquire both video and audio
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        videoAcquired = newStream.getVideoTracks().length > 0;
+      } catch (mediaErr) {
+        console.warn('Camera failed or unavailable, falling back to audio only:', mediaErr);
+        // 2. Fallback: acquire audio only for oral exam
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          setWarning(
+            'Không thể kích hoạt Camera (thiết bị đang bận hoặc không có camera). Hệ thống chuyển sang chế độ thi chỉ dùng Microphone.'
+          );
+        } catch (audioErr) {
+          console.error('Microphone also failed:', audioErr);
+          const errMessage = audioErr instanceof Error ? audioErr.message : 'Unknown error';
+          if (errMessage.includes('Permission denied') || errMessage.includes('NotAllowed')) {
+            throw new Error('Quyền Microphone bị từ chối. Vui lòng cấp quyền trong cài đặt Windows.');
+          } else if (errMessage.includes('NotFound') || errMessage.includes('Devices not found')) {
+            throw new Error('Không tìm thấy Microphone trên máy tính này. Vui lòng cắm tai nghe/micro.');
+          }
+          throw audioErr;
+        }
+      }
+
+      if (newStream) {
+        setStream(newStream);
+        setHasVideo(videoAcquired);
+        setPermissionsGranted(true);
+        await loadDevices();
+      }
     } catch (err) {
       console.error('Error requesting permissions:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      if (errorMessage.includes('Permission denied') || errorMessage.includes('NotAllowed')) {
-        setError('Permission denied. Please allow camera and microphone access.');
-      } else if (errorMessage.includes('NotFound') || errorMessage.includes('Devices not found')) {
-        setError('No camera or microphone found on this device.');
-      } else {
-        setError(`Failed to access devices: ${errorMessage}`);
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Lỗi không xác định';
+      setError(`Không thể truy cập thiết bị: ${errorMessage}`);
     }
   }, [stream, loadDevices]);
 
@@ -101,7 +130,6 @@ export function useMediaDevices(): UseMediaDevicesResult {
       if (!permissionsGranted) return;
 
       try {
-        // Stop current stream
         if (stream) {
           stream.getTracks().forEach((track) => track.stop());
         }
@@ -110,16 +138,30 @@ export function useMediaDevices(): UseMediaDevicesResult {
           audio: selectedMicrophone
             ? { deviceId: { exact: selectedMicrophone } }
             : true,
-          video: selectedCamera
-            ? { deviceId: { exact: selectedCamera } }
-            : true,
         };
+
+        if (hasVideo && selectedCamera) {
+          constraints.video = { deviceId: { exact: selectedCamera } };
+        }
 
         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
         setStream(newStream);
+        setHasVideo(newStream.getVideoTracks().length > 0);
       } catch (err) {
         console.error('Error updating stream:', err);
-        setError('Failed to switch device');
+        if (selectedMicrophone) {
+          try {
+            const audioOnlyStream = await navigator.mediaDevices.getUserMedia({
+              audio: { deviceId: { exact: selectedMicrophone } },
+            });
+            setStream(audioOnlyStream);
+            setHasVideo(false);
+            return;
+          } catch (audioOnlyErr) {
+            console.error('Audio only also failed:', audioOnlyErr);
+          }
+        }
+        setError('Không thể đổi thiết bị đã chọn');
       }
     };
 
@@ -152,6 +194,8 @@ export function useMediaDevices(): UseMediaDevicesResult {
     selectedMicrophone,
     stream,
     error,
+    warning,
+    hasVideo,
     requestPermissions,
     selectCamera,
     selectMicrophone,

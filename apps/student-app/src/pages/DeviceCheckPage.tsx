@@ -22,6 +22,8 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
     selectedMicrophone,
     stream,
     error,
+    warning,
+    hasVideo,
     requestPermissions,
     selectCamera,
     selectMicrophone,
@@ -29,8 +31,9 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
 
   const { level, isSpeaking } = useAudioLevel(stream);
 
+  const hasAudio = !!stream && stream.getAudioTracks().length > 0;
   const hasPermissions = !!stream;
-  const isReady = hasPermissions && selectedCamera && selectedMicrophone;
+  const isReady = hasAudio && (microphones.length > 0 || !!selectedMicrophone);
 
   const handleStartExam = () => {
     if (isReady) {
@@ -43,7 +46,7 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
       <div className="device-check-page__header">
         <h1>Kiểm tra thiết bị</h1>
         <p className="device-check-page__subtitle">
-          Vui lòng cho phép truy cập camera và microphone để bắt đầu bài thi
+          Vui lòng cho phép truy cập microphone để làm bài thi vấn đáp (camera khuyến nghị nếu có)
         </p>
       </div>
 
@@ -55,6 +58,26 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           <span>{error}</span>
+        </div>
+      )}
+
+      {warning && (
+        <div
+          style={{
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            color: '#92400e',
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <span>ℹ️</span>
+          <span>{warning}</span>
         </div>
       )}
 
@@ -76,34 +99,34 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
               onClick={requestPermissions}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M23 7l-7 5 7 5V7z" />
-                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
-              Cho phép truy cập thiết bị
+              Cho phép truy cập thiết bị (Mic & Cam)
             </button>
           ) : (
             <>
-              <div className="device-check-page__selector">
-                <label htmlFor="camera-select">Camera</label>
-                <select
-                  id="camera-select"
-                  value={selectedCamera || ''}
-                  onChange={(e) => selectCamera(e.target.value)}
-                >
-                  {cameras.length === 0 ? (
-                    <option value="">Không tìm thấy camera</option>
-                  ) : (
-                    cameras.map((camera) => (
+              {cameras.length > 0 && (
+                <div className="device-check-page__selector">
+                  <label htmlFor="camera-select">Camera</label>
+                  <select
+                    id="camera-select"
+                    value={selectedCamera || ''}
+                    onChange={(e) => selectCamera(e.target.value)}
+                  >
+                    {cameras.map((camera) => (
                       <option key={camera.deviceId} value={camera.deviceId}>
                         {camera.label}
                       </option>
-                    ))
-                  )}
-                </select>
-              </div>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="device-check-page__selector">
-                <label htmlFor="mic-select">Microphone</label>
+                <label htmlFor="mic-select">Microphone (Bắt buộc)</label>
                 <select
                   id="mic-select"
                   value={selectedMicrophone || ''}
@@ -127,9 +150,9 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
         <div className="device-check-page__checklist">
           <h3>Trạng thái kiểm tra</h3>
           <ul>
-            <li className={hasPermissions ? 'checklist-item--success' : 'checklist-item--pending'}>
+            <li className={hasVideo ? 'checklist-item--success' : (hasPermissions ? 'checklist-item--pending' : 'checklist-item--pending')}>
               <span className="checklist-item__icon">
-                {hasPermissions ? (
+                {hasVideo ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
@@ -139,11 +162,11 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
                   </svg>
                 )}
               </span>
-              Camera {hasPermissions ? 'đã sẵn sàng' : 'chưa kiểm tra'}
+              Camera {hasVideo ? 'đã sẵn sàng' : (hasPermissions ? 'bỏ qua (chỉ ghi âm mic)' : 'chưa kiểm tra')}
             </li>
-            <li className={hasPermissions ? 'checklist-item--success' : 'checklist-item--pending'}>
+            <li className={hasAudio ? 'checklist-item--success' : 'checklist-item--pending'}>
               <span className="checklist-item__icon">
-                {hasPermissions ? (
+                {hasAudio ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
@@ -153,7 +176,7 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
                   </svg>
                 )}
               </span>
-              Microphone {hasPermissions ? 'đã sẵn sàng' : 'chưa kiểm tra'}
+              Microphone {hasAudio ? 'đã sẵn sàng (Bắt buộc)' : 'chưa kiểm tra (Bắt buộc)'}
             </li>
           </ul>
         </div>
