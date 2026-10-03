@@ -4,13 +4,13 @@
  */
 
 export const NOISE_POLICY = {
-  durationMs: 6000,
-  ambientMs: 2000,
-  warmupMs: 300,
+  durationMs: 10000,
+  ambientMs: 3000,
+  warmupMs: 500,
   intervalMs: 100,
   thresholdDbfs: -40,
-  noisyFraction: 0.25,
-  minimumSignalDbfs: -80,
+  noisyFraction: 0.2,
+  minimumSignalDbfs: -90,
 };
 
 export type NoiseStatus = 'quiet' | 'noisy' | 'no_signal';

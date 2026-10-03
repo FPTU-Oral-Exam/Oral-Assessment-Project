@@ -296,8 +296,8 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
             </div>
 
             <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#64748b' }}>
-              Quy trình đo 6 giây: <strong>2 giây đầu giữ im lặng</strong> để đo độ ồn phòng,{' '}
-              <strong>4 giây sau nói thử</strong> để kiểm tra độ rõ giọng nói.
+              Quy trình đo 10 giây: <strong>3 giây đầu giữ im lặng</strong> để đo độ ồn phòng,{' '}
+              <strong>7 giây sau nói thử</strong> để kiểm tra độ rõ giọng nói.
             </p>
 
             {/* Measuring in progress */}
@@ -306,8 +306,8 @@ export const DeviceCheckPage: React.FC<DeviceCheckPageProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
                   <span style={{ fontWeight: 600, color: testStage === 'ambient' ? '#0369a1' : '#15803d' }}>
                     {testStage === 'ambient'
-                      ? '🤫 2s đầu: Vui lòng giữ im lặng để đo độ ồn phòng...'
-                      : '🗣️ 4s sau: Hãy nói thử vào micro (Alo 1 2 3...)...'}
+                      ? '🤫 3s đầu: Vui lòng giữ im lặng để đo độ ồn phòng...'
+                      : '🗣️ 7s sau: Hãy nói thử vào micro (Alo 1 2 3...)...'}
                   </span>
                   <span style={{ color: '#64748b' }}>{testProgress}%</span>
                 </div>
