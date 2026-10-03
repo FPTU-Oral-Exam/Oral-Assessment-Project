@@ -19,8 +19,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     try {
       const response = await api.login(mssv, password);
       onLogin(response.token, response.user);
-    } catch {
-      setError('MSSV hoặc mật khẩu không đúng');
+    } catch (err: any) {
+      setError(err?.message || err?.error?.message || 'MSSV hoặc mật khẩu không đúng');
     } finally {
       setIsLoading(false);
     }

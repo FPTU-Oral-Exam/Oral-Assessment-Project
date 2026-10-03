@@ -35,7 +35,7 @@ async def lifespan(app):
 app = FastAPI(title="AI Oral Assessment API", version="0.1.0", root_path="/api", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cfg.allowed_origins.split(","),
+    allow_origin_regex=r"^(http://localhost(:\d+)?|null|file://.*)$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "Idempotency-Key", "X-Chunk-Sha256"],
@@ -47,10 +47,18 @@ async def boundary(request: Request, call_next):
     request_id = str(uuid.uuid4())
     # Reject cross-origin cookie mutations, including login CSRF. Non-browser clients use Bearer tokens.
     origin = request.headers.get("origin")
+    allowed_origins = {
+        *cfg.allowed_origins.split(","),
+        runtime_settings.settings().public_origin,
+        "null",
+        "file://",
+    }
     if (
         request.method not in {"GET", "HEAD", "OPTIONS"}
         and origin
-        and origin not in [*cfg.allowed_origins.split(","), runtime_settings.settings().public_origin]
+        and origin not in allowed_origins
+        and not origin.startswith("file://")
+        and not origin.startswith("http://localhost:")
     ):
         return JSONResponse(
             status_code=403,
@@ -154,7 +162,11 @@ def login(body: schemas.Login, request: Request, response: Response, db: Session
     db.add(Audit(user_id=user.id, event="LOGIN", details={}))
     db.commit()
     cookies(response, access, refresh)
-    return {"user": public_user(user)}
+    return {
+        "user": public_user(user),
+        "token": access,
+        "access_token": access,
+    }
 
 
 @app.get("/auth/me")
@@ -175,7 +187,11 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     access, new_refresh = issue_tokens(db, user)
     db.commit()
     cookies(response, access, new_refresh)
-    return {"user": public_user(user)}
+    return {
+        "user": public_user(user),
+        "token": access,
+        "access_token": access,
+    }
 
 
 @app.post("/auth/logout")
