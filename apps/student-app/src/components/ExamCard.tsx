@@ -3,28 +3,29 @@ import type { StudentExam, SessionStatus } from '@oralai/shared';
 
 interface ExamCardProps {
   exam: StudentExam;
-  onStart: (sessionId: string) => void;
-  onContinue: (sessionId: string) => void;
+  onSelectExam: (exam: StudentExam) => void;
+  isLoading?: boolean;
 }
 
-export function ExamCard({ exam, onStart, onContinue }: ExamCardProps) {
+export function ExamCard({ exam, onSelectExam, isLoading }: ExamCardProps) {
   const statusConfig: Record<SessionStatus, { label: string; color: string; action: string }> = {
-    DEVICE_CHECK: { label: 'Kiểm tra thiết bị', color: '#ca8a04', action: 'Bắt đầu' },
-    IN_PROGRESS: { label: 'Đang thi', color: '#ca8a04', action: 'Tiếp tục' },
-    UPLOADING: { label: 'Đang tải lên', color: '#ca8a04', action: 'Chờ' },
-    SUBMITTED: { label: 'Đã nộp', color: '#2563eb', action: 'Xem' },
-    REVIEW_REQUIRED: { label: 'Cần xem lại', color: '#dc2626', action: 'Xem' },
+    ASSIGNED: { label: 'Sẵn sàng thi', color: '#2563eb', action: 'Bắt đầu làm bài' },
+    DEVICE_CHECK: { label: 'Kiểm tra thiết bị', color: '#ca8a04', action: 'Tiếp tục' },
+    IN_PROGRESS: { label: 'Đang làm dở', color: '#eab308', action: 'Tiếp tục làm bài' },
+    UPLOADING: { label: 'Đang nộp bài', color: '#6366f1', action: 'Đang nộp...' },
+    SUBMITTED: { label: 'Đã nộp bài', color: '#059669', action: 'Xem lại' },
+    REVIEW_REQUIRED: { label: 'Chờ chấm điểm', color: '#ea580c', action: 'Xem lại' },
     COMPLETED: { label: 'Hoàn thành', color: '#16a34a', action: 'Xem kết quả' },
   };
 
-  const config = statusConfig[exam.status] || { label: 'Không xác định', color: '#64748b', action: 'Xem' };
+  const config = statusConfig[exam.status] || {
+    label: exam.status || 'Chưa thi',
+    color: '#2563eb',
+    action: 'Bắt đầu làm bài',
+  };
 
   const handleClick = () => {
-    if (exam.status === 'DEVICE_CHECK' || exam.status === 'COMPLETED') {
-      onStart(exam.session_id || '');
-    } else if (exam.session_id) {
-      onContinue(exam.session_id);
-    }
+    onSelectExam(exam);
   };
 
   return (
@@ -42,8 +43,16 @@ export function ExamCard({ exam, onStart, onContinue }: ExamCardProps) {
         {exam.practice && <span style={styles.practice}>Luyện tập</span>}
       </div>
 
-      <button onClick={handleClick} style={styles.button}>
-        {config.action}
+      <button
+        onClick={handleClick}
+        disabled={isLoading}
+        style={{
+          ...styles.button,
+          opacity: isLoading ? 0.6 : 1,
+          cursor: isLoading ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {isLoading ? 'Đang khởi tạo...' : config.action}
       </button>
     </div>
   );

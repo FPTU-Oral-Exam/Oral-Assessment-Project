@@ -19,7 +19,7 @@ export function ExamListPage({ onStartExam, onLogout }: ExamListPageProps) {
     async function fetchExams() {
       try {
         setIsLoading(true);
-        const currentToken = token;
+        const currentToken = token || api.getToken();
         if (!currentToken) {
           setError('No authentication token');
           return;
@@ -39,12 +39,27 @@ export function ExamListPage({ onStartExam, onLogout }: ExamListPageProps) {
     fetchExams();
   }, [token]);
 
-  const handleStartExam = async (sessionId: string) => {
-    onStartExam(sessionId);
-  };
+  const [startingExamId, setStartingExamId] = useState<string | null>(null);
 
-  const handleContinueExam = async (sessionId: string) => {
-    onStartExam(sessionId);
+  const handleSelectExam = async (exam: StudentExam) => {
+    try {
+      setStartingExamId(exam.id);
+      let sessionId = exam.session_id;
+
+      // If no session created yet, or newly assigned, create the exam session
+      if (!sessionId || exam.status === 'ASSIGNED') {
+        const session = await api.createSession(exam.id);
+        sessionId = session.id;
+      }
+
+      if (sessionId) {
+        onStartExam(sessionId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể khởi tạo bài thi');
+    } finally {
+      setStartingExamId(null);
+    }
   };
 
   if (isLoading) {
@@ -93,8 +108,8 @@ export function ExamListPage({ onStartExam, onLogout }: ExamListPageProps) {
               <ExamCard
                 key={exam.id}
                 exam={exam}
-                onStart={handleStartExam}
-                onContinue={handleContinueExam}
+                onSelectExam={handleSelectExam}
+                isLoading={startingExamId === exam.id}
               />
             ))}
           </div>
