@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { Toaster } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 
@@ -23,6 +24,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           </div>
         </main>
       </div>
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }
