@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings as base_settings
 from .db import get_db
-from .models import Audit
+from .models import Audit, User
 from .schemas import Input
 from .security import admin, fail
 

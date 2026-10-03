@@ -1,10 +1,13 @@
-export default function Settings() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-800 mb-6">Cấu hình hệ thống</h1>
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-8 text-center text-slate-500">
-        Trang đang được phát triển.
-      </div>
-    </div>
-  );
+import { requireRole } from "@/lib/auth";
+import { SettingsClient } from "./SettingsClient";
+
+export const metadata = {
+  title: "Cấu hình hệ thống | OralAI Staff Portal",
+  description: "Quản trị thông số AI, Google OAuth và cài đặt mạng nền tảng",
+};
+
+export default async function SettingsPage() {
+  await requireRole(["SYSTEM_ADMIN"]);
+
+  return <SettingsClient />;
 }
