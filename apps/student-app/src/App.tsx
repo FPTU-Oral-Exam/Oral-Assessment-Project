@@ -6,6 +6,8 @@ import { DeviceCheckPage } from './pages/DeviceCheckPage';
 import { ExamRoomPage } from './pages/ExamRoomPage';
 import { api } from './lib/api';
 
+import { stopGlobalMedia } from './hooks/useMediaDevices';
+
 type Page = 'login' | 'exam-list' | 'device-check' | 'exam-room';
 
 const App: React.FC = () => {
@@ -19,6 +21,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    stopGlobalMedia();
     api.clearToken();
     logout();
     setCurrentPage('login');
@@ -35,10 +38,12 @@ const App: React.FC = () => {
   };
 
   const handleDeviceCheckBack = () => {
+    stopGlobalMedia();
     setCurrentPage('exam-list');
   };
 
   const handleExamFinish = () => {
+    stopGlobalMedia();
     setSessionId('');
     setCurrentPage('exam-list');
   };

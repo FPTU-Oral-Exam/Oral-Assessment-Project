@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface MediaDevice {
   deviceId: string;
@@ -13,9 +13,22 @@ export interface UseMediaDevicesResult {
   selectedMicrophone: string | null;
   stream: MediaStream | null;
   error: string | null;
+  warning: string | null;
+  hasVideo: boolean;
   requestPermissions: () => Promise<void>;
   selectCamera: (deviceId: string) => void;
   selectMicrophone: (deviceId: string) => void;
+  stopAllMedia: () => void;
+}
+
+// Module-level global stream to keep camera & mic alive across pages
+let globalStream: MediaStream | null = null;
+
+export function stopGlobalMedia() {
+  if (globalStream) {
+    globalStream.getTracks().forEach((track) => track.stop());
+    globalStream = null;
+  }
 }
 
 export function useMediaDevices(): UseMediaDevicesResult {
@@ -23,9 +36,13 @@ export function useMediaDevices(): UseMediaDevicesResult {
   const [microphones, setMicrophones] = useState<MediaDevice[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null);
   const [selectedMicrophone, setSelectedMicrophone] = useState<string | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  
+  const isGlobalActive = !!globalStream && globalStream.active && globalStream.getTracks().some(t => t.readyState === 'live');
+  const [stream, setStream] = useState<MediaStream | null>(isGlobalActive ? globalStream : null);
+  const [hasVideo, setHasVideo] = useState<boolean>(isGlobalActive ? (globalStream?.getVideoTracks().length ?? 0) > 0 : false);
   const [error, setError] = useState<string | null>(null);
-  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [permissionsGranted, setPermissionsGranted] = useState(isGlobalActive);
 
   // Load available devices
   const loadDevices = useCallback(async () => {
@@ -51,7 +68,6 @@ export function useMediaDevices(): UseMediaDevicesResult {
       setCameras(videoDevices);
       setMicrophones(audioDevices);
 
-      // Auto-select first devices if none selected
       if (!selectedCamera && videoDevices.length > 0) {
         setSelectedCamera(videoDevices[0].deviceId);
       }
@@ -60,7 +76,7 @@ export function useMediaDevices(): UseMediaDevicesResult {
       }
     } catch (err) {
       console.error('Error enumerating devices:', err);
-      setError('Failed to enumerate devices');
+      setError('Không thể liệt kê thiết bị');
     }
   }, [selectedCamera, selectedMicrophone]);
 
@@ -68,74 +84,95 @@ export function useMediaDevices(): UseMediaDevicesResult {
   const requestPermissions = useCallback(async () => {
     try {
       setError(null);
+      setWarning(null);
 
-      // Stop existing stream if any
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      // If global stream is already active and healthy, reuse it!
+      if (globalStream && globalStream.active && globalStream.getTracks().some(t => t.readyState === 'live')) {
+        setStream(globalStream);
+        setHasVideo(globalStream.getVideoTracks().length > 0);
+        setPermissionsGranted(true);
+        await loadDevices();
+        return;
       }
 
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      let newStream: MediaStream | null = null;
+      let videoAcquired = false;
 
-      setStream(newStream);
-      setPermissionsGranted(true);
-      await loadDevices();
+      // 1. Try to acquire both video and audio
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        videoAcquired = newStream.getVideoTracks().length > 0;
+      } catch (mediaErr) {
+        console.warn('Camera failed or in use, trying microphone only:', mediaErr);
+        // 2. Fallback: acquire audio only
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          setWarning(
+            'Không thể kích hoạt Camera (thiết bị đang bận hoặc không có camera). Hệ thống chuyển sang chỉ dùng Microphone.'
+          );
+        } catch (audioErr) {
+          console.error('Microphone also failed:', audioErr);
+          const errMessage = audioErr instanceof Error ? audioErr.message : 'Unknown error';
+          if (errMessage.includes('Permission denied') || errMessage.includes('NotAllowed')) {
+            throw new Error('Quyền Microphone bị từ chối. Vui lòng cấp quyền trong cài đặt Windows.');
+          } else if (errMessage.includes('NotFound') || errMessage.includes('Devices not found')) {
+            throw new Error('Không tìm thấy Microphone trên máy tính này. Vui lòng cắm tai nghe/micro.');
+          }
+          throw audioErr;
+        }
+      }
+
+      if (newStream) {
+        globalStream = newStream;
+        setStream(newStream);
+        setHasVideo(videoAcquired);
+        setPermissionsGranted(true);
+        await loadDevices();
+      }
     } catch (err) {
       console.error('Error requesting permissions:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      if (errorMessage.includes('Permission denied') || errorMessage.includes('NotAllowed')) {
-        setError('Permission denied. Please allow camera and microphone access.');
-      } else if (errorMessage.includes('NotFound') || errorMessage.includes('Devices not found')) {
-        setError('No camera or microphone found on this device.');
-      } else {
-        setError(`Failed to access devices: ${errorMessage}`);
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Lỗi không xác định';
+      setError(`Không thể truy cập thiết bị: ${errorMessage}`);
     }
-  }, [stream, loadDevices]);
+  }, [loadDevices]);
 
   // Update stream when selected devices change
   useEffect(() => {
     const updateStream = async () => {
-      if (!permissionsGranted) return;
+      if (!permissionsGranted || !selectedCamera && !selectedMicrophone) return;
 
       try {
-        // Stop current stream
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
-        }
-
         const constraints: MediaStreamConstraints = {
           audio: selectedMicrophone
             ? { deviceId: { exact: selectedMicrophone } }
             : true,
-          video: selectedCamera
-            ? { deviceId: { exact: selectedCamera } }
-            : true,
         };
 
+        if (hasVideo && selectedCamera) {
+          constraints.video = { deviceId: { exact: selectedCamera } };
+        }
+
         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (globalStream && globalStream !== newStream) {
+          globalStream.getTracks().forEach((track) => track.stop());
+        }
+        globalStream = newStream;
         setStream(newStream);
+        setHasVideo(newStream.getVideoTracks().length > 0);
       } catch (err) {
-        console.error('Error updating stream:', err);
-        setError('Failed to switch device');
+        console.error('Error updating stream device:', err);
       }
     };
 
-    if (selectedCamera || selectedMicrophone) {
+    if (permissionsGranted && (selectedCamera || selectedMicrophone)) {
       updateStream();
     }
-  }, [selectedCamera, selectedMicrophone, permissionsGranted]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [stream]);
+  }, [selectedCamera, selectedMicrophone, permissionsGranted, hasVideo]);
 
   const selectCamera = useCallback((deviceId: string) => {
     setSelectedCamera(deviceId);
@@ -145,6 +182,12 @@ export function useMediaDevices(): UseMediaDevicesResult {
     setSelectedMicrophone(deviceId);
   }, []);
 
+  const stopAllMedia = useCallback(() => {
+    stopGlobalMedia();
+    setStream(null);
+    setHasVideo(false);
+  }, []);
+
   return {
     cameras,
     microphones,
@@ -152,8 +195,11 @@ export function useMediaDevices(): UseMediaDevicesResult {
     selectedMicrophone,
     stream,
     error,
+    warning,
+    hasVideo,
     requestPermissions,
     selectCamera,
     selectMicrophone,
+    stopAllMedia,
   };
 }

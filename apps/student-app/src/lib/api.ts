@@ -88,6 +88,7 @@ class StudentApiClient {
       },
       {
         headers: {
+          'Idempotency-Key': idempotencyKey,
           'X-Idempotency-Key': idempotencyKey,
         },
       }
@@ -104,6 +105,7 @@ class StudentApiClient {
       { upload_id: uploadId, kind },
       {
         headers: {
+          'Idempotency-Key': idempotencyKey,
           'X-Idempotency-Key': idempotencyKey,
         },
       }

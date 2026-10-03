@@ -17,7 +17,8 @@ export interface UploadOptions {
 interface UploadInitResponse {
   id: string;
   chunk_size: number;
-  expires_at: number;
+  status?: string;
+  expires_at?: number;
 }
 
 interface UploadStatusResponse {
@@ -52,6 +53,8 @@ export class ChunkedUploader {
   async upload(file: File, options: UploadOptions): Promise<{ id: string }> {
     const { attemptId, kind, mimeType, onProgress, onChunkComplete } = options;
 
+    const cleanMimeType = (mimeType || 'audio/webm').split(';')[0].trim();
+
     // Step 1: Initialize upload
     const initResponse = await fetch(`${this.baseUrl}/api/uploads/init`, {
       method: "POST",
@@ -64,16 +67,39 @@ export class ChunkedUploader {
         kind,
         size: file.size,
         sha256: await this.computeFileHash(file),
-        mime_type: mimeType,
+        mime_type: cleanMimeType,
       }),
       credentials: "include",
     });
 
     if (!initResponse.ok) {
-      throw new Error("Failed to initialize upload");
+      let errMsg = "Failed to initialize upload";
+      try {
+        const errJson = await initResponse.json();
+        errMsg = errJson.message || errJson.detail || errMsg;
+      } catch {
+        // ignore
+      }
+      throw new Error(`Upload Failed: ${errMsg}`);
     }
 
-    const { id: uploadId, chunk_size } = (await initResponse.json()) as UploadInitResponse;
+    const initData = (await initResponse.json()) as UploadInitResponse;
+    const { id: uploadId, chunk_size, status } = initData;
+
+    // If file was already uploaded and marked COMPLETED on server, return immediately
+    if (status === "COMPLETED") {
+      if (onProgress) {
+        onProgress({
+          loaded: file.size,
+          total: file.size,
+          percentage: 100,
+          currentChunk: 1,
+          totalChunks: 1,
+        });
+      }
+      return { id: uploadId };
+    }
+
     const chunkSize = chunk_size || this.CHUNK_SIZE;
     const totalChunks = Math.ceil(file.size / chunkSize);
 
@@ -100,7 +126,18 @@ export class ChunkedUploader {
       );
 
       if (!chunkResponse.ok) {
-        throw new Error(`Failed to upload chunk ${i}`);
+        if (chunkResponse.status === 409) {
+          // If server reports upload already completed, resolve immediately
+          return { id: uploadId };
+        }
+        let errMsg = `Failed to upload chunk ${i}`;
+        try {
+          const errJson = await chunkResponse.json();
+          errMsg = errJson.message || errJson.detail || errMsg;
+        } catch {
+          // ignore
+        }
+        throw new Error(`Upload Failed: ${errMsg}`);
       }
 
       uploadedBytes += chunk.size;
@@ -130,8 +167,15 @@ export class ChunkedUploader {
       },
     );
 
-    if (!completeResponse.ok) {
-      throw new Error("Failed to complete upload");
+    if (!completeResponse.ok && completeResponse.status !== 409) {
+      let errMsg = "Failed to complete upload";
+      try {
+        const errJson = await completeResponse.json();
+        errMsg = errJson.message || errJson.detail || errMsg;
+      } catch {
+        // ignore
+      }
+      throw new Error(`Upload Failed: ${errMsg}`);
     }
 
     return { id: uploadId };

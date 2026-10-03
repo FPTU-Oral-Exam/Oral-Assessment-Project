@@ -19,7 +19,7 @@ function createWindow() {
     title: 'OralAI Student',
   });
 
-  // Disable screen capture (anti-cheating)
+  // Handle media and screen capture permissions
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     if (permission === 'media') {
       callback(true);
@@ -29,6 +29,16 @@ function createWindow() {
       callback(false);
     }
   });
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    return permission === 'media';
+  });
+
+  if (session.defaultSession.setDevicePermissionHandler) {
+    session.defaultSession.setDevicePermissionHandler((details) => {
+      return details.deviceType === 'camera' || details.deviceType === 'audioInput';
+    });
+  }
 
   // Disable DevTools in production
   if (!isDev) {
