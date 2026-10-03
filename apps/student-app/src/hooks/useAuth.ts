@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { User } from '@oralai/shared';
 
 interface AuthState {
@@ -6,19 +6,35 @@ interface AuthState {
   user: User | null;
 }
 
+// Module-level in-memory state shared across all components (never written to localStorage)
+let globalAuthState: AuthState = {
+  token: null,
+  user: null,
+};
+
+const listeners = new Set<(state: AuthState) => void>();
+
+function setGlobalAuthState(newState: AuthState) {
+  globalAuthState = newState;
+  listeners.forEach((listener) => listener(globalAuthState));
+}
+
 export function useAuth() {
-  const [authState, setAuthState] = useState<AuthState>(() => {
-    // Token is stored in MEMORY only - NOT localStorage (security requirement)
-    return { token: null, user: null };
-  });
+  const [authState, setAuthState] = useState<AuthState>(globalAuthState);
+
+  useEffect(() => {
+    listeners.add(setAuthState);
+    return () => {
+      listeners.delete(setAuthState);
+    };
+  }, []);
 
   const login = useCallback((token: string, user: User) => {
-    setAuthState({ token, user });
+    setGlobalAuthState({ token, user });
   }, []);
 
   const logout = useCallback(() => {
-    // Clear token from memory
-    setAuthState({ token: null, user: null });
+    setGlobalAuthState({ token: null, user: null });
   }, []);
 
   return {

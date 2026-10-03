@@ -22,6 +22,10 @@ class StudentApiClient {
     this.token = null;
   }
 
+  getToken(): string | null {
+    return this.token;
+  }
+
   // Auth endpoints
   async login(username: string, password: string) {
     const response = await this.client.post<{

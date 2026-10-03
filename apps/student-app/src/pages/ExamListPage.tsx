@@ -19,7 +19,7 @@ export function ExamListPage({ onStartExam, onLogout }: ExamListPageProps) {
     async function fetchExams() {
       try {
         setIsLoading(true);
-        const currentToken = token;
+        const currentToken = token || api.getToken();
         if (!currentToken) {
           setError('No authentication token');
           return;
