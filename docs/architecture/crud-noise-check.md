@@ -12,7 +12,7 @@
 
 `POST /admin/courses/{id}/archive` và `/restore` chuyển trạng thái môn; lưu trữ chặn tạo đề và sao chép đề. **Thay đổi hành vi API:** trước đây DELETE môn học chỉ lưu trữ; client tích hợp muốn giữ hành vi đó phải chuyển sang POST `/archive`.
 
-`POST /admin/exams/{id}/copy` tạo bản nháp mới có tên thêm “(bản sao)”, giữ rubric ID, thời gian và blueprint, không có snapshot, assignment, session hoặc kết quả. Bản sao dùng rubric và nguồn kiến thức hiện tại khi công bố lại, không phải bản chụp kiến thức của đề gốc. Giảng viên khác môn và STUDENT/REVIEWER không được thực hiện thao tác ghi. Giao diện có hủy sửa, reset form sau lưu, xóa có xác nhận; lỗi dependency hiện tại vị trí thao tác.
+`POST /admin/exams/{id}/copy` tạo bản nháp mới có tên thêm “(bản sao)”, giữ rubric ID, thời gian và blueprint, không có snapshot, assignment, session hoặc kết quả. Bản sao dùng rubric và nguồn kiến thức hiện tại khi công bố lại, không phải bản chụp kiến thức của đề gốc. Giảng viên khác môn và `STUDENT`/`EXAMINER` không được thực hiện thao tác ghi vào tài nguyên của giảng viên phụ trách. Giao diện có hủy sửa, reset form sau lưu, xóa có xác nhận; lỗi dependency hiện tại vị trí thao tác.
 
 Không thay đổi bảng/cột hay chạy migration mới. Foreign key vẫn là lớp bảo vệ cuối khi có thao tác đồng thời.
 
@@ -36,7 +36,7 @@ Sau cấp quyền thiết bị, nút bắt đầu thi chờ kết quả đạt h
 
 **Cập nhật 23/09/2026 — gain đầu vào:** `lib/microphone-gain.ts` dùng Web Audio GainNode, −12 đến +18 dB, mặc định 0. Luồng mic → gain → audio/video gốc; nhánh gain → RNNoise tạo audio STT đã lọc. Bản gốc trong tài liệu này là bản chưa RNNoise, đã áp dụng gain chọn lúc ghi. Không chỉnh lại minh chứng đã nộp. Bản thu thử dùng cùng gain; đánh giá nền vẫn dùng tín hiệu trước gain để không thay kết luận tiếng ồn theo thanh gain. Theo dõi mức đỉnh và nhắc giảm gain khi gần/vượt −1 dBFS. Đổi gain hủy phép thử và giải phóng bản nghe thử cũ; khóa khi ghi/xử lý/nộp. Xem [hướng dẫn sử dụng](../microphone-desktop.md).
 
-`lib/noise-filter.ts` dùng `@sapphi-red/web-noise-suppressor` (RNNoise WASM/AudioWorklet) ở 48 kHz. Khi bộ lọc hoạt động, câu trả lời luôn ghi đồng thời audio gốc, audio RNNoise và video gốc. Checkbox trước thi chọn bản dùng cho lần STT đầu; dropdown sau ghi cho phép nhận dạng lại từ một trong hai Blob. Lỗi RNNoise giữa lúc ghi làm bản lọc không hợp lệ và khóa lựa chọn đó. Không nối microphone ra loa để tránh hú; nghe thử bằng bản thu phát lại. Audio/video minh chứng luôn lấy từ nhánh gốc.
+`lib/noise-filter.ts` dùng `@sapphi-red/web-noise-suppressor` (RNNoise WASM/AudioWorklet) ở 48 kHz. Bộ lọc triệt tiêu tạp âm nền liên tục khi thu âm câu trả lời. File âm thanh thu được sẽ được đóng gói và chia chunk 4MB tải trực tiếp lên MinIO để server phiên âm. Không nối microphone ra loa để tránh hú; nghe thử bằng bản thu phát lại.
 
 Asset được copy từ dependency npm khi `predev`/`prebuild`, phục vụ tại `/audio` cùng origin, có trong Docker standalone. Không tải WASM từ CDN. Nếu bộ lọc lỗi, người dùng cần tắt lọc hoặc kết nối lại trước lần ghi tiếp theo. PhoWhisper chỉ đổi định dạng sang mono 16 kHz, không lọc FFmpeg lần hai. Client web mới gửi `preprocessing=off` đến `/stt` để tránh lọc lại; client cũ không gửi trường này vẫn theo policy lưu trên server.
 

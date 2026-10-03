@@ -207,15 +207,15 @@ Tài liệu này ghi lại các quy tắc nghiệp vụ của hệ thống AI Or
 
 ---
 
-## 12. Quy tắc về Đối soát Transcript & Chống Gian lận
+## 12. Quy tắc về Bảo mật Phòng thi & Chống Gian lận (Anti-Tampering & Thin-Client)
 
-**Narrative:** Sau khi hoàn thành câu trả lời, sinh viên nghe lại audio và kiểm tra transcript. Hệ thống gỡ bỏ mô hình LLM local nặng nề, cho phép sinh viên sửa tay hoặc thử nhận dạng lại, đồng thời kích hoạt cờ giám sát trung thực.
+**Narrative:** Để triệt tiêu hoàn toàn khả năng gian lận trong thi vấn đáp tự động ("nói một đằng, gõ một nẻo" hoặc sửa đổi bộ nhớ/mã nguồn client), hệ thống áp dụng nguyên tắc **Zero-Trust Client**. Ứng dụng Desktop của sinh viên đóng vai trò Thin-Client (chỉ thu âm và upload bằng chứng). Toàn bộ quá trình phiên âm giọng nói (STT) và chấm điểm được thực hiện khép kín và bất biến tại Server Worker.
 
 | BR-ID | Quy tắc | Lý do |
 |-------|---------|-------|
-| **BR-064** | Gỡ bỏ hoàn toàn sửa lỗi LLM cục bộ (Qwen3); sinh viên tự đối soát transcript sau khi STT xong | Giảm tải tài nguyên máy trạm của sinh viên, tránh lag giật khi thi |
-| **BR-065** | Sinh viên được chọn giữa bản ghi gốc và bản lọc nhiễu RNNoise để bấm "Thử STT lại"; file lưu trữ minh chứng luôn là bản gốc | Hỗ trợ sinh viên thử lại khi có tạp âm nhưng vẫn bảo toàn chứng cứ gốc |
-| **BR-066** | Nếu sinh viên sửa tay transcript khác bản STT gốc $\rightarrow$ Hệ thống gán `stt_confidence = 0` và tự động bật `review_required = True` | Bắt buộc Giảng viên phải nghe lại audio đối soát, ngăn gian lận nói một đằng gõ một nẻo |
+| **BR-064** | Client là Thin-Client (Zero-STT-Local): Tuyệt đối không chạy STT trên máy sinh viên, không hiển thị và cấm sinh viên nhập/sửa văn bản transcript | Loại bỏ triệt để nguy cơ gian lận sửa đáp án hoặc can thiệp client |
+| **BR-065** | Âm thanh ghi nhận từ microphone là bằng chứng pháp lý duy nhất (Legal Evidence); tải lên MinIO theo từng chunk 4MB có SHA-256 integrity checksum | Bảo đảm tính toàn vẹn dữ liệu, chống giả mạo file âm thanh khi truyền qua mạng |
+| **BR-066** | Quá trình phiên âm giọng nói (STT PhoWhisper) do Background Worker thực hiện bất đồng bộ từ file MinIO; điểm số được tính từ transcript của server | Bảo đảm tính khách quan, Server là Nguồn Chân lý Duy nhất (Source of Truth) |
 | **BR-067** | Khi bài thi đang `IN_PROGRESS`, Desktop (Electron `will-prevent-unload`) và Web (`beforeunload`) chặn thoát đột ngột bằng hộp thoại Unload Guard | Ngăn sinh viên vô tình reload hoặc tắt app làm mất bài thi chưa nộp |
 
 ---
@@ -305,9 +305,9 @@ Tài liệu này ghi lại các quy tắc nghiệp vụ của hệ thống AI Or
 | BR-061 | Thiết bị | Đo tiếng ồn luôn lấy tín hiệu trước Gain |
 | BR-062 | Thiết bị | Cảnh báo hạ Gain khi vượt -1dBFS (chống vỡ tiếng) |
 | BR-063 | Thiết bị | Khóa thanh Gain và chọn mic khi đang thi |
-| BR-064 | Transcript | Gỡ bỏ LLM local Qwen3 sửa chính tả |
-| BR-065 | Transcript | Chọn bản gốc hoặc RNNoise để thử STT lại |
-| BR-066 | Chống gian lận | Sửa transcript $\rightarrow$ gán confidence=0 $\rightarrow$ kích hoạt review |
+| BR-064 | Chống gian lận | Thin-Client (Zero-STT local), cấm nhập/sửa transcript |
+| BR-065 | Bằng chứng | Audio MinIO là bằng chứng duy nhất, chunk 4MB SHA-256 |
+| BR-066 | STT Server | PhoWhisper STT xử lý Server-Side bởi Background Worker |
 | BR-067 | Phòng thi | Unload Guard chặn đóng app/reload khi đang thi |
 | BR-068 | Thẩm định | Review khi confidence thấp hoặc điểm ngấp nghé 5.0 |
 | BR-069 | Rubric | Backend kiểm tra trần điểm criterion |

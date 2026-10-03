@@ -1,26 +1,31 @@
 # AI Oral Assessment Platform
 
 [README / danh mục tài liệu](README.md#hướng-dẫn-theo-nhu-cầu)
+
 ## Project Guide for Codex / AI Coding Agent
 
-Hướng dẫn thao tác hiện hành: [Admin, giảng viên và học viên](docs/user-guide.md), [chạy desktop](readme-desktop.md#bắt-đầu-nhanh), [cập nhật Jenkins](docs/jenkins.md). Các phần thiết kế và ghi chú theo ngày bên dưới có nội dung lịch sử; dùng các hướng dẫn này để xác định chức năng đã triển khai.
+> **CẬP NHẬT KIẾN TRÚC HIỆN HÀNH (Tháng 10/2026 — Phase 5 Dual-Frontend & Thin-Client):**
+> Hệ thống đã chính thức chuẩn hóa kiến trúc Dual-Frontend:
+> 1. **Student App (`apps/student-app`):** Thin-Client, ghi âm/hình, lọc nhiễu WASM RNNoise, upload media 4MB chunk lên MinIO. Tuyệt đối **không chạy STT local và không cho phép học viên sửa transcript** (Anti-Tampering & Zero-Manual-Input).
+> 2. **Server-Side STT & AI Worker:** Toàn bộ transcript do Celery Worker phiên âm tự động bằng PhoWhisper trực tiếp từ file âm thanh trên MinIO, sau đó chấm điểm đối chiếu Rubric & RAG.
+> 3. **Chuẩn hóa 4 Vai trò:** `SYSTEM_ADMIN` (Quản trị kỹ thuật), `EXAMINER` (Cán bộ Khảo thí - thay mã cũ `ADMIN`), `TEACHER` (Giảng viên) và `STUDENT` (Sinh viên).
+> Chi tiết xem [Kiến trúc Dual-Frontend](docs/superpowers/specs/2026-09-30-dual-frontend-architecture.md) và [Quy tắc phòng thi](docs/specifications/06-business-rules.md). Các tài liệu MVP cũ đã được chuyển vào [docs/archive/legacy-mvp/](docs/archive/legacy-mvp/README.md).
 
-> **Cập nhật 23/09/2026:** Đã gỡ sửa chính tả bằng LLM khỏi desktop. PhoWhisper STT vẫn đi kèm bộ cài; người dùng có thể sửa transcript bằng tay. AI gợi ý thuật ngữ tiếng Anh khi sinh câu hỏi; admin có thể xóa cả môn học cùng dữ liệu liên quan. Xem [hướng dẫn](README.md#thuật-ngữ-tiếng-anh-và-xóa-môn-học). Windows đã sửa lỗi xuất transcript tiếng Việt qua pipe `cp1252`; cần bundle STT/bộ cài mới để nhận bản sửa.
+Hướng dẫn thao tác hiện hành: [4 vai trò hệ thống](docs/user-guide.md), [hướng dẫn desktop](readme-desktop.md#bắt-đầu-nhanh). Các phần thiết kế và ghi chú theo ngày bên dưới có nội dung lịch sử; dùng các hướng dẫn này để xác định chức năng đã triển khai.
 
-> **Cập nhật 20/09/2026:** tách trạng thái đánh giá FAILED/NOT_GRADED/COMPLETED, không dùng confidence 0 cho kết quả chưa chấm. Chặn đề lệch cấu hình AI trước khi bắt đầu; hỗ trợ ADMIN chấm lại transcript theo phiên bản đề tương thích, giữ nguyên bài gốc và lịch sử, không tự công bố điểm. Xem [thiết kế chấm và confidence](docs/architecture/grading-confidence.md). Các mô tả regrade ở phần thiết kế cũ bên dưới được thay thế trong phạm vi luồng đã triển khai này; manual override vẫn chưa được triển khai.
+> **Cập nhật 23/09/2026 (Lưu trữ):** Đã gỡ sửa chính tả bằng LLM khỏi desktop. PhoWhisper STT vẫn đi kèm bộ cài cũ; AI gợi ý thuật ngữ tiếng Anh khi sinh câu hỏi; admin có thể xóa cả môn học cùng dữ liệu liên quan. Xem [hướng dẫn](README.md#thuật-ngữ-tiếng-anh-và-xóa-môn-học).
 
-> **Hiện hành 17/09/2026 — thay thế mô tả STT/AI/mic cũ bên dưới:** Desktop bắt buộc đóng gói PhoWhisper-small INT8 + runtime, nhận dạng local rồi gửi media gốc và transcript lên server. RNNoise bật/tắt cho audio STT; kiểm tra mic ghi 10 giây (3 giây im lặng + 7 giây nói), phát lại bản gốc/lọc ngay trên app. LLM server dùng Ollama hoặc Gemini theo `.env` (`AI_CONFIG_SOURCE=env`); admin có Gemini nhận dạng lại từ audio gốc bằng API key, không cần JSON Google STT. Admin chọn Gemini STT hoặc Google Cloud STT JSON trong cấu hình web và từng lần nhận dạng lại; desktop luôn local. README và tài liệu kiến trúc được cập nhật theo luồng này. Xem [STT/LLM](docs/architecture/knowledge-speech.md), [mic](docs/architecture/crud-noise-check.md), [đóng gói](docs/desktop-build.md).
+> **Cập nhật 20/09/2026 (Lưu trữ):** tách trạng thái đánh giá FAILED/NOT_GRADED/COMPLETED, không dùng confidence 0 cho kết quả chưa chấm. Chặn đề lệch cấu hình AI trước khi bắt đầu; hỗ trợ ADMIN chấm lại transcript theo phiên bản đề tương thích, giữ nguyên bài gốc và lịch sử, không tự công bố điểm. Xem [thiết kế chấm và confidence](docs/architecture/grading-confidence.md).
 
-> **Mở rộng tài khoản/desktop 13/09/2026:** Google OIDC (web + trình duyệt hệ thống cho Electron), admin đổi vai trò, enrollment theo môn gồm đề công bố tương lai, môn luyện tập mặc định, tab con/popup quản lý, cấu hình credentials AI/OAuth/STT trên web, menu đổi domain desktop và electron-builder/CI cho Windows/Linux/macOS. Migration `0003` giữ dữ liệu cũ. Xem [thiết kế](docs/architecture/accounts-courses-desktop.md) và [build desktop](docs/desktop-build.md).
+> **Ghi chú 17/09/2026 (Lưu trữ — Đã thay thế bởi Phase 5):** Desktop MVP cũ đóng gói PhoWhisper-small INT8 local. Xem [STT/LLM](docs/architecture/knowledge-speech.md), [mic](docs/architecture/crud-noise-check.md), [đóng gói cũ](docs/archive/legacy-mvp/desktop-build.md).
 
-> **Cập nhật 13/09/2026:** hoàn thiện CRUD môn/rubric/đề nháp, xóa môn trống, archive/restore riêng, chặn xóa rubric đang dùng, sao chép đề đã công bố thành bản nháp. Desktop/web có kiểm tra tiếng ồn 5 giây qua Web Audio, yêu cầu tìm nơi yên lặng khi quá ồn và có nút bỏ qua. Giữ bộ lọc FFmpeg trước STT; chưa thay bằng Spleeter khi chưa có benchmark. Không đổi schema/dependency/service Docker; CI GitHub Actions có test âm thanh, repository chưa có Jenkinsfile. Chi tiết hành vi API, ngưỡng tương đối và giới hạn: [CRUD & kiểm tra tiếng ồn](docs/architecture/crud-noise-check.md).
+> **Mở rộng tài khoản/desktop 13/09/2026:** Google OIDC, admin đổi vai trò, enrollment theo môn. Xem [thiết kế](docs/architecture/accounts-courses-desktop.md) và [build desktop cũ](docs/archive/legacy-mvp/desktop-build.md).
 
-> **Cấu hình Google STT tùy chọn:** ADMIN có thể upload/thay JSON service account trong mục Google Cloud STT ở trang Cấu hình giọng nói. Gemini chấm transcript từ Whisper không cần JSON này; AI provider và STT provider độc lập. Credentials nằm trong volume riêng của ứng dụng, dùng chung API/worker, không trả private key về web và không đưa vào Git. Xem [README](README.md).
+> **Cập nhật 13/09/2026:** hoàn thiện CRUD môn/rubric/đề nháp, xóa môn trống, archive/restore riêng, chặn xóa rubric đang dùng, sao chép đề đã công bố thành bản nháp. Chi tiết: [CRUD & kiểm tra tiếng ồn](docs/architecture/crud-noise-check.md).
 
-> Tài liệu này là nguồn mô tả kiến trúc và kế hoạch triển khai chính của dự án.
-> Mục tiêu là để Codex hoặc AI Coding Agent có thể đọc tài liệu này, hiểu hệ thống, chia nhỏ công việc và xây dựng theo từng giai đoạn mà không phá vỡ kiến trúc tổng thể.
+> **Cấu hình Google STT tùy chọn:** ADMIN có thể upload/thay JSON service account trong mục Google Cloud STT ở trang Cấu hình giọng nói. Credentials nằm trong volume riêng của ứng dụng, dùng chung API/worker. Xem [README](README.md).
 
-> **Cập nhật source ngày 11/09/2026:** giai đoạn 1 đã mở rộng một giáo trình PDF/môn, tách chương/header, chủ đề nhiều LO/chương/tài liệu, lọc nhiễu trước STT, admin chọn local/Google/server nội bộ, admin nhận dạng Google và chấm lại có lịch sử, spinner khi STT/nộp bài. Xem [thiết kế cập nhật](docs/architecture/knowledge-speech.md), [README](README.md) và [biên bản kiểm thử](docs/validation.md). Với các mục bên dưới mô tả STT local cố định hoặc regrade chỉ ở giai đoạn 2, áp dụng cập nhật này; các mục offline, OCR, manual override và production chưa tự động trở thành đã triển khai.
+> **Cập nhật source ngày 11/09/2026 (Lưu trữ):** giai đoạn 1 đã mở rộng một giáo trình PDF/môn, tách chương/header. Xem [thiết kế cập nhật](docs/architecture/knowledge-speech.md), [README](README.md) và [biên bản kiểm thử cũ](docs/archive/legacy-mvp/validation.md).
 
 ---
 

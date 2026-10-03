@@ -80,7 +80,7 @@ interface UserProfile {
 }
 
 // ✅ Type alias: PascalCase
-type UserRole = "ADMIN" | "TEACHER" | "STUDENT";
+type UserRole = "SYSTEM_ADMIN" | "EXAMINER" | "TEACHER" | "STUDENT";
 
 // ✅ Enum: PascalCase, members UPPER_SNAKE
 enum ExamStatus {

@@ -121,7 +121,7 @@ test("login, responsive layout and admin course form", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Đăng nhập", exact: true }),
   ).toBeVisible();
-  await page.screenshot({ path: "docs/screenshots/login.png", fullPage: true });
+  await page.screenshot({ path: "docs/archive/legacy-mvp/screenshots/login.png", fullPage: true });
   await page
     .getByLabel("Tên đăng nhập", { exact: true })
     .fill(env.BOOTSTRAP_ADMIN);
@@ -134,7 +134,7 @@ test("login, responsive layout and admin course form", async ({ page }) => {
   await page.getByRole("button", { name: "Vào không gian làm việc" }).click();
   await expect(page.getByRole("heading", { name: /Chào/ })).toBeVisible();
   await page.screenshot({
-    path: "docs/screenshots/dashboard.png",
+    path: "docs/archive/legacy-mvp/screenshots/dashboard.png",
     fullPage: true,
   });
   await page
@@ -217,7 +217,7 @@ test("login, responsive layout and admin course form", async ({ page }) => {
     page.getByText("2 tài liệu bổ sung · 2 chương/mục giáo trình"),
   ).toBeVisible();
   await page.screenshot({
-    path: "docs/screenshots/knowledge.png",
+    path: "docs/archive/legacy-mvp/screenshots/knowledge.png",
     fullPage: true,
   });
   await page.getByRole("button", { name: "02 · Rubric", exact: true }).click();
@@ -354,7 +354,7 @@ test("login, responsive layout and admin course form", async ({ page }) => {
     page.getByLabel("File JSON service account Google (tối đa 64 KB)"),
   ).toBeHidden();
   await page.screenshot({
-    path: "docs/screenshots/speech-settings.png",
+    path: "docs/archive/legacy-mvp/screenshots/speech-settings.png",
     fullPage: true,
     mask: [page.getByText(/^Project:/)],
     maskColor: "#eef2ef",
@@ -536,7 +536,7 @@ test("student records only during answer, submits media, admin plays real WebM",
     .poll(() => audio.evaluate((a: HTMLAudioElement) => a.currentTime))
     .toBeGreaterThan(0);
   await page.screenshot({
-    path: "docs/screenshots/review.png",
+    path: "docs/archive/legacy-mvp/screenshots/review.png",
     fullPage: true,
   });
 });

@@ -15,7 +15,7 @@ Tài liệu này ghi lại các ràng buộc kỹ thuật và nguyên tắc ki�
 | TC-ID | Ràng buộc | Lý do |
 |-------|-----------|-------|
 | **TC-001** | Điểm chính thức được tính và lưu ở server | Đảm bảo tính nhất quán |
-| **TC-002** | Desktop chỉ gửi: transcript, metadata, media, hash, trạng thái | Không tin tưởng client cho dữ liệu quan trọng |
+| **TC-002** | Desktop chỉ gửi: audio/video raw chunked upload MinIO, SHA-256 checksum, metadata session | Không tin tưởng client cho dữ liệu phiên âm hay điểm số |
 | **TC-003** | Server quyết định: câu hỏi, rubric version, điểm, trạng thái hoàn thành | Bảo mật và công bằng |
 | **TC-004** | Không tin tưởng dữ liệu quan trọng từ desktop client | Client có thể bị manipulate |
 
@@ -40,26 +40,27 @@ Tài liệu này ghi lại các ràng buộc kỹ thuật và nguyên tắc ki�
 
 ---
 
-## 3. Ràng buộc về STT (Speech-to-Text)
+## 3. Ràng buộc về STT (Speech-to-Text) & Xử lý Âm thanh
 
-### 3.1 Desktop STT
+### 3.1 Server-Side STT Pipeline (Source of Truth)
 
-**Narrative:** Desktop sử dụng PhoWhisper-small INT8 chạy local trên máy sinh viên. Không cần upload audio lên server để nhận dạng.
-
-| TC-ID | Ràng buộc | Lý do |
-|-------|-----------|-------|
-| **TC-012** | Desktop bắt buộc đóng gói PhoWhisper-small INT8 + runtime | STT local không phụ thuộc server |
-| **TC-013** | STT chạy local, không cần kết nối server để nhận dạng | Hỗ trợ mạng yếu |
-| **TC-014** | Audio gốc được lưu riêng, không thay bằng bản đã lọc | Bảo toàn bằng chứng |
-| **TC-015** | Có tùy chọn bật/tắt RNNoise cho audio STT | Linh hoạt theo điều kiện |
-
-### 3.2 Server STT (Optional)
+**Narrative:** Toàn bộ quá trình phiên âm giọng nói (Speech-to-Text) được chuyển giao 100% về phía Server. Background Worker (Celery/Redis) nhận nhiệm vụ phiên âm trực tiếp từ file âm thanh bằng chứng đã tải lên MinIO. Máy trạm sinh viên đóng vai trò Thin-Client, tuyệt đối không chạy PhoWhisper cục bộ.
 
 | TC-ID | Ràng buộc | Lý do |
 |-------|-----------|-------|
-| **TC-016** | Server STT chỉ dùng cho: trình duyệt web, nhận dạng lại | Desktop luôn dùng local |
-| **TC-017** | Có thể chọn Gemini STT hoặc Google Cloud STT | Linh hoạt theo yêu cầu |
-| **TC-018** | Google Cloud STT cần service account JSON | Xác thực với Google |
+| **TC-012** | Student App là Thin-Client (Zero-STT-Local); không đóng gói runtime Python hay model STT | Bảo đảm tính bất biến, chống gian lận và giảm dung lượng bộ cài |
+| **TC-013** | STT PhoWhisper được thực thi tập trung bởi Server Background Worker | Đảm bảo tính toán độc lập, khách quan, không bị thao túng bởi client |
+| **TC-014** | Audio raw được lưu trữ bất biến trên MinIO S3 theo định dạng WebM | Làm căn cứ pháp lý duy nhất để đối soát và phúc khảo điểm số |
+| **TC-015** | RNNoise WASM AudioWorklet lọc tạp âm real-time ở 48 kHz trước khi ghi | Cải thiện chất lượng bản thu âm đầu vào mà không tiêu tốn GPU server |
+
+### 3.2 Nhận dạng lại và Thẩm định (Review STT)
+
+| TC-ID | Ràng buộc | Lý do |
+|-------|-----------|-------|
+| **TC-016** | Server Worker quản lý hàng đợi STT qua Celery/Redis; xử lý tuần tự hoặc song song | Đảm bảo hệ thống không bị nghẽn khi hàng trăm sinh viên nộp bài cùng lúc |
+| **TC-017** | Hỗ trợ admin/khảo thí yêu cầu nhận dạng lại (Gemini STT hoặc Google Cloud STT) khi phúc khảo | Cung cấp góc nhìn đối chiếu thứ hai cho các trường hợp khiếu nại |
+| **TC-018** | Cấu hình credentials STT đám mây được bảo mật trong volume riêng của server | Không bao giờ lộ private key hay API token xuống client |
+
 
 ---
 

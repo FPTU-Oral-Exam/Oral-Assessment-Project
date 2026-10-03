@@ -1,6 +1,6 @@
 # Thu thử, chỉnh gain, dấu câu và thoát desktop
 
-[README / danh mục tài liệu](../README.md#hướng-dẫn-theo-nhu-cầu) · [Hướng dẫn desktop](../readme-desktop.md) · [Kiểm tra transcript](transcript-correction.md)
+[README / danh mục tài liệu](../README.md#hướng-dẫn-theo-nhu-cầu) · [Hướng dẫn sử dụng](user-guide.md)
 
 ## Ghi thử và nghe lại trước khi thi
 
@@ -24,15 +24,13 @@ Gain phần mềm cũng tăng tiếng nền. Nó không khôi phục âm đã v�
 
 Không thể đổi gain trong lúc đang ghi, STT hoặc nộp bài. Phép đánh giá tiếng ồn môi trường vẫn đo tín hiệu trước gain, nên giảm gain không làm một phòng ồn thành kết quả yên lặng giả. Gain trở về 0 khi mở lại giao diện; nên thu thử mỗi phiên hoặc sau khi đổi thiết bị.
 
-## Vì sao transcript thiếu dấu câu?
+## Quy trình Phiên âm Tập trung (Server-Side STT)
 
-Desktop giữ kết quả PhoWhisper; model có thể trả đoạn văn thiếu dấu chấm/phẩy. Các đoạn nhận dạng được ghép bằng khoảng trắng, không tự coi mỗi đoạn hoặc khoảng nghỉ là một câu. Chất lượng dấu câu không được bảo đảm, kể cả khi nội dung từ đã đúng.
-
-Có hai cách trước khi nộp:
-
-- Tự thêm dấu câu trong ô **Transcript**.
-
-Transcript có chỉnh sửa sẽ cần giảng viên đối chiếu khi nộp. Xem [kiểm tra transcript](transcript-correction.md).
+Trong kiến trúc **Thin-Client**, sinh viên **không cần và không được phép** chỉnh sửa dấu câu hay câu chữ của transcript trên máy client:
+- File âm thanh raw sau khi thu sẽ được chia chunk 4MB và tải thẳng lên MinIO storage.
+- Background Worker trên server sử dụng mô hình **PhoWhisper** phiên âm tự động với độ chính xác cao nhất từ audio gốc.
+- Mô hình AI chấm điểm (LLM Judge) được thiết kế để hiểu và chấm điểm dựa trên ngữ nghĩa câu trả lời, không phụ thuộc vào việc văn bản có dấu câu hoàn hảo hay không.
+- Giảng viên và Cán bộ Khảo thí có quyền nghe lại trực tiếp file âm thanh gốc từ MinIO khi thẩm định để bảo đảm quyền lợi tối đa cho sinh viên.
 
 ## Đóng ứng dụng desktop
 
