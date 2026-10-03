@@ -14,6 +14,7 @@ import {
   CheckCircle,
   BookOpen,
   Award,
+  Radio,
   Sparkles,
 } from 'lucide-react';
 
@@ -29,6 +30,7 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/courses', label: 'Quản lý môn học', icon: BookOpen },
     { href: '/exams', label: 'Quản lý kỳ thi', icon: ClipboardList },
     { href: '/schedule', label: 'Lịch thi vấn đáp', icon: Calendar },
+    { href: '/proctor', label: 'Coi thi & Giám sát', icon: Radio },
     { href: '/students', label: 'Danh sách thí sinh', icon: GraduationCap },
     { href: '/results', label: 'Phê duyệt kết quả', icon: CheckCircle },
   ],
@@ -36,6 +38,7 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/courses', label: 'Môn học phụ trách', icon: BookOpen },
     { href: '/rubrics', label: 'Tiêu chí Rubric', icon: FileText },
+    { href: '/proctor', label: 'Coi thi & Giám sát', icon: Radio },
     { href: '/grading', label: 'Đánh giá & Chấm bài', icon: Award },
   ],
 };
