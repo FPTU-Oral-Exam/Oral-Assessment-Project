@@ -1,28 +1,28 @@
-# OralAI — Thi vấn đáp
+# OralAI — Nền Tảng Thi Vấn Đáp Tự Động Bằng AI
 
-Desktop ghi audio/video, lọc nhiễu RNNoise và nhận dạng **PhoWhisper-small cục bộ**. Server nhận media gốc + transcript, chấm theo rubric/RAG bằng **Ollama local hoặc Gemini**, rồi trả kết quả cho app.
+Hệ thống kiến trúc **Dual-Frontend** chuẩn hóa:
+- **Student App (Thin-Client):** Ghi audio/video raw, tích hợp bộ lọc nhiễu real-time RNNoise (WASM AudioWorklet), tải bản ghi minh chứng theo chunk 4MB lên MinIO (Server là Source of Truth).
+- **Backend & AI Worker:** Celery Worker tự động phiên âm audio từ MinIO bằng **PhoWhisper**, chấm bài theo Rubric & RAG bằng **Ollama local hoặc Gemini**, lưu vết kiểm toán và trả kết quả cho **Staff Portal** (Web Next.js) và Student App.
 
 ## Hướng dẫn theo nhu cầu
 
 | Bạn muốn làm gì? | Tài liệu |
 | --- | --- |
-| Tạo môn, sinh câu hỏi/thuật ngữ, giao bài, làm bài và xóa môn | [Hướng dẫn sử dụng cho admin, giảng viên và học viên](docs/user-guide.md) |
+| Tạo môn, sinh câu hỏi/thuật ngữ, giao bài, làm bài và xóa môn | [Hướng dẫn sử dụng cho 4 vai trò (Admin, Khảo thí, Giảng viên, Sinh viên)](docs/user-guide.md) |
 | Cài desktop, chọn server, kiểm tra mic và làm bài | [Hướng dẫn OralAI Desktop](readme-desktop.md) |
 | Chọn đúng lệnh mở desktop từ source hoặc server | [Bắt đầu nhanh](readme-desktop.md#bắt-đầu-nhanh) |
-| Cập nhật server và xử lý lỗi pipeline | [Hướng dẫn Jenkins](docs/jenkins.md) |
-| Thu thử/nghe lại, chỉnh gain, thêm dấu câu hoặc thoát app | [Mic, dấu câu và thoát desktop](docs/microphone-desktop.md) |
-| Nghe lại và sửa transcript trước khi nộp | [Kiểm tra transcript](docs/transcript-correction.md) |
-| Build, đóng gói và kiểm tra bộ cài Windows/Linux/macOS | [Build desktop](docs/desktop-build.md) |
-| Chuẩn bị tài nguyên STT bắt buộc trong bộ cài | [STT resources](apps/desktop/resources/stt/README.md) |
-| Hiểu luồng nhận dạng, tài liệu kiến thức và LLM chấm bài | [Kiến trúc STT/LLM](docs/architecture/knowledge-speech.md) |
+| Kiến trúc tổng quan hệ thống & phân định 4 Actor | [Tổng quan kiến trúc](docs/specifications/01-system-overview.md) |
+| Quy tắc phòng thi, chống gian lận & Server-Side STT | [Quy tắc phòng thi & Chống gian lận (Anti-Tampering)](docs/specifications/06-business-rules.md) |
+| Thu thử/nghe lại, chỉnh gain hoặc thoát app | [Mic và thoát desktop](docs/microphone-desktop.md) |
+| Hiểu luồng nhận dạng giọng nói PhoWhisper và LLM chấm bài | [Kiến trúc STT/LLM Server-Side](docs/architecture/knowledge-speech.md) |
 | Quản lý tài khoản, môn học và đăng nhập Google | [Tài khoản, OAuth và desktop](docs/architecture/accounts-courses-desktop.md) |
-| Quản lý dữ liệu, kiểm tra mic và lọc nhiễu | [CRUD và kiểm tra tiếng ồn](docs/architecture/crud-noise-check.md) |
+| Quản lý dữ liệu, kiểm tra mic và lọc nhiễu RNNoise | [CRUD và kiểm tra tiếng ồn](docs/architecture/crud-noise-check.md) |
 | Cấu hình số lần thi, cấp thêm lượt và xem lịch sử | [Làm lại bài thi](docs/architecture/exam-retakes.md) |
 | Hiểu độ tin cậy AI và thao tác chấm lại | [Độ tin cậy và chấm lại](docs/architecture/grading-confidence.md) |
-| Nạp bộ câu hỏi mẫu môn Kiểm thử phần mềm | [Bộ dữ liệu Software Testing](data/software-testing-istqb/README.md) |
-| Xem kiến trúc ban đầu và kế hoạch phát triển | [Giai đoạn 1](docs/architecture/phase-1.md), [Project Guide](AI_Oral_Assessment_PROJECT_GUIDE.md) |
 | Xem thiết kế CSDL, sơ đồ ERD và từ điển dữ liệu | [Thiết kế CSDL & ERD](docs/architecture/database-schema.md) |
-| Xem những gì đã kiểm thử và giới hạn còn lại | [Biên bản kiểm thử](docs/validation.md) |
+| Nạp bộ câu hỏi mẫu môn Kiểm thử phần mềm | [Bộ dữ liệu Software Testing](data/software-testing-istqb/README.md) |
+| Kiến trúc chi tiết Dual-Frontend & Master Specs | [Kiến trúc Dual-Frontend](docs/superpowers/specs/2026-09-30-dual-frontend-architecture.md) |
+| Tra cứu tài liệu và quy trình cũ đã lưu trữ | [Thư mục lưu trữ tài liệu cũ (Legacy MVP Archive)](docs/archive/legacy-mvp/README.md) |
 
 Để bắt đầu: chạy server theo mục bên dưới, sau đó làm theo hướng dẫn desktop. Project Guide và biên bản kiểm thử có các phần lịch sử; đọc ghi chú cập nhật trước khi áp dụng.
 
@@ -86,15 +86,11 @@ Cài bộ OralAI từ workflow **Desktop installers**. Bộ cài chứa **PhoWhi
 2. Mở bài, cấp quyền và chọn microphone/camera trong danh sách **Chọn thiết bị**.
 3. Để **Gain microphone** ở 0 dB rồi bấm **Kiểm tra độ ồn**: giữ im lặng 3 giây đầu, nói thử 7 giây sau.
 4. Phát lại bản thử, bật/tắt **Nghe bản đã lọc nhiễu RNNoise** để so sánh. Bản thử không upload.
-5. Chọn bật/tắt **Lọc nhiễu RNNoise khi nhận dạng câu trả lời**, bắt đầu thi, kiểm tra transcript rồi nộp.
+5. Chọn bật/tắt **Lọc nhiễu RNNoise khi nhận dạng câu trả lời**, bắt đầu thi và hoàn thành các câu hỏi. Audio minh chứng được chia chunk và tải trực tiếp lên MinIO storage.
 
 Giọng nhỏ có thể tăng gain từng ít một; âm rè/gần −1 dBFS thì giảm gain và thu lại. Gain áp dụng cho bản thu thử, audio/video và STT của lần ghi mới. Bấm **Thoát ứng dụng** hoặc X để đóng; nếu còn bản chưa nộp, chọn **Ở lại** hoặc xác nhận **Rời trang / thoát**. Xem [hướng dẫn mic và thoát app](docs/microphone-desktop.md).
 
-Sau khi ghi, chọn **Bản gốc** hoặc **Bản giảm nhiễu RNNoise** rồi bấm **Thử STT lại** nếu cần nhận dạng lại.
-
-Người dùng nghe lại và sửa transcript bằng tay trước khi nộp. Chức năng sửa chính tả bằng LLM đã được gỡ. Xem [kiểm tra transcript](docs/transcript-correction.md).
-
-Desktop luôn chạy STT local; lựa chọn STT trên server chỉ điều khiển đường nhận dạng của trình duyệt web. Media gốc được lưu riêng, không thay bằng bản đã lọc. Worker xử lý bất đồng bộ; app tự cập nhật điểm hoặc trạng thái cần xem lại.
+> **Bảo mật phòng thi & Anti-Tampering:** Theo nguyên tắc bảo mật, học viên tuyệt đối không tạo, sửa đổi transcript trên máy cá nhân. Sau khi nộp bài, Celery Worker trên server sẽ tự động phiên âm bằng PhoWhisper trực tiếp từ file audio minh chứng lưu trên MinIO và chấm điểm khách quan. (Tài liệu cơ chế sửa tay cũ đã được lưu trữ tại [legacy-mvp archive](docs/archive/legacy-mvp/transcript-correction.md)).
 
 ## Thuật ngữ tiếng Anh và xóa môn học
 
@@ -129,15 +125,13 @@ GEMINI_STT_MODEL=gemini-2.5-flash
 
 Nhận dạng lại dùng audio gốc và hoạt động cả khi `AI_PROVIDER=local`. Nhà cung cấp đã chọn nhận dạng, còn LLM chấm vẫn theo snapshot đề. **Chỉ Google Cloud STT cần JSON; Gemini không cần.** Giữ transcript đã nộp và lịch sử trước/sau. Gemini không trả độ tin cậy âm học nên kết quả này cần giảng viên kiểm tra trước khi công nhận điểm.
 
-## Build, cập nhật và tài liệu
+## Build, cập nhật và phát triển
 
-Build desktop cần chuẩn bị bundle STT trước; xem [hướng dẫn desktop](readme-desktop.md) và [đóng gói](docs/desktop-build.md). Không đưa binary/model hoặc `.env` vào Git.
+- **Staff Portal & Shared Packages:** Phát triển trên Next.js 15 và TypeScript (`apps/staff-portal`, `packages/shared`).
+- **Student App Thin-Client:** Phát triển trên Electron + React + Vite (`apps/student-app`). Không đóng gói kèm model AI nặng; audio được truyền trực tiếp lên server.
+- **Pipeline CI/CD & Deploy:** Triển khai qua Docker Compose (`docker-compose.yml`), GitHub Actions và Playwright E2E. Các quy trình deploy Jenkins và đóng gói desktop cũ đã được lưu trữ tại [docs/archive/legacy-mvp/](docs/archive/legacy-mvp/README.md).
 
-`Jenkinsfile` build/kiểm tra/deploy web và API; bộ cài desktop dùng workflow riêng. Nếu deploy bằng Jenkins, đồng bộ các biến mới trong credential `oral-ai-env`.
-
-Xem [các bước cập nhật và chẩn đoán lỗi Jenkins](docs/jenkins.md). Lỗi 4 test Gemini/Ollama thiếu `english_terms` đã được sửa ở `b546e84`; job cần checkout commit này hoặc mới hơn, không cần đổi `.env` cho lỗi đó.
-
-Cập nhật server: `docker compose up -d --build --wait`, sau đó mở lại desktop. Compose tự chạy migration `0004` để lưu nhiều lần thi; không cần thêm biến `.env`. Không xóa volume dữ liệu. Kiểm tra chờ chấm/lỗi bằng `docker compose logs --tail=100 worker`.
+Cập nhật server: `docker compose up -d --build --wait`. Compose tự chạy migrations để đồng bộ database; không cần thêm biến `.env`. Không xóa volume dữ liệu. Kiểm tra worker bằng `docker compose logs -f worker`.
 
 ```bash
 .venv/bin/python -m pytest services/api/tests -q

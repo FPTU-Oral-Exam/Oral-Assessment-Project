@@ -453,9 +453,10 @@ git checkout -b feat/your-feature
 # Update branch with main
 git fetch origin && git rebase origin/main
 
-# Run frontend checks
-cd apps/admin-web
-npm run lint && npm run typecheck
+# Run frontend checks (monorepo workspaces)
+npm run typecheck -w packages/shared
+npm run check -w apps/staff-portal
+npm run check -w apps/student-app
 
 # Run backend checks
 cd services/api
@@ -468,13 +469,15 @@ gh pr create --title "feat(scope): description" --body "..."
 git fetch upstream && git checkout main && git merge upstream/main
 ```
 
-### Checklist Before PR
+### Checklist Before PR & Merge
 
 - [ ] Branch đúng format (`feat/`, `fix/`, etc.)
-- [ ] Commits đúng conventional format
-- [ ] Code passes lint và typecheck
+- [ ] Commits đúng conventional format và ký số SSH (`-S`)
+- [ ] Code passes lint, typecheck và tests trên toàn bộ 3 phân hệ (`shared`, `staff-portal`, `student-app`)
 - [ ] Tests pass
 - [ ] PR description đầy đủ
 - [ ] No console errors/warnings
 - [ ] Sensitive data not committed
-- [ ] Documentation updated (nếu cần)
+- [ ] Documentation updated
+- [ ] **Liêm chính nghiên cứu & Quét Co-Author AI bắt buộc:** Chạy `git log origin/main..HEAD --grep="[Cc]o-[Aa]uthored" --grep="[Cc]laude"` xác nhận 100% commit không chứa vết Co-Author AI trước khi merge vào `main`.
+

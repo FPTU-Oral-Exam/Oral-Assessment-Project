@@ -4,7 +4,7 @@
 
 Bộ cài desktop bao gồm runtime Python đóng gói, FFmpeg và **PhoWhisper-small INT8**. Nhận dạng chạy trên CPU của máy học viên, không cần cài Python riêng hoặc tải thêm model STT. LLM chấm bài chạy trên server.
 
-Đi nhanh: [chọn server](#đổi-url-máy-chủ-khi-chạy-hoặc-build) · [kiểm tra mic](#kiểm-tra-mic-trước-khi-thi) · [làm bài](#khi-làm-bài) · [kiểm tra transcript](docs/transcript-correction.md) · [build và cập nhật](#build-bộ-cài-và-chạy-lại) · [xử lý lỗi](#xử-lý-lỗi).
+Đi nhanh: [chọn server](#đổi-url-máy-chủ-khi-chạy-hoặc-build) · [kiểm tra mic](#kiểm-tra-mic-trước-khi-thi) · [làm bài](#khi-làm-bài) · [quy tắc phòng thi](docs/specifications/06-business-rules.md) · [build và cập nhật](#build-bộ-cài-và-chạy-lại) · [xử lý lỗi](#xử-lý-lỗi).
 
 ## Bắt đầu nhanh
 
@@ -37,7 +37,7 @@ Nếu dùng Docker local và server chưa chạy:
 docker compose up -d --build --wait
 ```
 
-Lần đầu cần chuẩn bị `.env` theo [hướng dẫn server](README.md#chạy-server). Server triển khai qua Jenkins được cập nhật theo [hướng dẫn Jenkins](docs/jenkins.md). Admin xem [hướng dẫn tạo môn và giao bài](docs/user-guide.md).
+Lần đầu cần chuẩn bị `.env` theo [hướng dẫn server](README.md#chạy-server). Server triển khai qua Jenkins (lưu trữ) xem [hướng dẫn Jenkins](docs/archive/legacy-mvp/jenkins.md). Admin xem [hướng dẫn tạo môn và giao bài](docs/user-guide.md).
 
 ## Đổi URL máy chủ khi chạy hoặc build
 
@@ -291,4 +291,4 @@ Trong **Cấu hình hệ thống → STT & giọng nói**, Gemini STT dùng `GEM
 | Không có tiếng | Kiểm tra mic, quyền hệ điều hành, nghe lại bản thử |
 | Chưa có điểm | Kiểm tra worker, chế độ demo/luyện tập hoặc trạng thái cần xem lại |
 
-Chi tiết bộ cài và kiểm tra offline: [docs/desktop-build.md](docs/desktop-build.md).
+Chi tiết bộ cài desktop legacy và kiểm tra: [docs/archive/legacy-mvp/desktop-build.md](docs/archive/legacy-mvp/desktop-build.md). Để phát triển phân hệ Thin-Client mới cho sinh viên, xem [apps/student-app/](apps/student-app/).

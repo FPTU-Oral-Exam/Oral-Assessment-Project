@@ -33,10 +33,10 @@
 > **I want to** trả lời câu hỏi bằng giọng nói  
 > **So that** tôi hoàn thành bài thi của mình
 
-### US-STUDENT-005: Nghe lại và sửa transcript
+### US-STUDENT-005: Thu âm và Tải audio minh chứng (Chunked Upload)
 > **As a** Sinh viên  
-> **I want to** nghe lại câu trả lời và sửa transcript  
-> **So that** đảm bảo câu trả lời được ghi nhận chính xác
+> **I want to** ghi âm câu trả lời và tự động tải các phân đoạn âm thanh lên hệ thống  
+> **So that** bài thi của tôi được lưu trữ an toàn, toàn vẹn và không bị gián đoạn đường truyền
 
 ### US-STUDENT-006: Xem điểm kết quả
 > **As a** Sinh viên  
@@ -151,60 +151,56 @@
 #### Main Flow
 1. Hệ thống hiển thị câu hỏi hiện tại
 2. Sinh viên bấm "Bắt đầu trả lời"
-3. Hệ thống bắt đầu ghi âm và ghi hình
-4. Sinh viên nói câu trả lời
+3. Hệ thống bắt đầu ghi âm qua MediaRecorder (kết hợp RNNoise lọc nhiễu 48kHz)
+4. Sinh viên trả lời câu hỏi bằng giọng nói
 5. Sinh viên bấm "Kết thúc trả lời"
-6. Hệ thống dừng ghi → PhoWhisper STT → hiển thị transcript
-7. Sinh viên nghe lại và sửa transcript nếu cần (hoặc thử STT lại)
-8. Sinh viên bấm "Nộp câu trả lời & tiếp tục"
-9. Hệ thống chuyển câu hỏi tiếp theo
-10. Lặp lại cho đến khi hết câu hỏi
-11. Sinh viên bấm "Nộp bài thi"
-12. Hệ thống nộp bài và hiển thị "Đang chấm điểm"
+6. Hệ thống dừng ghi âm, kích hoạt `ChunkedUploader` từ `@oralai/shared`
+7. File audio raw được cắt thành các chunk 4MB kèm SHA-256 integrity checksum tải trực tiếp lên MinIO
+8. Hệ thống gọi `POST /api/question-attempts/{key}/submit-audio` gửi `upload_id` lên backend
+9. Backend xác nhận upload hoàn tất, đánh dấu câu hỏi `AWAITING_STT` và ghi audit log `AUDIO_SUBMITTED`
+10. Hệ thống tự động chuyển sang câu hỏi tiếp theo
+11. Lặp lại các bước cho đến khi hoàn thành toàn bộ câu hỏi
+12. Sinh viên bấm "Nộp bài thi" (Submit Session)
+13. Server Worker tiếp nhận hàng đợi, chạy PhoWhisper phiên âm từ file MinIO và AI Grading
 
 #### Alternative Flows
-- **AF-004.1 (Bảo vệ phòng thi - Unload Guard):** Sinh viên vô tình bấm đóng cửa sổ hoặc reload khi ca thi đang `IN_PROGRESS` $\rightarrow$ Hệ thống hiển thị hộp thoại cảnh báo: *"Bạn còn bản ghi chưa nộp. Thoát sẽ mất dữ liệu."* và bắt buộc chọn "Ở lại".
-- **AF-004.2:** Mất kết nối mạng $\rightarrow$ Hệ thống lưu media local trong IndexedDB/Storage, tự động nộp lại khi có mạng
-- **AF-004.3:** Quá thời gian quy định $\rightarrow$ Hệ thống tự động nộp bài
+- **AF-004.1 (Bảo vệ phòng thi - Unload Guard):** Sinh viên vô tình bấm đóng cửa sổ hoặc reload khi ca thi đang `IN_PROGRESS` $\rightarrow$ Hệ thống hiển thị hộp thoại cảnh báo: *"Bạn còn bài thi chưa hoàn tất. Thoát sẽ mất dữ liệu phiên làm bài."* và chặn thoát đột ngột.
+- **AF-004.2 (Mất kết nối mạng khi tải chunk):** `ChunkedUploader` tự động thử lại (retry) tối đa 3 lần với exponential backoff.
+- **AF-004.3 (Hết thời gian quy định):** Khi đồng hồ đếm ngược server về 0, hệ thống tự động khóa ghi âm và submit phiên thi hiện tại.
 
 #### Ghi chú quan trọng
-- Camera và microphone được mở sẵn để giảm delay
-- **MediaRecorder chỉ bắt đầu ghi khi sinh viên bấm "Bắt đầu trả lời"**
-- Audio được STT bằng PhoWhisper local (không upload lên server trước)
+- Camera và microphone được mở sẵn để kiểm tra tín hiệu.
+- **MediaRecorder chỉ bắt đầu ghi khi sinh viên bấm "Bắt đầu trả lời".**
+- **Nguyên tắc Chống Gian lận (Anti-tampering):** Sinh viên tuyệt đối không chạy PhoWhisper local, không thấy transcript và không được phép gõ phím chỉnh sửa văn bản câu trả lời. File audio trên MinIO là nguồn chân lý duy nhất (Source of Truth).
 
 ---
 
-### UC-STUDENT-005: Nghe lại và sửa transcript
+### UC-STUDENT-005: Thu âm và Tải audio minh chứng (Chunked Upload)
 
 | Thuộc tính | Mô tả |
 |------------|--------|
 | **UC-ID** | UC-STUDENT-005 |
-| **Tên** | Nghe lại và sửa transcript |
+| **Tên** | Thu âm và Tải audio minh chứng |
 | **Actor** | Sinh viên |
-| **Mô tả** | Sinh viên nghe lại câu trả lời, thử STT lại hoặc sửa transcript trước khi nộp |
-| **Pre-condition** | Đã có transcript từ STT |
-| **Post-condition** | Transcript được xác nhận và nộp lên hệ thống |
+| **Mô tả** | Student App tự động phân mảnh file ghi âm và tải an toàn lên MinIO |
+| **Pre-condition** | Sinh viên đã hoàn thành câu trả lời của câu hỏi |
+| **Post-condition** | Toàn bộ chunk được upload và xác nhận tính toàn vẹn (SHA-256) |
 
 #### Main Flow
-1. Sau khi dừng ghi, hệ thống hiển thị transcript và audio player
-2. Sinh viên nghe lại bản ghi âm câu trả lời
-3. Sinh viên so sánh giọng nói thực tế với transcript
-4. Sinh viên có thể chọn giữa bản audio gốc hoặc bản RNNoise để bấm "Thử STT lại" nếu cần
-5. Sinh viên sửa lỗi chính tả trực tiếp trên ô transcript nếu STT nhận nhầm
-6. Sinh viên bấm "Nộp câu trả lời & tiếp tục"
+1. Sau khi bấm "Kết thúc trả lời", MediaRecorder tạo Blob âm thanh raw (định dạng WebM)
+2. `useChunkedUpload` khởi tạo tiến trình upload với backend: `POST /api/uploads/start`
+3. File âm thanh được chia thành các phân đoạn 4MB
+4. Mỗi chunk được băm SHA-256 và tải lên MinIO qua `POST /api/uploads/chunk`
+5. Sau khi đủ các chunk, client gọi `POST /api/uploads/{id}/complete` kèm tổng SHA-256 của toàn bộ file
+6. Backend verify checksum; nếu khớp, đánh dấu upload `COMPLETED`
+7. Client gửi `upload_id` đến endpoint câu trả lời `submit-audio`
 
-#### Tùy chọn bản ghi
-| Tùy chọn | Mô tả |
-|----------|--------|
-| **Bản gốc** | Audio thu âm thực tế (áp dụng Gain). Luôn được chọn làm file upload lưu trữ pháp lý |
-| **Bản giảm nhiễu RNNoise** | Audio đã lọc nhiễu qua AudioWorklet 48kHz; dùng để thử nhận dạng lại khi phòng có tiếng ồn nền |
-
-#### Alternative Flows & Cơ chế Giám sát Chống Gian Lận (Tamper Flag)
-- **AF-005.1 (Sửa transcript thủ công):** Sinh viên sửa văn bản transcript khác với kết quả STT gốc gần nhất $\rightarrow$ **Hệ thống tự động gán `stt_confidence = 0`**. Backend phát hiện `stt_confidence < 0.70` sẽ **tự động bật cờ `review_required = True`** bắt buộc Giảng viên phải nghe lại audio đối soát trước khi công nhận điểm.
-- **AF-005.2 (Thử STT lại):** Sinh viên chọn bản gốc hoặc bản RNNoise $\rightarrow$ Bấm "Thử STT lại" $\rightarrow$ Kết quả mới thay thế transcript hiện tại (cần thử lại trước khi chỉnh sửa tay).
-
+#### Alternative Flows & Bảo vệ Toàn vẹn
+- **AF-005.1 (Sai lệch Checksum):** Nếu SHA-256 của chunk tải lên không khớp với client tính toán $\rightarrow$ Backend từ chối chunk, client tự động upload lại chunk bị hỏng.
+- **AF-005.2 (Gián đoạn kết nối):** Client tiếp tục tải từ chunk chưa hoàn tất thay vì phải upload lại từ đầu (Resumable Chunked Upload).
 
 ---
+
 
 ### UC-STUDENT-006: Xem điểm kết quả
 
@@ -314,22 +310,24 @@ Bấm "Bắt đầu thi"
 ┌───────────────────────────────────────────────────────────────┐
 │  LẶP CHO MỖI CÂU HỎI:                                        │
 │                                                               │
-│  Hiển thị câu hỏi                                            │
+│  Hiển thị nội dung câu hỏi                                    │
 │         ↓                                                     │
-│  Bấm "Bắt đầu trả lời" → Ghi âm/ghi hình                    │
+│  Bấm "Bắt đầu trả lời" → MediaRecorder ghi âm raw             │
 │         ↓                                                     │
-│  Bấm "Kết thúc trả lời" → STT PhoWhisper → Transcript       │
+│  Bấm "Kết thúc trả lời" → Dừng ghi âm                         │
 │         ↓                                                     │
-│  Nghe lại, sửa transcript (tùy chọn)                        │
+│  Tự động chia chunk 4MB, SHA-256 upload lên MinIO             │
 │         ↓                                                     │
-│  Bấm "Nộp câu trả lời & tiếp tục"                           │
+│  Submit Audio (upload_id) → Server đánh dấu AWAITING_STT      │
+│         ↓                                                     │
+│  Chuyển câu hỏi tiếp theo                                     │
 └───────────────────────────────────────────────────────────────┘
         ↓
-Bấm "Nộp bài thi"
+Bấm "Nộp bài thi" (Submit Session)
         ↓
-Chờ server chấm điểm (background)
+Server Worker tự động phiên âm PhoWhisper & chấm điểm AI
         ↓
-Xem kết quả
+Xem kết quả trên màn hình Results
         ↓
 [Làm lại bài thi nếu còn lượt]
 ```
@@ -339,17 +337,16 @@ Xem kết quả
 ## 6. Ghi chú kỹ thuật
 
 ### 6.1 Camera và Microphone
-- Camera và microphone được mở sẵn trước khi thi để:
-  - Hiển thị preview
-  - Giảm delay khi bắt đầu trả lời
-- **MediaRecorder chỉ bắt đầu ghi khi sinh viên bấm "Bắt đầu trả lời"**
+- Camera và microphone được mở sẵn trước khi thi để kiểm tra tín hiệu và đo độ ồn 10s (RNNoise).
+- **MediaRecorder chỉ bắt đầu ghi khi sinh viên bấm "Bắt đầu trả lời".**
 
-### 6.2 STT Local
-- PhoWhisper chạy local trên máy sinh viên
-- Không cần upload audio lên server để STT
-- Sinh viên có thể sửa transcript trước khi nộp
+### 6.2 Bảo mật Chống Gian lận (Anti-Tampering)
+- Student App là **Thin-Client**: Tuyệt đối không chạy PhoWhisper local, không hiển thị và không cho phép can thiệp transcript.
+- File audio lưu tại MinIO là căn cứ pháp lý duy nhất (Source of Truth).
+- Tránh nguy cơ gian lận "nói một đằng gõ một nẻo" hoặc sửa đổi mã nguồn client.
 
-### 6.3 Upload Media
-- Audio/video được upload lên server sau khi nộp
-- Upload chạy background, không block sinh viên
-- Hỗ trợ resume nếu mất kết nối
+### 6.3 Tải tệp phân đoạn (Chunked Upload)
+- Sử dụng `ChunkedUploader` từ `@oralai/shared`.
+- Phân đoạn 4MB, tính SHA-256 checksum cho từng chunk và toàn file.
+- Tự động thử lại (retry) khi mạng chập chờn, đảm bảo an toàn tuyệt đối cho bài thi.
+

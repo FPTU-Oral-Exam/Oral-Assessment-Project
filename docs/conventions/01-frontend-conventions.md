@@ -2,7 +2,10 @@
 
 ## 1. Giới thiệu
 
-Tài liệu này quy định các convention cho frontend code trong dự án AI Oral Assessment Platform, bao gồm `apps/admin-web` (Next.js) và `apps/desktop` (Electron).
+Tài liệu này quy định các convention cho frontend code trong dự án AI Oral Assessment Platform, bao gồm:
+- `apps/staff-portal` (Next.js 15 App Router + Tailwind CSS cho Cán bộ & Giảng viên)
+- `apps/student-app` (Electron 33 + Vite + React 18 Thin-Client cho Sinh viên)
+- `packages/shared` (`@oralai/shared`: Domain types, API client, ChunkedUploader)
 
 ---
 
@@ -59,7 +62,7 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "TEACHER" | "STUDENT";
+  role: "SYSTEM_ADMIN" | "EXAMINER" | "TEACHER" | "STUDENT";
 }
 
 type ApiResponse<T> = {
@@ -133,34 +136,33 @@ export function UserCard({ user, onEdit, isSelected }: UserCardProps) {
 | Helper functions | camelCase | `formatDate`, `validateEmail` |
 
 ### 4.3 File Organization
-
 ```
-apps/admin-web/
-├── app/                    # Next.js App Router pages
-│   ├── layout.tsx
-│   ├── page.tsx
-│   └── (routes)/
-├── components/
-│   ├── ui/                 # Shared UI components
-│   │   ├── Button.tsx
-│   │   └── Modal.tsx
-│   ├── features/           # Feature-specific components
-│   │   ├── users/
-│   │   │   ├── UserList.tsx
-│   │   │   └── UserCard.tsx
-│   │   └── exams/
-│   │       ├── ExamList.tsx
-│   │       └── ExamCard.tsx
-│   └── shared.tsx          # Shared components
-├── lib/
-│   ├── api.ts              # API client
-│   ├── auth.ts             # Auth utilities
-│   └── utils.ts            # Common utilities
-├── hooks/                  # Custom hooks
-│   └── useAuth.ts
-├── types/                  # Shared types
-│   └── index.ts
-└── public/
+apps/staff-portal/           # Next.js 15 App Router (Staff Web)
+├── app/
+│   ├── (admin)/            # Route group cho SYSTEM_ADMIN
+│   ├── (examiner)/         # Route group cho EXAMINER
+│   ├── (teacher)/          # Route group cho TEACHER
+│   ├── (shared)/           # Dashboard, layout chung
+│   └── (auth)/             # Login
+├── components/             # Reusable UI & features
+├── lib/                    # API client, auth, utils
+└── middleware.ts           # RBAC Route Guards
+
+apps/student-app/            # Electron 33 + Vite + React 18 Thin-Client
+├── src/
+│   ├── components/         # AudioLevel, CameraPreview, RecordingControls
+│   ├── pages/              # LoginPage, ExamListPage, DeviceCheckPage, ExamRoomPage
+│   ├── hooks/              # useRecording, useChunkedUpload, useExamSession
+│   ├── lib/                # RNNoise WASM audio worklet
+│   └── electron/           # Main & preload scripts
+└── package.json
+
+packages/shared/             # @oralai/shared
+├── src/
+│   ├── types/              # TypeScript domain types (User, Exam, etc.)
+│   ├── api-client/         # Shared ApiClient & ChunkedUploader
+│   └── utils/              # Zod validation schemas
+└── package.json
 ```
 
 ---

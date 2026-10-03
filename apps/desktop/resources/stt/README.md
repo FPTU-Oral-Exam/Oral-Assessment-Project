@@ -6,4 +6,4 @@ Chạy `python scripts/build_desktop_stt.py` từ gốc repository trên đúng 
 
 Đây là model nhận dạng giọng nói, luôn đi kèm bộ cài đầy đủ.
 
-Xem [build desktop](../../../../docs/desktop-build.md).
+Xem [hướng dẫn đóng gói desktop cũ (lưu trữ)](../../../../docs/archive/legacy-mvp/desktop-build.md). Phân hệ mới của sinh viên là Thin-Client không còn đóng gói model STT này (xem `apps/student-app/`).

@@ -29,7 +29,7 @@
 
 ### US-SYSADMIN-004: Phân quyền người dùng
 > **As a** System Admin  
-> **I want to** gán vai trò (ADMIN, TEACHER, STUDENT) cho tài khoản  
+> **I want to** gán vai trò (SYSTEM_ADMIN, EXAMINER, TEACHER, STUDENT) cho tài khoản  
 > **So that** người dùng có quyền truy cập phù hợp
 
 ### US-SYSADMIN-005: Quản lý storage
@@ -115,10 +115,10 @@
 5. Hệ thống xác minh credentials
 
 #### Ghi chú
-- Desktop luôn dùng PhoWhisper local, không phụ thuộc cấu hình này
+- Student App là Thin-Client, toàn bộ audio minh chứng được tải lên MinIO và phiên âm tự động bởi Worker STT PhoWhisper (Server-Side)
 - Cấu hình STT server dùng cho:
-  - STT từ trình duyệt web
-  - Nhận dạng lại từ admin
+  - Celery Worker STT Pipeline (PhoWhisper-large-v3/PhoWhisper-small)
+  - STT fallback từ các Cloud Provider khi cần (Gemini STT / Google Cloud STT)
 
 ---
 
@@ -161,12 +161,12 @@
 #### Vai trò hệ thống
 | Vai trò | Quyền hạn |
 |---------|-----------|
-| **ADMIN** | Quản lý kỳ thi, môn học, sinh viên, xem kết quả (tương ứng vai trò Khảo thí / Examiner) |
-| **TEACHER** | Ra đề chuẩn dùng chung, giao bài cho lớp, chấm điểm, chấm phúc khảo |
-| **STUDENT** | Làm bài thi, kiểm tra mic, đối soát transcript, xem điểm cá nhân |
-| **SYSTEM_ADMIN** | Cấu hình hạ tầng AI/STT, phân quyền người dùng, quản trị kỹ thuật |
+| **SYSTEM_ADMIN** | Cấu hình hạ tầng AI/STT, phân quyền người dùng, quản trị kỹ thuật hệ thống |
+| **EXAMINER** | Quản lý kỳ thi, tổ chức phòng thi, chấm thi, phúc khảo, duyệt kết quả biên độ tự tin thấp |
+| **TEACHER** | Quản lý môn học, upload giáo trình RAG, tạo Rubric, phát hành đề thi, giao bài cho lớp |
+| **STUDENT** | Làm bài thi oral trên Student App, kiểm tra mic, upload bản ghi âm minh chứng, xem điểm cá nhân |
 
-> **Ghi chú phân định vai trò:** Vai trò **ADMIN** trong bảng quyền hạn hệ thống trên đại diện cho Cán bộ Khảo thí / Quản trị đào tạo (Actor trong `02-actor-admin.md`). Còn **SYSTEM_ADMIN** là Quản trị viên kỹ thuật toàn hệ thống (IT System Admin).
+> **Ghi chú chuẩn hóa vai trò:** Theo kiến trúc Dual-Frontend chuẩn mới (Phase 5), hệ thống áp dụng 4 vai trò: `SYSTEM_ADMIN` (Quản trị kỹ thuật), `EXAMINER` (Cán bộ Khảo thí - chi tiết trong `02-actor-examiner.md`, thay thế mã cũ `ADMIN`), `TEACHER` (Giảng viên) và `STUDENT` (Sinh viên).
 
 #### Main Flow
 1. Admin vào "Người dùng"
@@ -293,11 +293,12 @@ EMBEDDING_MODEL=nomic-embed-text
 
 ### STT Configuration
 ```dotenv
-# Server-side STT (for browser/web)
-# Gemini STT
+# Server-side STT Pipeline (Celery Worker + PhoWhisper / Cloud Fallback)
+STT_PROVIDER=phowhisper  # phowhisper | gemini | google_cloud
+PHOWHISPER_MODEL_NAME=vinai/phowhisper-small  # or vinai/phowhisper-large-v3
 GEMINI_STT_MODEL=gemini-2.5-flash
 
-# Google Cloud STT - configured via web admin
+# Google Cloud STT - configured via web admin if enabled
 ```
 
 ### OAuth Configuration

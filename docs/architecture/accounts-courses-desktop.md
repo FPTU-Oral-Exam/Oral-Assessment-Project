@@ -10,7 +10,7 @@
 - Launcher source dùng UI dev riêng (mặc định 3001), truyền `ORAL_AUTH_ORIGIN` từ `--server` (mặc định 3000). Electron chỉ nhận origin đăng nhập riêng khi chạy source với `ORAL_WEB_URL`; bản đóng gói dùng cùng origin với máy chủ đã chọn. Đổi máy chủ trong app đặt lại origin đăng nhập. IPC vẫn kiểm tra renderer gửi yêu cầu và chỉ mở `/api/auth/google/start` có `flow_id` trên origin được cấu hình; callback Google giữ domain gốc của backend.
 - Backend xác minh chữ ký/audience/issuer/expiry ID token bằng `google-auth`, kiểm tra nonce và email đã xác minh, gắn danh tính theo Google `sub`. Tài khoản mới luôn là STUDENT. Không tự ghép vào tài khoản mật khẩu chỉ vì username giống email; điều này tránh cấp nhầm quyền admin. Nếu đã có tài khoản mật khẩu, đăng nhập Google tạo tài khoản riêng để admin giao lại môn/quyền khi cần.
 - OAuth state dùng cookie HttpOnly, SameSite=Lax và bản hash trong database; code/flow chỉ dùng một lần. Flow hết hạn sau 5 phút, được dọn khi tạo flow mới. Redis giới hạn tạo flow. Cookie ứng dụng dùng Secure khi domain gốc là HTTPS. Không ghi query OAuth vào access log API trong Docker.
-- **Người dùng → Vai trò → Lưu quyền** cho phép ADMIN đổi STUDENT/TEACHER/REVIEWER/ADMIN của bất kỳ tài khoản. Mỗi request đọc vai trò hiện tại từ database, nên quyền thay đổi ngay với phiên đang có. Không được bỏ admin ACTIVE cuối cùng. Audit lưu người đổi, đối tượng và vai trò trước/sau.
+- **Người dùng → Vai trò → Lưu quyền** cho phép `SYSTEM_ADMIN` đổi vai trò giữa 4 roles chuẩn: `STUDENT`, `TEACHER`, `EXAMINER`, `SYSTEM_ADMIN` của bất kỳ tài khoản. Mỗi request đọc vai trò hiện tại từ database, nên quyền thay đổi ngay với phiên đang có. Không được bỏ admin ACTIVE cuối cùng. Audit lưu người đổi, đối tượng và vai trò trước/sau.
 
 Tham khảo: [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
 
@@ -40,6 +40,4 @@ API và worker đọc cấu hình mới cho request/job tiếp theo, giữ một
 
 Migration `0003` thêm `users.email`, Google `sub` duy nhất, bảng OAuth flow và enrollment; giữ tài khoản, môn, đề và kết quả cũ. Bootstrap bổ sung môn luyện tập ở lần cập nhật tiếp theo. Dockerfile API tắt access log mặc định có query string; middleware vẫn ghi request ID/method/path/status.
 
-Bộ cài desktop bắt buộc kèm runtime và model PhoWhisper-small INT8; CI không còn tùy chọn bỏ bundle. Desktop gửi media gốc + transcript local để server chấm bằng Ollama/Gemini. Hướng dẫn build, cấu hình domain và STT local: [Desktop đa nền tảng](../desktop-build.md).
-
-Chức năng sửa chính tả LLM đã được gỡ. Học viên vẫn nghe lại và sửa transcript bằng tay trước khi nộp. Xem [kiểm tra transcript](../transcript-correction.md).
+Phân hệ Student App (`apps/student-app`) được xây dựng theo kiến trúc Thin-Client: tuyệt đối không kèm runtime Python hay model PhoWhisper. Client chỉ gửi audio raw qua cơ chế chunked upload 4MB lên MinIO, và server chịu trách nhiệm 100% việc phiên âm và chấm điểm.

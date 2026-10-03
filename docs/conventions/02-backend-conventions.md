@@ -186,12 +186,12 @@ async def get_current_user(
     return user
 
 
-def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Require admin role."""
-    if user.role != "ADMIN":
+def require_system_admin(user: User = Depends(get_current_user)) -> User:
+    """Require system admin role."""
+    if user.role != "SYSTEM_ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="System Admin access required",
         )
     return user
 ```

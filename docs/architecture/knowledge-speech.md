@@ -27,31 +27,32 @@ erDiagram
 - Mỗi bản công bố mới lưu `topic_chunk_ids`, các ánh xạ LO/chương/tài liệu và câu hỏi trong snapshot. Chấm thường/chấm lại dùng đúng tập chunk này. Chỉnh ánh xạ hoặc trang chương chỉ ảnh hưởng đề công bố sau. Đề MVP cũ dùng tập tài liệu snapshot và cột topic cũ để giữ phạm vi ban đầu.
 - Giáo trình READY được giữ bất biến. Nếu upload lỗi, có thể thay PDF tại mục **Thay PDF bị lỗi**; version tăng và worker xử lý lại. Cơ chế nhiều phiên bản giáo trình đang sử dụng chưa triển khai.
 
-## Pipeline giọng nói — cập nhật 17/09/2026
+## Pipeline giọng nói & Chấm điểm (Server-Side STT) — cập nhật 30/09/2026
 
 ```mermaid
 flowchart LR
-  Mic[Microphone] --> Raw[Audio và video gốc]
-  Mic --> Filter[RNNoise bật hoặc tắt]
-  Filter --> Local[PhoWhisper-small INT8 trên desktop]
-  Local --> Text[Transcript để học viên kiểm tra]
-  Raw --> Server[Server lưu minh chứng]
-  Text --> Server
-  Server --> Grade[LLM chấm theo rubric và RAG]
-  Grade --> Result[Kết quả trả về desktop]
-  Server --> Review[Admin yêu cầu Gemini nhận dạng lại]
-  Review --> Grade
+  Mic[Microphone] --> RNNoise[RNNoise WASM 48kHz]
+  RNNoise --> Chunks[Chunked Uploader 4MB]
+  Chunks --> MinIO[(MinIO S3 Evidence)]
+  MinIO --> Worker[Worker STT PhoWhisper]
+  Worker --> Transcript[Server Transcript]
+  Transcript --> Grade[LLM Judge chấm theo Rubric & RAG]
+  Grade --> Review{Confidence < Threshold?}
+  Review -- Yes --> ReviewRequired[Cần Giảng viên duyệt]
+  Review -- No --> Completed[Điểm chính thức]
+  MinIO -. Thẩm định audio gốc .-> ReviewRequired
 ```
 
-Desktop luôn dùng helper local, kể cả khi cấu hình STT cũ trên server là Google. Bộ cài chứa runtime, FFmpeg và model PhoWhisper-small; không tải model lúc thi, không cần Python trên máy học viên. RNNoise chạy trong AudioWorklet ở 48 kHz; helper chuyển âm thanh thành mono 16 kHz và nhận dạng với ngôn ngữ đã chọn. `STT_MODEL` chỉ điều khiển Whisper server, không thay model đóng gói trong desktop.
+Client áp dụng cơ chế **Thin-Client Anti-Tampering**:
+- Không đóng gói bất kỳ model STT hay runtime Python nào trên Desktop.
+- Âm thanh được lọc nhiễu qua AudioWorklet RNNoise (WASM) ở 48 kHz ngay trên máy trạm.
+- Audio raw được cắt thành các chunk 4MB kèm SHA-256 integrity checksum tải trực tiếp lên MinIO.
+- Toàn bộ quá trình STT được thực hiện bởi Background Worker trên server bằng mô hình **PhoWhisper**, bảo đảm tính trung thực tuyệt đối.
+- Sinh viên không nhìn thấy hay can thiệp vào văn bản transcript.
 
-Media gốc và audio để nhận dạng là hai nhánh riêng. Bật/tắt RNNoise chỉ ảnh hưởng audio nhận dạng. Khi nộp, desktop upload audio/video gốc và transcript; worker chấm bất đồng bộ. Transcript nhập tay hoặc độ tin cậy thấp cần giảng viên kiểm tra. Lỗi AI, bài demo hoặc đang chờ chấm không được hiển thị thành điểm 0/10.
+### Thuật ngữ tiếng Anh & Snapshot Đề thi
 
-### Transcript và thuật ngữ
-
-Chức năng sửa chính tả bằng LLM đã được gỡ. Người dùng có thể sửa transcript bằng tay; mọi bản sửa được đánh dấu để giảng viên đối chiếu với audio.
-
-AI gợi ý thuật ngữ tiếng Anh và nghĩa tiếng Việt cùng lúc sinh câu hỏi, lưu trong snapshot đề và hiển thị ở workspace giảng viên. Không tự sửa transcript hoặc tự truyền gợi ý vào STT.
+AI gợi ý thuật ngữ tiếng Anh và nghĩa tiếng Việt cùng lúc sinh câu hỏi, lưu trong snapshot đề và hiển thị ở workspace giảng viên. Snapshot đề thi đóng băng cấu hình AI provider, embedding model, rubric và RAG knowledge để bảo đảm tính truy vết khi chấm bài.
 
 ### LLM và cấu hình
 
