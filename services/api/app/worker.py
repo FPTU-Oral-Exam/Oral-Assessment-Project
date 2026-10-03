@@ -147,6 +147,55 @@ def process_transcription_review(db, job, exam, session, attempt):
     job.status = "COMPLETED"
 
 
+def transcribe_attempt_if_needed(db, attempt):
+    """If attempt needs server-side STT, fetch audio from MinIO and transcribe with Whisper Large-v3."""
+    if attempt.transcript and attempt.transcript != "AWAITING_STT":
+        return attempt.transcript, attempt.stt_confidence or 0.0
+
+    upload = db.scalar(
+        select(Upload)
+        .where(Upload.attempt_id == attempt.id, Upload.status == "COMPLETED")
+        .order_by(Upload.created_at.desc())
+        .limit(1)
+    )
+    if not upload or not upload.storage_key:
+        log.warning("no_audio_upload_found attempt=%s", attempt.id)
+        attempt.transcript = "[No audio uploaded]"
+        attempt.stt_confidence = 0.0
+        return attempt.transcript, attempt.stt_confidence
+
+    with tempfile.TemporaryDirectory(prefix="oral-stt-") as folder:
+        path = Path(folder) / "answer.webm"
+        raw_audio = storage.get(upload.storage_key)
+        if upload.sha256 and hashlib.sha256(raw_audio).hexdigest() != upload.sha256:
+            raise ValueError("Audio evidence checksum mismatch")
+        path.write_bytes(raw_audio)
+        try:
+            result = speech.transcribe_file(path)
+            attempt.transcript = result["transcript"]
+            attempt.stt_confidence = result["stt_confidence"]
+        except ValueError as exc:
+            if "Không phát hiện giọng nói" in str(exc):
+                attempt.transcript = "[No speech detected]"
+                attempt.stt_confidence = 0.0
+            else:
+                raise
+
+    db.add(
+        Audit(
+            event="AUDIO_TRANSCRIBED",
+            details={
+                "attempt_id": attempt.id,
+                "model": speech.settings().stt_model,
+                "language": speech.settings().stt_language,
+                "stt_confidence": attempt.stt_confidence,
+            },
+        )
+    )
+    db.flush()
+    return attempt.transcript, attempt.stt_confidence
+
+
 @runtime_settings.snapshot()
 def tick():
     with SessionLocal() as db:
@@ -210,8 +259,9 @@ def tick():
         exam = db.get(Exam, session.exam_id)
         snapshot = exam.snapshot
         try:
+            transcript, stt_confidence = transcribe_attempt_if_needed(db, attempt)
             attempt.assessment = grade_answer(
-                db, exam, session, attempt, attempt.transcript, attempt.stt_confidence or 0
+                db, exam, session, attempt, transcript, stt_confidence
             )
         except Exception as exc:
             code, message = failure(exc)

@@ -15,11 +15,13 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/schedule/,
     /^\/students/,
     /^\/results/,
+    /^\/proctor/,
   ],
   TEACHER: [
     /^\/courses/,
     /^\/rubrics/,
     /^\/grading/,
+    /^\/proctor/,
   ],
 };
 
@@ -42,13 +44,19 @@ export function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // Skip RBAC for login page and static assets
-  if (path === '/login' || path.startsWith('/_next') || path.startsWith('/api')) {
+  // Redirect root path to dashboard
+  if (path === '/' || path === '') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  // Skip RBAC for login page, unauthorized page, and static assets
+  if (path === '/login' || path === '/unauthorized' || path.startsWith('/_next') || path.startsWith('/api')) {
     return NextResponse.next();
   }
 
   // Check role permissions
-  const hasAccess = user.roles.some((role: string) => {
+  const roles = user.roles || (user.role ? [user.role] : []);
+  const hasAccess = roles.some((role: string) => {
     const patterns = rolePermissions[role] || [];
     return patterns.some(pattern => pattern.test(path));
   });

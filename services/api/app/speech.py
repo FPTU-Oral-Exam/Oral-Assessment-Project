@@ -105,13 +105,14 @@ def upload_google_credentials(file: UploadFile = File(), db: Session = Depends(g
 @lru_cache(maxsize=1)
 def model(name):
     from faster_whisper import WhisperModel
+    import ctranslate2
 
     # Server-side STT: Use GPU if available, fall back to CPU
-    # Whisper-large-v3: ~6GB RAM on GPU, ~12GB on CPU
-    import torch
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Whisper-large-v3: ~6GB RAM on GPU, ~3GB RAM with int8 on CPU
+    device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
     compute_type = "float16" if device == "cuda" else "int8"
-    return WhisperModel(name, device=device, compute_type=compute_type)
+    download_root = str(Path(settings().data_dir) / "models")
+    return WhisperModel(name, device=device, compute_type=compute_type, download_root=download_root)
 
 
 def whisper(path, language):
