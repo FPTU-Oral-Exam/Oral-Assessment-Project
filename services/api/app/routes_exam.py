@@ -43,7 +43,7 @@ def active(db, session):
     if session.status != "IN_PROGRESS":
         fail(409, "EXAM_SESSION_NOT_ACTIVE", "Phiên thi không hoạt động")
     exam = by_id(db, Exam, session.exam_id)
-    if time.time() > session.started_at + exam.time_limit:
+    if not bool(exam.snapshot.get("practice")) and time.time() > session.started_at + exam.time_limit:
         fail(409, "EXAM_EXPIRED", "Đã hết giờ. Bạn có thể nộp bài để giảng viên xem lại.")
 
 
@@ -331,8 +331,13 @@ def finish(key: str, db: Session = Depends(get_db), user=Depends(current_user)):
 @router.post("/uploads/init")
 def init_upload(body: s.UploadIn, db: Session = Depends(get_db), user=Depends(current_user)):
     attempt, session = owned_attempt(db, body.attempt_id, user)
-    if attempt.status == "READY" or session.status != "IN_PROGRESS":
+    if session.status != "IN_PROGRESS":
         fail(409, "INVALID_STATE", "Chỉ upload khi câu trả lời đã bắt đầu và bài chưa nộp")
+    if attempt.status == "READY":
+        attempt.status, attempt.started_at = "STARTED", time.time()
+        db.commit()
+    elif attempt.status != "STARTED":
+        fail(409, "INVALID_STATE", "Câu trả lời đã được nộp hoặc không ở trạng thái sẵn sàng")
     if not body.mime_type.startswith(body.kind.lower() + "/"):
         fail(422, "MIME_MISMATCH", "Loại file không khớp evidence")
     if body.size > settings().max_media_mb * 1024 * 1024:
