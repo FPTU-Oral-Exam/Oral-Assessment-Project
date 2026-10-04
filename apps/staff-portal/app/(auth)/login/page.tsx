@@ -28,13 +28,18 @@ export default function LoginPage() {
         credentials: 'include',
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Lỗi kết nối máy chủ (Mã ${res.status}: ${res.statusText || 'Internal Server Error'}).`);
+      }
 
       if (!res.ok) {
         if (res.status === 429) {
           throw new Error('Quá nhiều lần đăng nhập thất bại. Vui lòng đợi 1 phút và thử lại.');
         }
-        throw new Error(data.error?.message || data.detail?.message || 'Tên đăng nhập hoặc mật khẩu không đúng.');
+        throw new Error(data.error?.message || data.detail?.message || data.detail || 'Tên đăng nhập hoặc mật khẩu không đúng.');
       }
 
       // Store complete user profile in cookie for middleware & layout

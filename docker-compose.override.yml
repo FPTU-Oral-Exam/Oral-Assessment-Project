@@ -5,6 +5,7 @@ services:
   web:
     environment:
       - NODE_ENV=development
+      - API_INTERNAL_URL=http://api:8000
     volumes:
       - ./apps/staff-portal:/app/apps/staff-portal
       - /app/apps/staff-portal/node_modules

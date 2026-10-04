@@ -7,11 +7,11 @@ import { useUser } from '@/hooks/useUser';
 
 export default function UnauthorizedPage() {
   const router = useRouter();
-  const { user, logout } = useUser();
+  const { user } = useUser();
 
   const handleLogout = () => {
-    logout();
-    router.push('/login');
+    document.cookie = 'user=; path=/; max-age=0; SameSite=Lax';
+    window.location.href = '/login';
   };
 
   return (
