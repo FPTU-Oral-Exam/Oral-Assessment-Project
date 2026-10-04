@@ -35,7 +35,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  let user: { roles: string[] };
+  let user: { roles?: string[]; role?: string };
   try {
     user = JSON.parse(decodeURIComponent(userCookie.value));
   } catch {

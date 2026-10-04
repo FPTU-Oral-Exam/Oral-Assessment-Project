@@ -1,4 +1,9 @@
 import type { NextConfig } from 'next';
+import { existsSync } from 'fs';
+
+const isDocker = existsSync('/.dockerenv');
+const defaultApi = isDocker ? 'http://api:8000' : 'http://127.0.0.1:8000';
+const apiTarget = process.env.API_INTERNAL_URL || defaultApi;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -10,7 +15,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: `${process.env.API_INTERNAL_URL || 'http://127.0.0.1:8000'}/:path*`,
+        destination: `${apiTarget}/:path*`,
       },
     ];
   },

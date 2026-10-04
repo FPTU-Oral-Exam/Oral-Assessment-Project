@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, session } from 'electron';
 import { join } from 'path';
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === 'development' || !!process.env.VITE_DEV_SERVER_URL || !app.isPackaged;
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -53,12 +53,19 @@ function createWindow() {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self'; " +
-          "script-src 'self'; " +
-          "style-src 'self' 'unsafe-inline'; " +
-          "img-src 'self' data: blob:; " +
-          "media-src 'self' blob:; " +
-          "connect-src 'self' http://localhost:* https://*;"
+          isDev
+            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http://localhost:* ws://localhost:*; " +
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*; " +
+              "style-src 'self' 'unsafe-inline' http://localhost:*; " +
+              "img-src 'self' data: blob: http://localhost:*; " +
+              "media-src 'self' blob:; " +
+              "connect-src 'self' http://localhost:* ws://localhost:* https://*;"
+            : "default-src 'self'; " +
+              "script-src 'self'; " +
+              "style-src 'self' 'unsafe-inline'; " +
+              "img-src 'self' data: blob:; " +
+              "media-src 'self' blob:; " +
+              "connect-src 'self' http://localhost:* https://*;"
         ],
       },
     });
@@ -68,7 +75,10 @@ function createWindow() {
     mainWindow?.show();
   });
 
-  if (isDev) {
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+    mainWindow.webContents.openDevTools();
+  } else if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {

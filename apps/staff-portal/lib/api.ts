@@ -12,16 +12,25 @@ export async function api<T>(endpoint: string, options?: RequestInit): Promise<T
   const path = cleanEndpoint.startsWith('/api') ? cleanEndpoint : `/api${cleanEndpoint}`;
   const url = API_BASE_URL ? `${API_BASE_URL}${cleanEndpoint}` : path;
 
+  const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData;
+
   const res = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...options?.headers,
     },
     credentials: 'include',
   });
   if (!res.ok) {
-    throw new Error(`API call failed: ${res.statusText}`);
+    let errMsg = `API call failed: ${res.statusText}`;
+    try {
+      const errJson = await res.json();
+      errMsg = errJson.message || errJson.detail || errJson.error?.message || errMsg;
+    } catch {
+      // ignore
+    }
+    throw new Error(errMsg);
   }
   return res.json();
 }

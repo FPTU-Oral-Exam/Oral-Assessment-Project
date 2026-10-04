@@ -18,6 +18,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
     try {
       const response = await api.login(mssv, password);
+      if (response.user.role !== 'STUDENT') {
+        setError(
+          `Tài khoản "${response.user.username}" có vai trò là ${response.user.role} (Cán bộ/Giảng viên), không phải Sinh viên. Vui lòng mở cổng 3000 (Staff Portal) để sử dụng hoặc đăng nhập bằng tài khoản Sinh viên.`
+        );
+        return;
+      }
       onLogin(response.token, response.user);
     } catch (err: any) {
       setError(err?.message || err?.error?.message || 'MSSV hoặc mật khẩu không đúng');
