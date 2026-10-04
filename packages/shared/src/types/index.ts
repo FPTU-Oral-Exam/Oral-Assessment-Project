@@ -31,3 +31,15 @@ export type {
   Assessment,
   Evidence,
 } from "./assessment";
+export type {
+  Semester,
+  Section,
+  StudentEnrollment,
+} from "./semester";
+export type {
+  ScheduleSlot,
+  ExamVariant,
+  SlotAssignment,
+  StudentResult,
+  ReEvaluation,
+} from "./schedule";
