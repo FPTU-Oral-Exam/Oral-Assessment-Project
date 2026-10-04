@@ -119,7 +119,7 @@ class ExamVariantIn(Input):
 class ReEvaluationIn(Input):
     teacher_id_2: str
     reason: Literal["RECONTROLL", "GRADE_DISPUTE", "EXAMINER_REQUEST"]
-    reason_detail: str | None = None
+    reason_detail: str | None = Field(default=None, min_length=5, max_length=2000)
     blind_marking: bool = True
 
 

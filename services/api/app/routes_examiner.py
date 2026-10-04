@@ -120,6 +120,10 @@ def list_sections(course_id: str, db: Session = Depends(get_db), user=Depends(ex
 @router.post("/courses/{course_id}/sections", status_code=201)
 def create_section(course_id: str, body: s.SectionIn, db: Session = Depends(get_db), user=Depends(examiner)):
     course_access(db, course_id, user)
+    # Validate teacher exists before creating section
+    teacher = by_id(db, User, body.teacher_id)
+    if teacher.role not in {"TEACHER", "EXAMINER"}:
+        fail(422, "NOT_TEACHER", "Giao cho giang vien hoac examiner")
     row = Section(course_id=course_id, **body.model_dump())
     db.add(row)
     db.commit()
@@ -232,9 +236,8 @@ def list_slots(exam_id: str, db: Session = Depends(get_db), user=Depends(examine
 @router.post("/exams/{exam_id}/slots", status_code=201)
 def create_slots(exam_id: str, body: s.CreateSlotsIn, db: Session = Depends(get_db), user=Depends(examiner)):
     """Create multiple slots and auto-assign enrolled students evenly."""
-    exam = by_id(db, ScheduleSlot, exam_id)  # will fail if exam doesn't exist
-    # Reload as Exam
     from .models import Exam
+
     exam = by_id(db, Exam, exam_id)
 
     # Get all enrolled students across all sections of this course
@@ -458,7 +461,8 @@ def request_re_evaluation(
 ):
     """Create a re-evaluation request with optional blind marking."""
     attempt = by_id(db, Attempt, attempt_id)
-    session = by_id(db, ExamSession, attempt.session_id)
+    # Validate session exists (session info used for audit traceability)
+    _session = by_id(db, ExamSession, attempt.session_id)
 
     row = ReEvaluation(
         attempt_id=attempt_id,
