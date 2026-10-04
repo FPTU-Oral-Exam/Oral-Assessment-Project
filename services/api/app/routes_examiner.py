@@ -47,7 +47,7 @@ def list_semesters(db: Session = Depends(get_db), user=Depends(examiner)):
             "start_date": s.start_date,
             "end_date": s.end_date,
             "course_count": db.scalar(
-                select(func.count()).select_from(Course).where(Course.semester_id == s.id)
+                select(func.count()).select_from(Section).where(Section.semester_id == s.id)
             ) or 0,
             "created_at": s.created_at,
         }
@@ -71,10 +71,13 @@ def create_semester(body: s.SemesterIn, db: Session = Depends(get_db), user=Depe
 @router.get("/semesters/{semester_id}")
 def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     semester = by_id(db, Semester, semester_id)
-    courses = db.scalars(select(Course).where(Course.semester_id == semester_id)).all()
+    sections = db.scalars(select(Section).where(Section.semester_id == semester_id)).all()
+    # Get unique courses from sections
+    course_ids = set(s.course_id for s in sections)
+    courses = [db.get(Course, cid) for cid in course_ids]
     return {
         **data(semester, "name", "year", "term", "status", "start_date", "end_date"),
-        "courses": [data(c, "code", "name", "description", "status") for c in courses],
+        "courses": [data(c, "code", "name", "description", "status") for c in courses if c],
     }
 
 

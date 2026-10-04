@@ -268,7 +268,7 @@ class Semester(Entity, Base):
 class Section(Entity, Base):
     __tablename__ = "sections"
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"))
-    semester_id: Mapped[str] = mapped_column(ForeignKey("semesters.id"))
+    semester_id: Mapped[str | None] = mapped_column(ForeignKey("semesters.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(200))     # "ENGO01 - Sáng T2"
     code: Mapped[str] = mapped_column(String(50))      # "ENGO01"
     teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
