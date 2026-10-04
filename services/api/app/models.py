@@ -251,3 +251,82 @@ class ReviewJob(Entity, Base):
     result: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     error: Mapped[str | None] = mapped_column(Text)
     completed_at: Mapped[float | None] = mapped_column(Float)
+
+
+# === Examiner Portal Models ===
+
+class Semester(Entity, Base):
+    __tablename__ = "semesters"
+    name: Mapped[str] = mapped_column(String(100))  # "Spring 2026"
+    year: Mapped[int] = mapped_column(Integer)
+    term: Mapped[str] = mapped_column(String(20))   # SPRING, SUMMER, FALL
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT")  # DRAFT, ACTIVE, COMPLETED
+    start_date: Mapped[float] = mapped_column(Float)  # Unix timestamp
+    end_date: Mapped[float] = mapped_column(Float)    # Unix timestamp
+
+
+class Section(Entity, Base):
+    __tablename__ = "sections"
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"))
+    semester_id: Mapped[str] = mapped_column(ForeignKey("semesters.id"))
+    name: Mapped[str] = mapped_column(String(200))     # "ENGO01 - Sáng T2"
+    code: Mapped[str] = mapped_column(String(50))      # "ENGO01"
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    day_of_week: Mapped[int] = mapped_column(Integer, default=0)  # 0=CN, 1=T2, ..., 6=T7
+    time_slot: Mapped[str] = mapped_column(String(20), default="MORNING")  # MORNING, AFTERNOON, EVENING
+    max_students: Mapped[int] = mapped_column(Integer, default=50)
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT")  # DRAFT, ACTIVE, ARCHIVED
+
+
+class ScheduleSlot(Entity, Base):
+    __tablename__ = "schedule_slots"
+    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id"))
+    slot_number: Mapped[int] = mapped_column(Integer)
+    date: Mapped[float] = mapped_column(Float)           # Unix timestamp (date only)
+    start_time: Mapped[str] = mapped_column(String(10))  # "08:00"
+    end_time: Mapped[str] = mapped_column(String(10))    # "10:00"
+    room: Mapped[str] = mapped_column(String(50))        # "A301"
+    max_students: Mapped[int] = mapped_column(Integer)
+    exam_variant_id: Mapped[str | None] = mapped_column(ForeignKey("exam_variants.id"))
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")  # PENDING, READY, IN_PROGRESS, COMPLETED
+    grade_locked: Mapped[bool] = mapped_column(default=False)
+
+
+class ExamVariant(Entity, Base):
+    __tablename__ = "exam_variants"
+    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id"))
+    name: Mapped[str] = mapped_column(String(100))       # "Đề A"
+    questions: Mapped[list] = mapped_column(JSON)        # Array of question objects
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="CREATING")  # CREATING, READY, ASSIGNED
+
+
+class ReEvaluation(Entity, Base):
+    __tablename__ = "re_evaluations"
+    attempt_id: Mapped[str] = mapped_column(ForeignKey("question_attempts.id"))
+    teacher_id_1: Mapped[str] = mapped_column(ForeignKey("users.id"))  # Original grader
+    teacher_id_2: Mapped[str] = mapped_column(ForeignKey("users.id"))  # Blind marker
+    reason: Mapped[str] = mapped_column(String(50))      # RECONTROLL, GRADE_DISPUTE, EXAMINER_REQUEST
+    reason_detail: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING")  # PENDING, IN_PROGRESS, COMPLETED
+    score_1: Mapped[float | None] = mapped_column(Float)
+    score_2: Mapped[float | None] = mapped_column(Float)
+    final_score: Mapped[float | None] = mapped_column(Float)
+    blind_marking: Mapped[bool] = mapped_column(default=True)
+    completed_at: Mapped[float | None] = mapped_column(Float)
+
+
+class ExamEnrollment(Entity, Base):
+    __tablename__ = "exam_enrollments"
+    __table_args__ = (UniqueConstraint("section_id", "student_id"),)
+    section_id: Mapped[str] = mapped_column(ForeignKey("sections.id"))
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE")  # PENDING, ACTIVE, DROPPED
+    enrolled_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class SlotAssignment(Entity, Base):
+    __tablename__ = "slot_assignments"
+    __table_args__ = (UniqueConstraint("slot_id", "student_id"),)
+    slot_id: Mapped[str] = mapped_column(ForeignKey("schedule_slots.id"))
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
