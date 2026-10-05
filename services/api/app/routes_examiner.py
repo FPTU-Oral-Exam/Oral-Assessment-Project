@@ -549,6 +549,34 @@ def create_slots(exam_id: str, body: s.CreateSlotsIn, db: Session = Depends(get_
     return {"created": len(created_slots), "slots": created_slots}
 
 
+# ─────────────────────────────────────────────────────────────────
+# Slot Detail endpoint
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/slots/{slot_id}")
+def get_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+    """Get slot details including exam_id."""
+    slot = by_id(db, ScheduleSlot, slot_id)
+
+    student_count = db.scalar(
+        select(func.count()).select_from(SlotAssignment).where(SlotAssignment.slot_id == slot_id)
+    ) or 0
+
+    return {
+        "id": slot.id,
+        "exam_id": slot.exam_id,
+        "slot_number": slot.slot_number,
+        "date": slot.date,
+        "start_time": slot.start_time,
+        "end_time": slot.end_time,
+        "room": slot.room,
+        "max_students": slot.max_students,
+        "status": slot.status,
+        "grade_locked": slot.grade_locked,
+        "student_count": student_count,
+    }
+
+
 @router.post("/slots/{slot_id}/lock")
 def lock_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     row = by_id(db, ScheduleSlot, slot_id, lock=True)
@@ -622,12 +650,26 @@ def slot_results(slot_id: str, db: Session = Depends(get_db), user=Depends(exami
             )
         )
 
+        # Check if there's a review score (from ReEvaluation)
+        score_review = None
+        if session:
+            # Find latest re-evaluation with a final score
+            review = db.scalar(
+                select(ReEvaluation)
+                .join(Attempt, Attempt.id == ReEvaluation.attempt_id)
+                .where(Attempt.session_id == session.id, ReEvaluation.status == "COMPLETED")
+                .order_by(ReEvaluation.created_at.desc())
+            )
+            if review and review.final_score is not None:
+                score_review = review.final_score
+
         results.append({
             "student_id": student.id,
             "username": student.username,
             "name": student.name,
             "score_ai": session.final_score if session else None,
             "score_final": session.final_score if session else None,
+            "score_review": score_review,
             "status": session.status if session else "NOT_STARTED",
         })
 
@@ -732,3 +774,42 @@ def request_re_evaluation(
     db.commit()
 
     return {"id": row.id, "status": row.status}
+
+
+# ─────────────────────────────────────────────────────────────────
+# Student Attempts endpoint
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/students/{student_id}/attempts")
+def get_student_attempts(
+    student_id: str,
+    exam_id: str = None,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Get all attempts for a student, optionally filtered by exam."""
+    by_id(db, User, student_id)  # Validate student exists
+
+    query = (
+        select(Attempt, ExamSession)
+        .join(ExamSession, ExamSession.id == Attempt.session_id)
+        .where(ExamSession.student_id == student_id)
+    )
+
+    if exam_id:
+        query = query.where(ExamSession.exam_id == exam_id)
+
+    rows = db.execute(query.order_by(Attempt.sequence)).all()
+
+    return [
+        {
+            "id": attempt.id,
+            "sequence": attempt.sequence,
+            "transcript": attempt.transcript,
+            "stt_confidence": attempt.stt_confidence,
+            "grading_message": attempt.assessment.get("grading_message") if attempt.assessment else None,
+            "score": attempt.assessment.get("score") if attempt.assessment else None,
+            "status": attempt.status,
+        }
+        for attempt, _ in rows
+    ]

@@ -32,10 +32,14 @@ export interface Exam {
   course_id: string;
   name: string;
   description?: string;
+  course_name?: string;
   status: ExamStatus;
   time_limit: number;
   question_count: number;
   rubric_id?: string | null;
+  blueprint?: Blueprint[];
+  max_attempts?: number;
+  practice?: boolean;
   created_at: number;
   published_at?: number | null;
 }

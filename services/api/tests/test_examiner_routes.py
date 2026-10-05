@@ -576,8 +576,9 @@ class TestEnrollmentManagement:
         examiner = clients["examiner"]
         course, section = self._create_course_with_section(examiner)
 
+        openpyxl = pytest.importorskip("openpyxl")
         import io
-        wb = __import__("openpyxl").Workbook()
+        wb = openpyxl.Workbook()
         ws = wb.active
         ws.append(["MSSV", "Ho ten", "Ma lop"])
         ws.append(["student", "Test Student", section["code"]])
@@ -603,8 +604,9 @@ class TestEnrollmentManagement:
         examiner = clients["examiner"]
         course, section = self._create_course_with_section(examiner)
 
+        openpyxl = pytest.importorskip("openpyxl")
         import io
-        wb = __import__("openpyxl").Workbook()
+        wb = openpyxl.Workbook()
         ws = wb.active
         ws.append(["MSSV", "Ho ten", "Ma lop"])
         ws.append(["student", "Test Student", section["code"]])
