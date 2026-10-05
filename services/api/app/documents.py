@@ -53,7 +53,9 @@ def extract(data: bytes, filename: str):
     stream = io.BytesIO(data)
     if extension == "pdf":
         if not data.startswith(b"%PDF-"):
-            raise ValueError("PDF không hợp lệ")
+            if data[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+                raise ValueError("File này thực chất là slide/tài liệu Office cũ (.ppt/.doc) được đổi đuôi thành .pdf. Vui lòng mở bằng PowerPoint và chọn File -> Export -> Create PDF hoặc Lưu dạng .pptx.")
+            raise ValueError("File PDF không hợp lệ (không đúng chuẩn PDF hoặc file bị hỏng).")
         return [(i + 1, page.extract_text() or "") for i, page in enumerate(PdfReader(stream).pages)]
     if extension == "pptx":
         return [
@@ -101,10 +103,15 @@ def process_document(db, document):
     raw = storage.get(document.storage_key)
     pages = extract(raw, document.filename)
     document.page_count = len(pages)
+    db.query(Chunk).filter(Chunk.document_id == document.id).delete()
+    existing_sections = db.query(BookSection).filter(BookSection.document_id == document.id).all()
     sections = []
     if document.kind == "TEXTBOOK":
-        sections = suggest_sections(raw, pages)
-        db.add_all(BookSection(course_id=document.course_id, document_id=document.id, **s) for s in sections)
+        if not existing_sections:
+            sections = suggest_sections(raw, pages)
+            db.add_all(BookSection(course_id=document.course_id, document_id=document.id, **s) for s in sections)
+        else:
+            sections = [{"start_page": s.start_page, "end_page": s.end_page, "title": s.title} for s in existing_sections]
     chunks = []
     for page, text in pages:
         default_heading = " / ".join(s["title"] for s in sections if s["start_page"] <= page <= s["end_page"])
