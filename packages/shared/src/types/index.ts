@@ -11,6 +11,7 @@ export type {
   AttemptStatus,
   Blueprint,
   Exam,
+  ExamDetail,
   StudentExam,
   Sitting,
   ExamSession,

@@ -23,18 +23,21 @@ export interface Blueprint {
   count: number;
 }
 
+export interface ExamDetail extends Exam {
+  slot_count: number;
+}
+
 export interface Exam {
   id: string;
+  course_id: string;
   name: string;
-  course_id?: string;
-  course_name?: string;
+  description?: string;
   status: ExamStatus;
   time_limit: number;
-  question_count?: number;
-  blueprint?: Blueprint[];
-  rubric_id?: string;
-  max_attempts?: number;
-  practice?: boolean;
+  question_count: number;
+  rubric_id?: string | null;
+  created_at: number;
+  published_at?: number | null;
 }
 
 export interface StudentExam extends Omit<Exam, "status"> {

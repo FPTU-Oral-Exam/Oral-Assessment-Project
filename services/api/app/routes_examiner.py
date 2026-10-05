@@ -237,6 +237,98 @@ def create_section(course_id: str, body: s.SectionIn, db: Session = Depends(get_
 
 
 # ─────────────────────────────────────────────────────────────────
+# Exam endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/courses/{course_id}/exams")
+def list_course_exams(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all exams for a course."""
+    from .models import Exam
+    exams = db.scalars(
+        select(Exam).where(Exam.course_id == course_id).order_by(Exam.created_at.desc())
+    ).all()
+    return [
+        {**data(e, "name", "description", "status", "time_limit", "question_count")}
+        for e in exams
+    ]
+
+
+@router.post("/courses/{course_id}/exams", status_code=201)
+def create_exam(
+    course_id: str,
+    body: s.ExaminerExamIn,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Create a new exam for a course (1 exam per course per spec)."""
+    from .models import Exam
+
+    course_access(db, course_id, user)
+
+    # Check if exam already exists for this course (1 exam per course)
+    existing = db.scalar(
+        select(Exam).where(Exam.course_id == course_id, Exam.deleted_at.is_(None))
+    )
+    if existing:
+        fail(409, "EXAM_EXISTS", "Mỗi môn chỉ được tạo 1 kỳ thi")
+
+    exam = Exam(
+        course_id=course_id,
+        name=body.name,
+        description=body.description,
+        time_limit=body.time_limit,
+        question_count=body.question_count,
+        status="DRAFT",
+        rubric_id=body.rubric_id,
+    )
+    db.add(exam)
+    db.add(Audit(user_id=user.id, event="EXAM_CREATED", details={
+        "exam_id": exam.id,
+        "course_id": course_id,
+    }))
+    db.commit()
+
+    return {**data(exam, "name", "description", "status", "time_limit", "question_count")}
+
+
+@router.get("/exams/{exam_id}")
+def get_exam(exam_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+    """Get exam detail with slot count."""
+    from .models import Exam
+    exam = by_id(db, Exam, exam_id)
+    slots = db.scalars(
+        select(ScheduleSlot).where(ScheduleSlot.exam_id == exam_id)
+    ).all()
+    return {
+        **data(exam, "name", "description", "status", "time_limit", "question_count"),
+        "slot_count": len(slots),
+    }
+
+
+@router.put("/exams/{exam_id}")
+def update_exam(
+    exam_id: str,
+    body: s.ExaminerExamIn,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Update exam details."""
+    from .models import Exam
+    exam = by_id(db, Exam, exam_id, lock=True)
+
+    for key in ["name", "description", "time_limit", "question_count", "rubric_id"]:
+        val = getattr(body, key, None)
+        if val is not None or key == "description":
+            setattr(exam, key, val if val is not None else getattr(exam, key))
+
+    db.add(Audit(user_id=user.id, event="EXAM_UPDATED", details={
+        "exam_id": exam_id,
+    }))
+    db.commit()
+    return data(exam, "name", "description", "status", "time_limit", "question_count")
+
+
+# ─────────────────────────────────────────────────────────────────
 # Enrollment import endpoint
 # ─────────────────────────────────────────────────────────────────
 

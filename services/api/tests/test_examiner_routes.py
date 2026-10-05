@@ -426,6 +426,101 @@ class TestSectionCRUD:
 
 
 # ============================================================================
+# Exam Management Tests
+# ============================================================================
+
+
+class TestExamManagement:
+    """Test Exam management endpoints."""
+
+    def _create_course(self, examiner):
+        """Helper to create semester and course."""
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        return sem_data, ok(course_response, 201)
+
+    def test_create_exam(self, env):
+        """Test creating an exam for a course."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        _, course = self._create_course(examiner)
+
+        response = examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={
+                "name": "Midterm Exam",
+                "description": "Midterm assessment",
+                "time_limit": 30,
+                "question_count": 3,
+            }
+        )
+        data = ok(response, 201)
+        assert data["name"] == "Midterm Exam"
+        assert data["status"] == "DRAFT"
+        assert data["time_limit"] == 30
+
+    def test_one_exam_per_course(self, env):
+        """Test that only one exam can exist per course."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        _, course = self._create_course(examiner)
+
+        examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "First Exam", "time_limit": 30, "question_count": 3}
+        )
+
+        response = examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "Second Exam", "time_limit": 30, "question_count": 3}
+        )
+        assert response.status_code == 409
+
+    def test_list_course_exams(self, env):
+        """Test listing exams for a course."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        _, course = self._create_course(examiner)
+
+        examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "Test Exam", "time_limit": 30, "question_count": 3}
+        )
+
+        response = examiner.get(f"/api/examiner/courses/{course['id']}/exams")
+        data = ok(response)
+        assert len(data) == 1
+        assert data[0]["name"] == "Test Exam"
+
+    def test_get_exam_detail(self, env):
+        """Test getting exam detail."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        _, course = self._create_course(examiner)
+
+        create_response = examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "Detail Exam", "time_limit": 45, "question_count": 5}
+        )
+        exam_data = ok(create_response, 201)
+
+        detail_response = examiner.get(f"/api/examiner/exams/{exam_data['id']}")
+        detail = ok(detail_response)
+        assert detail["name"] == "Detail Exam"
+        assert detail["time_limit"] == 45
+        assert detail["slot_count"] == 0
+
+
+# ============================================================================
 # Enrollment Import Tests
 # ============================================================================
 

@@ -139,6 +139,15 @@ class ReEvaluationIn(Input):
     blind_marking: bool = True
 
 
+class ExaminerExamIn(Input):
+    """Simplified Exam schema for Examiner Portal (1 exam per course)."""
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    time_limit: int = Field(default=30, ge=5, le=180)  # minutes
+    question_count: int = Field(default=3, ge=1, le=10)
+    rubric_id: str | None = Field(default=None)  # Optional for MVP
+
+
 class EnrollmentImportIn(Input):
     course_id: str
     file_data: str
@@ -186,7 +195,9 @@ class ExamIn(Input):
     course_id: str
     rubric_id: str
     name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
     time_limit: int = Field(ge=60, le=10800)
+    question_count: int = Field(default=3, ge=1, le=10)
     blueprint: list[Blueprint] = Field(min_length=1, max_length=20)
     max_attempts: int | None = Field(default=1, ge=1, le=1001)
 

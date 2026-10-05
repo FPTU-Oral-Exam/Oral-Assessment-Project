@@ -131,13 +131,16 @@ class Rubric(Entity, Base):
 class Exam(Entity, Base):
     __tablename__ = "exams"
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"))
-    rubric_id: Mapped[str] = mapped_column(ForeignKey("rubrics.id"))
+    rubric_id: Mapped[str | None] = mapped_column(ForeignKey("rubrics.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, default="")
     time_limit: Mapped[int] = mapped_column(Integer)
-    blueprint: Mapped[list] = mapped_column(JSON(none_as_null=True))
+    question_count: Mapped[int] = mapped_column(Integer, default=3)
+    blueprint: Mapped[list | None] = mapped_column(JSON(none_as_null=True), default=[])
     status: Mapped[str] = mapped_column(String(20), default="DRAFT")
     snapshot: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     max_attempts: Mapped[int | None] = mapped_column(Integer().evaluates_none(), default=1, server_default="1")
+    deleted_at: Mapped[float | None] = mapped_column(Float)
 
 
 class Assignment(Entity, Base):
