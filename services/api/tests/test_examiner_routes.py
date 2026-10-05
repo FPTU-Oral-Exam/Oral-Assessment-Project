@@ -329,6 +329,29 @@ class TestCourseManagement:
         updated = ok(update_response)
         assert updated["name"] == "Updated Name"
 
+    def test_list_all_courses(self, env):
+        """Test listing all courses across semesters."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+        examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": "All Courses Test", "code": unique_code()}
+        )
+
+        courses = ok(examiner.get("/api/examiner/courses"))
+        assert isinstance(courses, list)
+        assert len(courses) >= 1
+        assert "name" in courses[0]
+        assert "code" in courses[0]
+        assert "section_count" in courses[0]
+
 
 # ============================================================================
 # Section CRUD Tests
@@ -557,6 +580,23 @@ class TestExamManagement:
         assert detail["name"] == "Detail Exam"
         assert detail["time_limit"] == 45
         assert detail["slot_count"] == 0
+
+    def test_list_all_exams(self, env):
+        """Test listing all exams across courses."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        _, course = self._create_course(examiner)
+        examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "All Exams Test", "time_limit": 30, "question_count": 3}
+        )
+
+        exams = ok(examiner.get("/api/examiner/exams"))
+        assert isinstance(exams, list)
+        assert len(exams) >= 1
+        assert "name" in exams[0]
+        assert "course_id" in exams[0]
+        assert "slot_count" in exams[0]
 
 
 # ============================================================================
@@ -1059,6 +1099,27 @@ class TestReEvaluation:
         re_eval_data = ok(re_eval_res)
         assert re_eval_data["status"] == "PENDING"
         assert "id" in re_eval_data
+
+
+# ============================================================================
+# Student Attempts Tests
+# ============================================================================
+
+
+class TestStudentAttempts:
+    """Test retrieving student attempts with audio and transcript."""
+
+    def test_get_student_attempts(self, env):
+        clients, factory = env
+        examiner = clients["examiner"]
+
+        with factory() as db:
+            student = db.execute(select(User).where(User.username == "student")).scalar_one()
+            student_id = student.id
+
+        attempts = ok(examiner.get(f"/api/examiner/students/{student_id}/attempts"))
+        assert isinstance(attempts, list)
+
 
 
 # ============================================================================
