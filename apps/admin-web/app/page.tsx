@@ -115,6 +115,7 @@ export default function Home() {
       </main>
     );
   const isStudent = user.role === "STUDENT";
+  const isAdmin = (user.role as string) === "ADMIN" || user.role === "SYSTEM_ADMIN";
   const links = isStudent
     ? [{ id: "student", label: "Bài thi của tôi", icon: GraduationCap }]
     : [
@@ -123,7 +124,7 @@ export default function Home() {
         { id: "users", label: "Người dùng", icon: Users },
         { id: "results", label: "Kết quả & xem lại", icon: ClipboardCheck },
         { id: "student", label: "Học & thi thử", icon: GraduationCap },
-        ...(user.role === "ADMIN"
+        ...(isAdmin
           ? [{ id: "settings", label: "Cấu hình hệ thống", icon: AudioLines }]
           : []),
       ];

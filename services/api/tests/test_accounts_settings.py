@@ -147,7 +147,7 @@ def test_google_login_creates_student_without_linking_existing_account(env, plat
     user = ok(browser.get("/auth/me"))
     assert user["role"] == "STUDENT" and user["email"] == "admin"
     with factory() as db:
-        assert db.scalar(select(User).where(User.username == "admin")).role == "ADMIN"
+        assert db.scalar(select(User).where(User.username == "admin")).role in {"ADMIN", "SYSTEM_ADMIN"}
     assert (
         browser.get(
             "/auth/google/callback",

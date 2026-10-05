@@ -9,9 +9,9 @@ export class ApiError extends Error {
   }
 
   static fromResponse(response: Response, body: unknown): ApiError {
-    const detail = (body as { detail?: { code?: string; message?: string } } | undefined)?.detail;
-    const code = typeof detail === "object" ? detail?.code : undefined;
-    const message = typeof detail === "object" ? detail?.message : (body as { detail?: string })?.detail || "Unknown error";
+    const err = (body as any)?.error || (body as any)?.detail;
+    const code = typeof err === "object" ? err?.code : undefined;
+    const message = typeof err === "object" ? err?.message : (typeof err === "string" ? err : ((body as any)?.message || "Request failed"));
     return new ApiError(response.status, message || "Request failed", code);
   }
 

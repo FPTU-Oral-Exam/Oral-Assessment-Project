@@ -93,8 +93,14 @@ export async function measureNoise(
 ): Promise<NoiseResult & { audioBlob: Blob }> {
   signal.throwIfAborted();
 
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length === 0) {
+    throw new Error('Không tìm thấy tín hiệu Microphone để kiểm tra âm thanh');
+  }
+  const audioStream = new MediaStream(audioTracks);
+
   const context = new AudioContext();
-  const source = context.createMediaStreamSource(stream);
+  const source = context.createMediaStreamSource(audioStream);
   const analyser = context.createAnalyser();
   analyser.fftSize = 2048;
   source.connect(analyser);
@@ -103,7 +109,7 @@ export async function measureNoise(
     MediaRecorder.isTypeSupported(t),
   ) || 'audio/webm';
 
-  const recorder = new MediaRecorder(stream, { mimeType });
+  const recorder = new MediaRecorder(audioStream, { mimeType });
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);

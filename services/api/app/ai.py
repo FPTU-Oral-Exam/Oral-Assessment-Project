@@ -134,7 +134,6 @@ def structured(instruction, data, schema):
                 ],
                 "format": schema.model_json_schema(),
                 "stream": False,
-                "think": False,
                 "options": {"temperature": 0.2},
             },
         )
@@ -227,6 +226,9 @@ def grade(question, transcript, criteria, chunks, stt_confidence):
         raise ValueError("RAG returned no evidence")
     result = structured(
         "Grade the answer against every rubric criterion, using only supplied knowledge. "
+        "The transcript is from an English oral exam taken by ESL (English as a Second Language) students. "
+        "Be tolerant of minor phonetic transcription errors, pronunciation quirks, or non-native phrasing. "
+        "Focus on evaluating whether the student demonstrates correct conceptual understanding according to the rubric and evidence. "
         "Return one score per criterion with the exact criterion name, bounded by its max_score. "
         "Scores are raw rubric points, NEVER percentages: for max_score=2, three of four equal items earns 1.5, not 75. "
         "Return every criterion once in the supplied order; use its own max_score even when other criteria have a larger maximum. "

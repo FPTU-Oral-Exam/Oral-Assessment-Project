@@ -6,10 +6,11 @@ import { api } from '../lib/api';
 
 interface ExamListPageProps {
   onStartExam: (sessionId: string) => void;
+  onViewResults: (sessionId: string, exam: StudentExam) => void;
   onLogout: () => void;
 }
 
-export function ExamListPage({ onStartExam, onLogout }: ExamListPageProps) {
+export function ExamListPage({ onStartExam, onViewResults, onLogout }: ExamListPageProps) {
   const { user, token } = useAuth();
   const [exams, setExams] = useState<StudentExam[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,6 +46,13 @@ export function ExamListPage({ onStartExam, onLogout }: ExamListPageProps) {
     try {
       setStartingExamId(exam.id);
       let sessionId = exam.session_id;
+
+      // Finished / in review exams go to results review page
+      const isFinished = ['SUBMITTED', 'REVIEW_REQUIRED', 'COMPLETED'].includes(exam.status);
+      if (isFinished && sessionId) {
+        onViewResults(sessionId, exam);
+        return;
+      }
 
       // If no session created yet, or newly assigned, create the exam session
       if (!sessionId || exam.status === 'ASSIGNED') {

@@ -59,6 +59,32 @@ def frozen_chunks(db, exam, attempt):
     )
 
 
+def build_stt_prompt(question_dict: dict | None, exam_title: str | None = None) -> str | None:
+    if not question_dict or not isinstance(question_dict, dict):
+        return f"Subject: {exam_title}" if exam_title else None
+    terms = []
+    for item in question_dict.get("english_terms", []):
+        if isinstance(item, dict) and item.get("term"):
+            terms.append(str(item["term"]).strip())
+        elif isinstance(item, str) and item.strip():
+            terms.append(item.strip())
+    q_text = str(question_dict.get("text", "")).strip()
+
+    if not terms and not q_text and not exam_title:
+        return None
+
+    parts = ["English oral assessment for ESL students"]
+    if exam_title:
+        parts.append(f"Subject: {exam_title}")
+    if terms:
+        parts.append("Key terms: " + ", ".join(terms[:15]))
+    if q_text:
+        parts.append("Topic: " + q_text)
+
+    full_prompt = ". ".join(parts).strip()
+    return full_prompt[:250] if full_prompt else None
+
+
 def grade_answer(db, exam, session, attempt, transcript, confidence):
     snapshot = exam.snapshot
     if snapshot.get("practice"):
@@ -83,13 +109,21 @@ def grade_answer(db, exam, session, attempt, transcript, confidence):
         snapshot["document_ids"],
         frozen_chunks(db, exam, attempt),
     )
-    return ai.grade(
+    assessment = ai.grade(
         attempt.question,
         transcript,
         snapshot["criteria"],
         chunks,
         confidence if attempt.finished_at <= session.started_at + exam.time_limit else 0,
     ) | {"rubric_version": snapshot["rubric_version"], "knowledge_version": snapshot["knowledge_version"]}
+
+    if confidence is not None and confidence < 0.50:
+        assessment["review_required"] = True
+        flags = assessment.setdefault("audit_flags", [])
+        if "LOW_STT_CONFIDENCE" not in flags:
+            flags.append("LOW_STT_CONFIDENCE")
+
+    return assessment
 
 
 def process_review(db, job):
@@ -137,7 +171,11 @@ def process_transcription_review(db, job, exam, session, attempt):
         if hashlib.sha256(original).hexdigest() != audio.sha256:
             raise ValueError("Original audio checksum mismatch")
         path.write_bytes(original)
-        transcript = speech.transcribe_file(path, job.policy)
+        prompt = build_stt_prompt(attempt.question, exam.name if exam else None)
+        try:
+            transcript = speech.transcribe_file(path, job.policy, prompt=prompt)
+        except TypeError:
+            transcript = speech.transcribe_file(path, job.policy)
     assessment = grade_answer(
         db, exam, session, attempt, transcript["transcript"], transcript["stt_confidence"]
     )
@@ -171,7 +209,13 @@ def transcribe_attempt_if_needed(db, attempt):
             raise ValueError("Audio evidence checksum mismatch")
         path.write_bytes(raw_audio)
         try:
-            result = speech.transcribe_file(path)
+            session = db.get(ExamSession, attempt.session_id)
+            exam = db.get(Exam, session.exam_id) if session else None
+            prompt = build_stt_prompt(attempt.question, exam.name if exam else None)
+            try:
+                result = speech.transcribe_file(path, prompt=prompt)
+            except TypeError:
+                result = speech.transcribe_file(path)
             attempt.transcript = result["transcript"]
             attempt.stt_confidence = result["stt_confidence"]
         except ValueError as exc:

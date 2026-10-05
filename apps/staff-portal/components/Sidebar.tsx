@@ -21,6 +21,10 @@ import {
 const menuItems: Record<string, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
   SYSTEM_ADMIN: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/courses', label: 'Quản lý môn học', icon: BookOpen },
+    { href: '/exams', label: 'Quản lý kỳ thi', icon: ClipboardList },
+    { href: '/grading', label: 'Đánh giá & Chấm bài', icon: Award },
+    { href: '/results', label: 'Phê duyệt kết quả', icon: CheckCircle },
     { href: '/users', label: 'Quản lý người dùng', icon: Users },
     { href: '/settings', label: 'Cấu hình hệ thống', icon: Settings },
     { href: '/audit', label: 'Nhật ký kiểm toán', icon: FileText },

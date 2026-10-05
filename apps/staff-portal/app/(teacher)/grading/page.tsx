@@ -413,8 +413,27 @@ export default function GradingPage() {
                       </span>
                     </div>
 
-                    {/* Transcript Box */}
-                    <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs leading-relaxed">
+                    {/* Audio Player & Transcript Box */}
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 text-xs leading-relaxed space-y-2">
+                      {att.evidence && att.evidence.some((e) => e.kind === "AUDIO" && e.id) && (
+                        <div className="p-2 bg-slate-50 rounded border border-slate-200 flex flex-col gap-1.5">
+                          <div className="flex items-center gap-1.5 text-slate-700 font-semibold text-[11px]">
+                            <Headphones className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Ghi âm câu trả lời (MinIO Evidence):</span>
+                          </div>
+                          {att.evidence
+                            .filter((e) => e.kind === "AUDIO" && e.id)
+                            .map((ev) => (
+                              <audio
+                                key={ev.id}
+                                controls
+                                preload="metadata"
+                                className="w-full h-8"
+                                src={`${API_BASE_URL}/api/evidence/${ev.id}/content`}
+                              />
+                            ))}
+                        </div>
+                      )}
                       <div className="flex items-center justify-between text-slate-400 mb-1.5 font-semibold">
                         <span className="flex items-center gap-1.5 text-slate-600">
                           <Volume2 className="w-3.5 h-3.5 text-blue-600" />

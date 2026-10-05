@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -70,7 +70,7 @@ def dashboard(db: Session = Depends(get_db), user=Depends(staff)):
 @router.get("/users")
 def users(db: Session = Depends(get_db), user=Depends(staff)):
     query = select(User).order_by(User.created_at.desc())
-    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"}:
+    if user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER"}:
         query = query.where(User.role == "STUDENT")
     return [public_user(u) for u in db.scalars(query)]
 
@@ -112,7 +112,7 @@ def delete_course(
     db: Session = Depends(get_db), user=Depends(editor),
 ):
     if body is not None:
-        if user.role not in {"SYSTEM_ADMIN", "EXAMINER"}:
+        if user.role not in {"SYSTEM_ADMIN", "ADMIN"}:
             fail(403, "FORBIDDEN", "Chỉ admin được xóa toàn bộ môn học và dữ liệu liên quan")
         return delete_course_tree(db, course_id, body.confirm_code, user)
     row = course_access(db, course_id, user)
@@ -434,7 +434,7 @@ def validate_exam(db, body, user):
 @router.post("/exams", status_code=201)
 def create_exam(body: s.ExamIn, db: Session = Depends(get_db), user=Depends(editor)):
     validate_exam(db, body, user)
-    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"} and body.max_attempts != 1:
+    if user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER"} and body.max_attempts != 1:
         fail(403, "FORBIDDEN", "Chỉ admin được cấu hình số lượt làm bài")
     row = Exam(**body.model_dump())
     db.add(row)
@@ -451,7 +451,7 @@ def update_exam(key: str, body: s.ExamIn, db: Session = Depends(get_db), user=De
     if body.course_id != row.course_id:
         fail(422, "CROSS_COURSE", "Không chuyển đề thi sang môn học khác")
     validate_exam(db, body, user)
-    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"} and body.max_attempts != row.max_attempts:
+    if user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER"} and body.max_attempts != row.max_attempts:
         fail(403, "FORBIDDEN", "Chỉ admin được cấu hình số lượt làm bài")
     for field, value in body.model_dump().items():
         setattr(row, field, value)
@@ -595,7 +595,9 @@ def results(db: Session = Depends(get_db), user=Depends(staff)):
         .where(ExamSession.deleted_at.is_(None))
     )
     if user.role == "TEACHER":
-        query = query.join(Course).where(Course.owner_id == user.id)
+        query = query.join(Course, Course.id == Exam.course_id).where(
+            or_(Course.owner_id == user.id, Course.code == "ORAL-PRACTICE")
+        )
     return [
         history_row(session)
         | {"exam_name": exam.name, "student_name": student.name,
@@ -625,7 +627,7 @@ def review(key: str, db: Session = Depends(get_db), user=Depends(staff)):
                 "assessment": assessment_view(a.assessment, exam),
                 "grading_targets": grading_targets(db, exam, a),
                 "evidence": [
-                    data(e, "kind", "status", "sha256", "size")
+                    data(e, "id", "kind", "status", "sha256", "size")
                     for e in db.scalars(
                         select(Upload).where(Upload.attempt_id == a.id, Upload.status == "COMPLETED")
                     )
@@ -780,10 +782,10 @@ def request_transcription_review(key, body, db, user, provider):
 @router.put("/users/{key}/role")
 def change_role(key: str, body: s.RoleIn, db: Session = Depends(get_db), user=Depends(admin)):
     admins = db.scalars(
-        select(User).where(User.role == "SYSTEM_ADMIN", User.status == "ACTIVE").order_by(User.id).with_for_update()
+        select(User).where(User.role.in_(("SYSTEM_ADMIN", "ADMIN")), User.status == "ACTIVE").order_by(User.id).with_for_update()
     ).all()
     row = by_id(db, User, key, lock=True)
-    if row.role == "SYSTEM_ADMIN" and body.role != "SYSTEM_ADMIN" and row.status == "ACTIVE" and len(admins) <= 1:
+    if row.role in {"SYSTEM_ADMIN", "ADMIN"} and body.role not in {"SYSTEM_ADMIN", "ADMIN"} and row.status == "ACTIVE" and len(admins) <= 1:
         fail(409, "LAST_ADMIN", "Cần giữ ít nhất một quản trị viên đang hoạt động")
     before = row.role
     row.role = body.role

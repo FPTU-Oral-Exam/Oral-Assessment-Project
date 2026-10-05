@@ -38,7 +38,7 @@ app.add_middleware(
     allow_origin_regex=r"^(http://localhost(:\d+)?|null|file://.*)$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "Authorization", "Idempotency-Key", "X-Chunk-Sha256"],
+    allow_headers=["*"],
 )
 
 

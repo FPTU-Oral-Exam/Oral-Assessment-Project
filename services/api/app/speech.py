@@ -115,9 +115,18 @@ def model(name):
     return WhisperModel(name, device=device, compute_type=compute_type, download_root=download_root)
 
 
-def whisper(path, language):
+def whisper(path, language, prompt=None):
     with _lock:
-        segments, info = model(settings().stt_model).transcribe(str(path), language=language, vad_filter=True)
+        segments, info = model(settings().stt_model).transcribe(
+            str(path),
+            language=language,
+            initial_prompt=prompt,
+            condition_on_previous_text=False,
+            repetition_penalty=1.15,
+            no_speech_threshold=0.6,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=500, speech_pad_ms=200),
+        )
         segments = list(segments)
     confidence = sum(math.exp(min(0, s.avg_logprob)) for s in segments) / len(segments) if segments else 0
     return {
@@ -244,7 +253,7 @@ def gemini_transcribe(path, language, model_name=None):
     }
 
 
-def transcribe_file(path, speech_policy=None):
+def transcribe_file(path, speech_policy=None, prompt=None):
     cfg = settings()
     config = speech_policy or SpeechPolicy(provider=cfg.stt_provider, language=cfg.stt_language).model_dump()
     if config["provider"] not in {"google", "gemini", "local_server"}:
@@ -252,12 +261,12 @@ def transcribe_file(path, speech_policy=None):
     with tempfile.TemporaryDirectory(prefix="oral-clean-") as folder:
         clean = Path(folder) / "speech.wav"
         metadata = prepare_audio(Path(path), clean, config["preprocessing"])
-        if config["provider"] == "gemini":
+        if config["provider"] == "google":
+            result = google_transcribe(clean, config["language"])
+        elif config["provider"] == "gemini":
             result = gemini_transcribe(clean, config["language"], config.get("model"))
         else:
-            result = (google_transcribe if config["provider"] == "google" else whisper)(
-                clean, config["language"]
-            )
+            result = whisper(clean, config["language"], prompt) if prompt is not None else whisper(clean, config["language"])
     if not result["transcript"].strip():
         raise ValueError("Không phát hiện giọng nói")
     if len(result["transcript"]) > 30000 or not 0 <= result["stt_confidence"] <= 1:

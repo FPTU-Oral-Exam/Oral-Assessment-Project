@@ -336,8 +336,8 @@ def init_upload(body: s.UploadIn, db: Session = Depends(get_db), user=Depends(cu
     if attempt.status == "READY":
         attempt.status, attempt.started_at = "STARTED", time.time()
         db.commit()
-    elif attempt.status != "STARTED":
-        fail(409, "INVALID_STATE", "Câu trả lời đã được nộp hoặc không ở trạng thái sẵn sàng")
+    elif attempt.status not in {"STARTED", "SUBMITTED"}:
+        fail(409, "INVALID_STATE", "Câu trả lời đã hoàn thành hoặc không ở trạng thái sẵn sàng")
     if not body.mime_type.startswith(body.kind.lower() + "/"):
         fail(422, "MIME_MISMATCH", "Loại file không khớp evidence")
     if body.size > settings().max_media_mb * 1024 * 1024:
