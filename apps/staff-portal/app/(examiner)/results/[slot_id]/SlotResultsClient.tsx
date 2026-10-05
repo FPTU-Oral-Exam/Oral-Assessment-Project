@@ -1,9 +1,35 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Download, Lock, Unlock, Users, CheckCircle, AlertCircle, Loader2, X, ArrowLeft } from 'lucide-react';
+import {
+  Download,
+  Lock,
+  Unlock,
+  Users,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  X,
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+  RefreshCw,
+  FileText,
+  Star,
+} from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+
+interface AttemptDetail {
+  id: string;
+  sequence: number;
+  transcript: string | null;
+  stt_confidence: number | null;
+  grading_message: string | null;
+  score: number | null;
+  status: string;
+}
 
 interface StudentResult {
   student_id: string;
@@ -11,7 +37,9 @@ interface StudentResult {
   name: string;
   score_ai: number | null;
   score_final: number | null;
+  score_review: number | null;
   status: string;
+  attempts?: AttemptDetail[];
 }
 
 interface Slot {
@@ -23,6 +51,7 @@ interface Slot {
   end_time: string;
   status: string;
   grade_locked: boolean;
+  exam_id?: string;
 }
 
 interface ExamInfo {
@@ -35,6 +64,12 @@ interface CourseInfo {
   name: string;
 }
 
+interface ReviewRequestModal {
+  studentId: string;
+  studentName: string;
+  attemptId: string;
+}
+
 export default function SlotResultsClient({ slotId }: { slotId: string }) {
   const [results, setResults] = useState<StudentResult[]>([]);
   const [slot, setSlot] = useState<Slot | null>(null);
@@ -43,6 +78,18 @@ export default function SlotResultsClient({ slotId }: { slotId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingLock, setTogglingLock] = useState(false);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [loadingAttempts, setLoadingAttempts] = useState<string | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewModal, setReviewModal] = useState<ReviewRequestModal | null>(null);
+  const [teachers, setTeachers] = useState<Array<{ id: string; name: string; username: string }>>([]);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewForm, setReviewForm] = useState({
+    teacher_id_2: '',
+    reason: 'GRADE_DISPUTE' as 'RECONTROLL' | 'GRADE_DISPUTE' | 'EXAMINER_REQUEST',
+    reason_detail: '',
+    blind_marking: true,
+  });
 
   const fetchData = useCallback(async () => {
     try {
@@ -136,6 +183,91 @@ export default function SlotResultsClient({ slotId }: { slotId: string }) {
       month: '2-digit',
       year: 'numeric',
     });
+  };
+
+  const fetchAttempts = async (studentId: string) => {
+    setLoadingAttempts(studentId);
+    try {
+      const res = await fetch(`/api/examiner/students/${studentId}/attempts?exam_id=${slot?.exam_id}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Khong the tai chi tiet');
+      const data = await res.json();
+      setResults((prev) =>
+        prev.map((r) =>
+          r.student_id === studentId ? { ...r, attempts: Array.isArray(data) ? data : [] } : r
+        )
+      );
+    } catch {
+      toast.error('Khong the tai chi tiet buoi thi');
+    } finally {
+      setLoadingAttempts(null);
+    }
+  };
+
+  const fetchTeachers = async () => {
+    try {
+      const res = await fetch('/api/admin/users?role=TEACHER', { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setTeachers(Array.isArray(data) ? data : []);
+    } catch {
+      // Silently fail
+    }
+  };
+
+  const openReviewModal = (result: StudentResult, attempt: AttemptDetail) => {
+    setReviewModal({
+      studentId: result.student_id,
+      studentName: result.name,
+      attemptId: attempt.id,
+    });
+    setReviewForm({
+      teacher_id_2: '',
+      reason: 'GRADE_DISPUTE',
+      reason_detail: '',
+      blind_marking: true,
+    });
+    fetchTeachers();
+    setShowReviewModal(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewModal || !reviewForm.teacher_id_2 || !reviewForm.reason_detail.trim()) {
+      toast.error('Vui long dien day du thong tin');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const res = await fetch(`/api/examiner/attempts/${reviewModal.attemptId}/request-re-eval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(reviewForm),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Yeu cau phuc khao that bai' }));
+        throw new Error(err.message || err.detail || 'Yeu cau phuc khao that bai');
+      }
+      toast.success('Da gui yeu cau phuc khao thanh cong');
+      setShowReviewModal(false);
+      setReviewModal(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Yeu cau phuc khao that bai');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const toggleRow = (studentId: string, attempts?: AttemptDetail[]) => {
+    if (expandedRow === studentId) {
+      setExpandedRow(null);
+    } else {
+      setExpandedRow(studentId);
+      if (!attempts || attempts.length === 0) {
+        fetchAttempts(studentId);
+      }
+    }
   };
 
   if (loading) {
@@ -279,6 +411,9 @@ export default function SlotResultsClient({ slotId }: { slotId: string }) {
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600 w-10">
+                    {/* Expand toggle */}
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600">
                     MSSV
                   </th>
@@ -292,57 +427,334 @@ export default function SlotResultsClient({ slotId }: { slotId: string }) {
                     Điểm CK
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-600">
+                    Điểm PK
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-600">
                     Trạng thái
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {results.map((result) => (
-                  <tr key={result.student_id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-sm font-semibold text-slate-700">
-                        {result.username}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-slate-900">{result.name}</span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {result.score_ai !== null ? (
-                        <span className="font-bold text-slate-900">{result.score_ai.toFixed(1)}</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
+                {results.map((result) => {
+                  const isExpanded = expandedRow === result.student_id;
+                  return (
+                    <>
+                      <tr key={result.student_id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => toggleRow(result.student_id, result.attempts)}
+                            className="p-1 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+                            title="Xem chi tiet"
+                          >
+                            {loadingAttempts === result.student_id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : isExpanded ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-sm font-semibold text-slate-700">
+                            {result.username}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-slate-900">{result.name}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {result.score_ai !== null ? (
+                            <span className="font-bold text-slate-900">{result.score_ai.toFixed(1)}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {result.score_final !== null ? (
+                            <span className="font-bold text-blue-600">{result.score_final.toFixed(1)}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {result.score_review !== null ? (
+                            <span className="font-bold text-violet-600">{result.score_review.toFixed(1)}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {result.status === 'COMPLETED' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Hoan thanh
+                            </span>
+                          ) : result.status === 'REVIEW_REQUIRED' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              Can phuc khao
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              {result.status === 'NOT_STARTED' ? 'Chua thi' : 'Dang thi'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${result.student_id}-detail`}>
+                          <td colSpan={7} className="px-4 py-4 bg-slate-50">
+                            {result.attempts && result.attempts.length > 0 ? (
+                              <div className="space-y-4">
+                                {result.attempts.map((attempt) => (
+                                  <div
+                                    key={attempt.id}
+                                    className="bg-white rounded-xl border border-slate-200 p-4 space-y-3"
+                                  >
+                                    {/* Attempt Header */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                          <FileText className="w-4 h-4 text-blue-600" />
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-bold text-slate-900">
+                                            Cau hoi {attempt.sequence}
+                                          </p>
+                                          <p className="text-xs text-slate-500">
+                                            Diem:{' '}
+                                            <span className="font-bold text-blue-600">
+                                              {attempt.score !== null ? attempt.score.toFixed(1) : '—'}
+                                            </span>
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => openReviewModal(result, attempt)}
+                                        className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                                      >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                        Yeu cau phuc khao
+                                      </button>
+                                    </div>
+
+                                    {/* STT Confidence */}
+                                    {attempt.stt_confidence !== null && (
+                                      <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2 text-xs text-slate-600">
+                                          <MessageSquare className="w-4 h-4 text-slate-400" />
+                                          <span>STT Confidence:</span>
+                                          <span
+                                            className={`font-bold ${
+                                              attempt.stt_confidence >= 0.8
+                                                ? 'text-emerald-600'
+                                                : attempt.stt_confidence >= 0.5
+                                                ? 'text-amber-600'
+                                                : 'text-red-600'
+                                            }`}
+                                          >
+                                            {(attempt.stt_confidence * 100).toFixed(0)}%
+                                          </span>
+                                          <div className="w-24 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full ${
+                                                attempt.stt_confidence >= 0.8
+                                                  ? 'bg-emerald-500'
+                                                  : attempt.stt_confidence >= 0.5
+                                                  ? 'bg-amber-500'
+                                                  : 'bg-red-500'
+                                              }`}
+                                              style={{ width: `${attempt.stt_confidence * 100}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Transcript */}
+                                    {attempt.transcript && (
+                                      <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                          Phiem am (Transcript)
+                                        </p>
+                                        <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-700 italic max-h-32 overflow-y-auto">
+                                          "{attempt.transcript}"
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Grading Message */}
+                                    {attempt.grading_message && (
+                                      <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                          Nhan xet cua AI
+                                        </p>
+                                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-800">
+                                          {attempt.grading_message}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-center py-8">
+                                <Loader2 className="w-6 h-6 text-slate-400 mx-auto mb-2 animate-spin" />
+                                <p className="text-sm text-slate-500">Dang tai chi tiet...</p>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {result.score_final !== null ? (
-                        <span className="font-bold text-blue-600">{result.score_final.toFixed(1)}</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {result.status === 'COMPLETED' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          Hoàn thành
-                        </span>
-                      ) : result.status === 'REVIEW_REQUIRED' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          Cần phúc khảo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          {result.status === 'NOT_STARTED' ? 'Chưa thi' : 'Đang thi'}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Re-evaluation Request Modal */}
+      {showReviewModal && reviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowReviewModal(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Yeu cau phuc khao</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Sinh vien: {reviewModal.studentName}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-4">
+              {/* Teacher Selection */}
+              <div>
+                <label
+                  htmlFor="review_teacher"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
+                >
+                  Giang vien phuc khao <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="review_teacher"
+                  value={reviewForm.teacher_id_2}
+                  onChange={(e) => setReviewForm({ ...reviewForm, teacher_id_2: e.target.value })}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                >
+                  <option value="">-- Chon giang vien --</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.username})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label
+                  htmlFor="review_reason"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
+                >
+                  Ly do <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="review_reason"
+                  value={reviewForm.reason}
+                  onChange={(e) =>
+                    setReviewForm({
+                      ...reviewForm,
+                      reason: e.target.value as 'RECONTROLL' | 'GRADE_DISPUTE' | 'EXAMINER_REQUEST',
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                >
+                  <option value="GRADE_DISPUTE">Khang truc diem</option>
+                  <option value="RECONTROLL">Yeu cau cham lai</option>
+                  <option value="EXAMINER_REQUEST">Yeu cau tu giang vien</option>
+                </select>
+              </div>
+
+              {/* Reason Detail */}
+              <div>
+                <label
+                  htmlFor="review_detail"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
+                >
+                  Mo ta chi tiet <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  id="review_detail"
+                  value={reviewForm.reason_detail}
+                  onChange={(e) => setReviewForm({ ...reviewForm, reason_detail: e.target.value })}
+                  required
+                  minLength={5}
+                  rows={3}
+                  placeholder="Nhap chi tiet ly do phuc khao..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                />
+              </div>
+
+              {/* Blind Marking */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="blind_marking"
+                  checked={reviewForm.blind_marking}
+                  onChange={(e) => setReviewForm({ ...reviewForm, blind_marking: e.target.checked })}
+                  className="w-4 h-4 text-violet-600 border-slate-300 rounded focus:ring-violet-500"
+                />
+                <label htmlFor="blind_marking" className="text-sm text-slate-700">
+                  Blind marking (Giang vien phuc khao khong biet nguoi cham truoc)
+                </label>
+              </div>
+
+              {/* Notice */}
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">
+                  Yeu cau phuc khao se duoc gui den giang vien duoc chon. Vui long dam bao thong tin
+                  chinh xac truoc khi gui.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-3 p-4 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                Huy
+              </button>
+              <button
+                onClick={handleSubmitReview}
+                disabled={
+                  submittingReview || !reviewForm.teacher_id_2 || !reviewForm.reason_detail.trim()
+                }
+                className="inline-flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submittingReview && <Loader2 className="w-4 h-4 animate-spin" />}
+                {submittingReview ? 'Dang gui...' : 'Gui yeu cau phuc khao'}
+              </button>
+            </div>
           </div>
         </div>
       )}
