@@ -51,29 +51,43 @@ def env(monkeypatch):
     app.dependency_overrides[get_db] = db_override
     monkeypatch.setattr(worker, "SessionLocal", factory)
     with factory() as db:
-        for role in ("ADMIN", "TEACHER", "STUDENT", "REVIEWER"):
+        # New role names (from CLAUDE.md standard 4-role system)
+        # ADMIN -> SYSTEM_ADMIN, REVIEWER -> EXAMINER
+        role_map = [
+            ("system_admin", "SYSTEM_ADMIN"),
+            ("teacher", "TEACHER"),
+            ("student", "STUDENT"),
+            ("examiner", "EXAMINER"),
+            # Legacy role names for backward compatibility
+            ("admin", "SYSTEM_ADMIN"),
+            ("reviewer", "EXAMINER"),
+            ("outsider", "STUDENT"),
+        ]
+        for username, role in role_map:
             db.add(
                 User(
-                    username=role.lower(),
+                    username=username,
                     name=role,
                     role=role,
                     password_hash=hasher.hash("test-password-123"),
                 )
             )
-        db.add(
-            User(
-                username="outsider",
-                name="Other student",
-                role="STUDENT",
-                password_hash=hasher.hash("test-password-123"),
-            )
-        )
         db.commit()
     clients = {}
-    for name in ("admin", "teacher", "student", "reviewer", "outsider"):
+    # Map old names to new roles for compatibility
+    client_names = [
+        ("admin", "admin"),           # old: login with "admin", role SYSTEM_ADMIN
+        ("teacher", "teacher"),       # same
+        ("student", "student"),       # same
+        ("reviewer", "reviewer"),     # old: login with "reviewer", role EXAMINER
+        ("examiner", "examiner"),     # new: login with "examiner", role EXAMINER
+        ("system_admin", "system_admin"),  # new: login with "system_admin", role SYSTEM_ADMIN
+        ("outsider", "outsider"),     # same
+    ]
+    for name, login_name in client_names:
         client = TestClient(app)
-        response = client.post("/auth/login", json={"username": name, "password": "test-password-123"})
-        assert response.status_code == 200
+        response = client.post("/auth/login", json={"username": login_name, "password": "test-password-123"})
+        assert response.status_code == 200, f"Failed to login as {login_name}: {response.text}"
         clients[name] = client
     yield clients, factory
     for client in clients.values():

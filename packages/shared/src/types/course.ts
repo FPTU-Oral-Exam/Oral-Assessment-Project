@@ -3,8 +3,17 @@ export interface Course {
   code: string;
   name: string;
   description?: string;
+  credits?: number;
+  teacher_id?: string | null;
+  semester_id?: string | null;
   status: "ACTIVE" | "ARCHIVED";
   created_at?: number;
+}
+
+export interface CourseDetail extends Course {
+  semester_id: string;
+  teacher?: { id: string; name: string } | null;
+  section_count: number;
 }
 
 export interface LearningOutcome {

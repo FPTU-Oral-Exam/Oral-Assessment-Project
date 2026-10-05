@@ -53,7 +53,7 @@ class TopicIn(Input):
         return self
 
 
-class SectionIn(Input):
+class BookSectionIn(Input):
     title: str = Field(min_length=1, max_length=300)
     level: int = Field(default=1, ge=1, le=6)
     start_page: int = Field(ge=1)
@@ -64,6 +64,93 @@ class SectionIn(Input):
         if self.end_page < self.start_page:
             raise ValueError("Trang kết thúc phải từ trang bắt đầu trở đi")
         return self
+
+
+# === Examiner Portal Schemas ===
+
+class SemesterIn(Input):
+    name: str = Field(min_length=1, max_length=100)
+    year: int = Field(ge=2020, le=2100)
+    term: Literal["SPRING", "SUMMER", "FALL"]
+    start_date: float = Field(gt=0)
+    end_date: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.end_date <= self.start_date:
+            raise ValueError("Ngày kết thúc phải sau ngày bắt đầu")
+        return self
+
+
+class SectionIn(Input):
+    name: str = Field(min_length=1, max_length=200)
+    code: str = Field(min_length=1, max_length=50)
+    teacher_id: str
+    day_of_week: int = Field(ge=0, le=6)
+    time_slot: Literal["MORNING", "AFTERNOON", "EVENING"] = "MORNING"
+    max_students: int = Field(default=50, ge=1, le=500)
+
+
+class CourseIn(Input):
+    name: str = Field(min_length=1, max_length=200)
+    code: str = Field(min_length=1, max_length=50)
+    description: str = Field(default="", max_length=1000)
+    credits: int = Field(default=3, ge=1, le=10)
+    teacher_id: str | None = Field(default=None)
+
+
+class CourseUpdateIn(Input):
+    name: str | None = Field(default=None, max_length=200)
+    code: str | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=1000)
+    credits: int | None = Field(default=None, ge=1, le=10)
+    teacher_id: str | None = Field(default=None)
+
+
+class SlotIn(Input):
+    slot_number: int = Field(ge=1)
+    date: float = Field(gt=0)
+    start_time: str = Field(min_length=1, max_length=10)
+    end_time: str = Field(min_length=1, max_length=10)
+    room: str = Field(min_length=1, max_length=50)
+    max_students: int = Field(ge=1)
+
+
+class CreateSlotsIn(Input):
+    slots: list[SlotIn] = Field(min_length=1, max_length=50)
+
+
+class QuestionItem(Input):
+    sequence: int = Field(ge=1)
+    text: str = Field(min_length=10, max_length=4000)
+    topic: str = Field(min_length=1, max_length=200)
+    difficulty: Literal["EASY", "MEDIUM", "HARD"]
+
+
+class ExamVariantIn(Input):
+    name: str = Field(min_length=1, max_length=100)
+    questions: list[QuestionItem] = Field(min_length=1, max_length=50)
+
+
+class ReEvaluationIn(Input):
+    teacher_id_2: str
+    reason: Literal["RECONTROLL", "GRADE_DISPUTE", "EXAMINER_REQUEST"]
+    reason_detail: str | None = Field(default=None, min_length=5, max_length=2000)
+    blind_marking: bool = True
+
+
+class ExaminerExamIn(Input):
+    """Simplified Exam schema for Examiner Portal (1 exam per course)."""
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    time_limit: int = Field(default=30, ge=5, le=180)  # minutes
+    question_count: int = Field(default=3, ge=1, le=10)
+    rubric_id: str | None = Field(default=None)  # Optional for MVP
+
+
+class EnrollmentImportIn(Input):
+    course_id: str
+    file_data: str
 
 
 class SpeechPolicy(Input):
@@ -108,7 +195,9 @@ class ExamIn(Input):
     course_id: str
     rubric_id: str
     name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
     time_limit: int = Field(ge=60, le=10800)
+    question_count: int = Field(default=3, ge=1, le=10)
     blueprint: list[Blueprint] = Field(min_length=1, max_length=20)
     max_attempts: int | None = Field(default=1, ge=1, le=1001)
 

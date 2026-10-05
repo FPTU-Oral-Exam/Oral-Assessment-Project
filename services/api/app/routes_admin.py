@@ -335,7 +335,7 @@ async def replace_failed_textbook(
 
 
 @router.post("/documents/{key}/chapters", status_code=201)
-def add_section(key: str, body: s.SectionIn, db: Session = Depends(get_db), user=Depends(editor)):
+def add_section(key: str, body: s.BookSectionIn, db: Session = Depends(get_db), user=Depends(editor)):
     doc = by_id(db, Document, key)
     course_access(db, doc.course_id, user)
     if doc.kind != "TEXTBOOK" or doc.status != "READY" or body.end_page > (doc.page_count or 0):
@@ -347,7 +347,7 @@ def add_section(key: str, body: s.SectionIn, db: Session = Depends(get_db), user
 
 
 @router.put("/chapters/{key}")
-def update_section(key: str, body: s.SectionIn, db: Session = Depends(get_db), user=Depends(editor)):
+def update_section(key: str, body: s.BookSectionIn, db: Session = Depends(get_db), user=Depends(editor)):
     row = by_id(db, BookSection, key, lock=True)
     course_access(db, row.course_id, user)
     if body.end_page > (by_id(db, Document, row.document_id).page_count or 0):

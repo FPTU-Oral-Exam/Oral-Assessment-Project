@@ -11,6 +11,7 @@ export type {
   AttemptStatus,
   Blueprint,
   Exam,
+  ExamDetail,
   StudentExam,
   Sitting,
   ExamSession,
@@ -18,6 +19,7 @@ export type {
 } from "./exam";
 export type {
   Course,
+  CourseDetail,
   LearningOutcome,
   Topic,
   Doc,
@@ -31,3 +33,15 @@ export type {
   Assessment,
   Evidence,
 } from "./assessment";
+export type {
+  Semester,
+  Section,
+  StudentEnrollment,
+} from "./semester";
+export type {
+  ScheduleSlot,
+  ExamVariant,
+  SlotAssignment,
+  StudentResult,
+  ReEvaluation,
+} from "./schedule";
