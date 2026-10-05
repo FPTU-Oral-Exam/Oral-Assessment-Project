@@ -41,7 +41,10 @@ class Course(Entity, Base):
     code: Mapped[str] = mapped_column(String(50), unique=True)
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
+    credits: Mapped[int] = mapped_column(Integer, default=3)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    teacher_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    semester_id: Mapped[str | None] = mapped_column(ForeignKey("semesters.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
 
 

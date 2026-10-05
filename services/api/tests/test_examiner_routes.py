@@ -202,6 +202,135 @@ class TestSemesterCRUD:
 
 
 # ============================================================================
+# Course Management Tests
+# ============================================================================
+
+
+class TestCourseManagement:
+    """Test Course management endpoints."""
+
+    def test_list_semester_courses(self, env):
+        """Test listing courses in a semester."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={
+                "name": "Test Semester",
+                "year": 2026,
+                "term": "SPRING",
+                "start_date": 1735689600.0,
+                "end_date": 1748304000.0,
+            }
+        )
+        sem_data = ok(sem_response, 201)
+        sem_id = sem_data["id"]
+
+        course_code = unique_code()
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_id}/courses",
+            json={
+                "name": "Test Course",
+                "code": course_code,
+                "description": "Test",
+            }
+        )
+        ok(course_response, 201)
+
+        list_response = examiner.get(f"/api/examiner/semesters/{sem_id}/courses")
+        data = ok(list_response)
+        assert len(data) >= 1
+        assert any(c["code"] == course_code for c in data)
+
+    def test_create_course_creates_default_section(self, env):
+        """Test that creating course creates a default section."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={
+                "name": "Test Semester 2",
+                "year": 2026,
+                "term": "SUMMER",
+                "start_date": 1735689600.0,
+                "end_date": 1748304000.0,
+            }
+        )
+        sem_data = ok(sem_response, 201)
+
+        course_code = unique_code()
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={
+                "name": "Test Course 2",
+                "code": course_code,
+            }
+        )
+        course_data = ok(course_response, 201)
+
+        sections_response = examiner.get(
+            f"/api/examiner/courses/{course_data['id']}/sections"
+        )
+        sections = ok(sections_response)
+        assert len(sections) == 1
+        assert sections[0]["code"] == course_code
+
+    def test_get_course_detail(self, env):
+        """Test getting course detail."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": "Test 3", "year": 2026, "term": "FALL",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+
+        course_code = unique_code()
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": "Test Course 3", "code": course_code}
+        )
+        course_data = ok(course_response, 201)
+
+        detail_response = examiner.get(
+            f"/api/examiner/courses/{course_data['id']}"
+        )
+        detail = ok(detail_response)
+        assert detail["name"] == "Test Course 3"
+        assert detail["section_count"] == 1
+
+    def test_update_course(self, env):
+        """Test updating course details."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": "Test 4", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+
+        course_code = unique_code()
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": "Original Name", "code": course_code}
+        )
+        course_data = ok(course_response, 201)
+
+        update_response = examiner.put(
+            f"/api/examiner/courses/{course_data['id']}",
+            json={"name": "Updated Name"}
+        )
+        updated = ok(update_response)
+        assert updated["name"] == "Updated Name"
+
+
+# ============================================================================
 # Section CRUD Tests
 # ============================================================================
 

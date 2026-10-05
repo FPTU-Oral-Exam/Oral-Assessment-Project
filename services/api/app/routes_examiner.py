@@ -100,6 +100,109 @@ def complete_semester(semester_id: str, db: Session = Depends(get_db), user=Depe
 
 
 # ─────────────────────────────────────────────────────────────────
+# Course endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/semesters/{semester_id}/courses")
+def list_semester_courses(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all courses in a semester via sections."""
+    sections = db.scalars(
+        select(Section).where(Section.semester_id == semester_id)
+    ).all()
+    course_ids = set(s.course_id for s in sections)
+    courses = []
+    for cid in course_ids:
+        course = db.get(Course, cid)
+        if course:
+            teacher = db.get(User, course.teacher_id) if course.teacher_id else None
+            courses.append({
+                **data(course, "name", "code", "description", "status"),
+                "semester_id": semester_id,
+                "teacher": public_user(teacher) if teacher else None,
+            })
+    return courses
+
+
+@router.post("/semesters/{semester_id}/courses", status_code=201)
+def create_course_in_semester(
+    semester_id: str,
+    body: s.CourseIn,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Create a new course in semester. Creates a default section."""
+    by_id(db, Semester, semester_id)
+
+    course = Course(
+        semester_id=semester_id,
+        name=body.name,
+        code=body.code,
+        description=body.description,
+        credits=body.credits,
+        teacher_id=body.teacher_id,
+        owner_id=user.id,
+        status="DRAFT",
+    )
+    db.add(course)
+    db.flush()
+
+    # Create default section (use examiner as teacher if no teacher specified)
+    section_teacher_id = body.teacher_id or user.id
+    section = Section(
+        course_id=course.id,
+        semester_id=semester_id,
+        name=f"{body.code} - Default",
+        code=body.code,
+        teacher_id=section_teacher_id,
+        status="DRAFT",
+    )
+    db.add(section)
+
+    db.add(Audit(user_id=user.id, event="COURSE_CREATED", details={
+        "course_id": course.id,
+        "semester_id": semester_id,
+    }))
+    db.commit()
+
+    return {**data(course, "name", "code", "description", "status"), "semester_id": semester_id}
+
+
+@router.get("/courses/{course_id}")
+def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+    """Get course detail with sections count."""
+    course = by_id(db, Course, course_id)
+    teacher = db.get(User, course.teacher_id) if course.teacher_id else None
+    sections = db.scalars(select(Section).where(Section.course_id == course_id)).all()
+    return {
+        **data(course, "name", "code", "description", "status"),
+        "semester_id": course.semester_id,
+        "teacher": public_user(teacher) if teacher else None,
+        "section_count": len(sections),
+    }
+
+
+@router.put("/courses/{course_id}")
+def update_course(
+    course_id: str,
+    body: s.CourseUpdateIn,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Update course details."""
+    course = by_id(db, Course, course_id, lock=True)
+    updates = body.model_dump(exclude_unset=True)
+    for key in ["name", "code", "description", "credits", "teacher_id"]:
+        if key in updates:
+            setattr(course, key, updates[key])
+
+    db.add(Audit(user_id=user.id, event="COURSE_UPDATED", details={
+        "course_id": course_id,
+    }))
+    db.commit()
+    return data(course, "name", "code", "description", "status")
+
+
+# ─────────────────────────────────────────────────────────────────
 # Section endpoints
 # ─────────────────────────────────────────────────────────────────
 

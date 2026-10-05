@@ -91,6 +91,22 @@ class SectionIn(Input):
     max_students: int = Field(default=50, ge=1, le=500)
 
 
+class CourseIn(Input):
+    name: str = Field(min_length=1, max_length=200)
+    code: str = Field(min_length=1, max_length=50)
+    description: str = Field(default="", max_length=1000)
+    credits: int = Field(default=3, ge=1, le=10)
+    teacher_id: str | None = Field(default=None)
+
+
+class CourseUpdateIn(Input):
+    name: str | None = Field(default=None, max_length=200)
+    code: str | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=1000)
+    credits: int | None = Field(default=None, ge=1, le=10)
+    teacher_id: str | None = Field(default=None)
+
+
 class SlotIn(Input):
     slot_number: int = Field(ge=1)
     date: float = Field(gt=0)

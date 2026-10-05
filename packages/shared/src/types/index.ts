@@ -18,6 +18,7 @@ export type {
 } from "./exam";
 export type {
   Course,
+  CourseDetail,
   LearningOutcome,
   Topic,
   Doc,
