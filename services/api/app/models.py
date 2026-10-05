@@ -277,7 +277,7 @@ class Section(Entity, Base):
     semester_id: Mapped[str | None] = mapped_column(ForeignKey("semesters.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(200))     # "ENGO01 - Sáng T2"
     code: Mapped[str] = mapped_column(String(50))      # "ENGO01"
-    teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    teacher_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     day_of_week: Mapped[int] = mapped_column(Integer, default=0)  # 0=CN, 1=T2, ..., 6=T7
     time_slot: Mapped[str] = mapped_column(String(20), default="MORNING")  # MORNING, AFTERNOON, EVENING
     max_students: Mapped[int] = mapped_column(Integer, default=50)
