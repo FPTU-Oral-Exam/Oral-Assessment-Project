@@ -64,11 +64,13 @@ def test_admin_grants_roles_immediately_and_protects_last_admin(env):
     clients, _ = env
     student_id = ok(clients["student"].get("/auth/me"))["id"]
     admin_id = ok(clients["admin"].get("/auth/me"))["id"]
+    system_admin_id = ok(clients["system_admin"].get("/auth/me"))["id"]
     path = f"/admin/users/{student_id}/role"
-    assert clients["teacher"].put(path, json={"role": "ADMIN"}).status_code == 403
+    assert clients["teacher"].put(path, json={"role": "SYSTEM_ADMIN"}).status_code == 403
+    ok(clients["admin"].put(f"/admin/users/{system_admin_id}/role", json={"role": "STUDENT"}))
     assert clients["admin"].put(f"/admin/users/{admin_id}/role", json={"role": "STUDENT"}).status_code == 409
-    ok(clients["admin"].put(path, json={"role": "ADMIN"}))
-    assert ok(clients["student"].get("/auth/me"))["role"] == "ADMIN"
+    ok(clients["admin"].put(path, json={"role": "SYSTEM_ADMIN"}))
+    assert ok(clients["student"].get("/auth/me"))["role"] == "SYSTEM_ADMIN"
     assert clients["student"].get("/admin/users").status_code == 200
     ok(clients["student"].put(f"/admin/users/{admin_id}/role", json={"role": "STUDENT"}))
     assert clients["admin"].get("/admin/users").status_code == 403

@@ -23,10 +23,19 @@ export async function api<T>(endpoint: string, options?: RequestInit): Promise<T
     credentials: 'include',
   });
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== 'undefined') {
+      window.location.href = `/login?from=${encodeURIComponent(window.location.pathname)}`;
+    }
     let errMsg = `API call failed: ${res.statusText}`;
     try {
       const errJson = await res.json();
-      errMsg = errJson.message || errJson.detail || errJson.error?.message || errMsg;
+      errMsg =
+        errJson.error?.message ||
+        errJson.detail?.message ||
+        errJson.message ||
+        (typeof errJson.detail === 'string' ? errJson.detail : null) ||
+        (errJson.detail ? JSON.stringify(errJson.detail) : null) ||
+        errMsg;
     } catch {
       // ignore
     }

@@ -52,12 +52,15 @@ def env(monkeypatch):
     monkeypatch.setattr(worker, "SessionLocal", factory)
     with factory() as db:
         # New role names (from CLAUDE.md standard 4-role system)
-        # Canonical 5 users for test suite
+        # ADMIN -> SYSTEM_ADMIN, REVIEWER -> EXAMINER
         role_map = [
-            ("admin", "ADMIN"),
+            ("system_admin", "SYSTEM_ADMIN"),
             ("teacher", "TEACHER"),
             ("student", "STUDENT"),
-            ("reviewer", "REVIEWER"),
+            ("examiner", "EXAMINER"),
+            # Legacy role names for backward compatibility
+            ("admin", "SYSTEM_ADMIN"),
+            ("reviewer", "EXAMINER"),
             ("outsider", "STUDENT"),
         ]
         for username, role in role_map:
@@ -71,15 +74,15 @@ def env(monkeypatch):
             )
         db.commit()
     clients = {}
-    # Map old and new names for full compatibility
+    # Map old names to new roles for compatibility
     client_names = [
-        ("admin", "admin"),
-        ("system_admin", "admin"),     # alias to admin (SYSTEM_ADMIN)
-        ("teacher", "teacher"),
-        ("student", "student"),
-        ("reviewer", "reviewer"),
-        ("examiner", "reviewer"),      # alias to reviewer (EXAMINER)
-        ("outsider", "outsider"),
+        ("admin", "admin"),           # old: login with "admin", role SYSTEM_ADMIN
+        ("teacher", "teacher"),       # same
+        ("student", "student"),       # same
+        ("reviewer", "reviewer"),     # old: login with "reviewer", role EXAMINER
+        ("examiner", "examiner"),     # new: login with "examiner", role EXAMINER
+        ("system_admin", "system_admin"),  # new: login with "system_admin", role SYSTEM_ADMIN
+        ("outsider", "outsider"),     # same
     ]
     for name, login_name in client_names:
         client = TestClient(app)

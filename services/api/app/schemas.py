@@ -85,10 +85,19 @@ class SemesterIn(Input):
 class SectionIn(Input):
     name: str = Field(min_length=1, max_length=200)
     code: str = Field(min_length=1, max_length=50)
-    teacher_id: str
+    teacher_id: str | None = Field(default=None)
     day_of_week: int = Field(ge=0, le=6)
     time_slot: Literal["MORNING", "AFTERNOON", "EVENING"] = "MORNING"
     max_students: int = Field(default=50, ge=1, le=500)
+
+
+class SectionUpdateIn(Input):
+    name: str | None = Field(default=None, max_length=200)
+    code: str | None = Field(default=None, max_length=50)
+    teacher_id: str | None = Field(default=None)
+    day_of_week: int | None = Field(default=None, ge=0, le=6)
+    time_slot: Literal["MORNING", "AFTERNOON", "EVENING"] | None = None
+    max_students: int | None = Field(default=None, ge=1, le=500)
 
 
 class CourseIn(Input):
@@ -137,6 +146,28 @@ class ReEvaluationIn(Input):
     reason: Literal["RECONTROLL", "GRADE_DISPUTE", "EXAMINER_REQUEST"]
     reason_detail: str | None = Field(default=None, min_length=5, max_length=2000)
     blind_marking: bool = True
+
+
+class CriterionScoreIn(Input):
+    name: str = Field(min_length=1, max_length=100)
+    score: float = Field(ge=0, le=100)
+    feedback: str | None = None
+
+
+class ScoreOverrideIn(Input):
+    score: float = Field(ge=0, le=10)
+    reason: str = Field(min_length=3, max_length=2000)
+    criteria: list[CriterionScoreIn] | None = None
+
+
+class RegradeTranscriptIn(Input):
+    corrected_transcript: str = Field(min_length=1, max_length=10000)
+    reason: str = Field(min_length=3, max_length=2000)
+
+
+class ReEvaluationSubmitIn(Input):
+    score_2: float = Field(ge=0, le=10)
+    feedback: str | None = Field(default=None, max_length=2000)
 
 
 class ExaminerExamIn(Input):

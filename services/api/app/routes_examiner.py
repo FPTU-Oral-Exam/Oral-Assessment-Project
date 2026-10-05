@@ -10,6 +10,7 @@ from .models import (
     Audit,
     Attempt,
     Course,
+    Exam,
     ExamEnrollment,
     ExamSession,
     ExamVariant,
@@ -18,6 +19,7 @@ from .models import (
     Section,
     Semester,
     SlotAssignment,
+    Upload,
     User,
 )
 from .security import by_id, course_access, examiner, fail, public_user
@@ -167,6 +169,25 @@ def create_course_in_semester(
     return {**data(course, "name", "code", "description", "status"), "semester_id": semester_id}
 
 
+@router.get("/courses")
+def list_all_courses(db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all active courses with section count and teacher."""
+    courses = db.scalars(
+        select(Course).order_by(Course.created_at.desc())
+    ).all()
+    return [
+        {
+            **data(c, "name", "code", "description", "status"),
+            "semester_id": c.semester_id,
+            "teacher": public_user(db.get(User, c.teacher_id)) if c.teacher_id else None,
+            "section_count": db.scalar(
+                select(func.count()).select_from(Section).where(Section.course_id == c.id)
+            ) or 0,
+        }
+        for c in courses
+    ]
+
+
 @router.get("/courses/{course_id}")
 def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     """Get course detail with sections count."""
@@ -226,19 +247,71 @@ def list_sections(course_id: str, db: Session = Depends(get_db), user=Depends(ex
 @router.post("/courses/{course_id}/sections", status_code=201)
 def create_section(course_id: str, body: s.SectionIn, db: Session = Depends(get_db), user=Depends(examiner)):
     course_access(db, course_id, user)
-    # Validate teacher exists before creating section
-    teacher = by_id(db, User, body.teacher_id)
-    if teacher.role not in {"TEACHER", "EXAMINER"}:
-        fail(422, "NOT_TEACHER", "Giao cho giang vien hoac examiner")
+    if body.teacher_id:
+        teacher = by_id(db, User, body.teacher_id)
+        if teacher.role not in {"TEACHER", "EXAMINER"}:
+            fail(422, "NOT_TEACHER", "Giao cho giang vien hoac examiner")
     row = Section(course_id=course_id, **body.model_dump())
     db.add(row)
     db.commit()
-    return data(row, "name", "code", "day_of_week", "time_slot", "max_students", "status")
+    teacher = db.get(User, row.teacher_id) if row.teacher_id else None
+    return {
+        **data(row, "id", "name", "code", "day_of_week", "time_slot", "max_students", "status"),
+        "teacher": public_user(teacher) if teacher else None,
+    }
+
+
+@router.patch("/sections/{section_id}")
+def update_section(section_id: str, body: s.SectionUpdateIn, db: Session = Depends(get_db), user=Depends(examiner)):
+    section = by_id(db, Section, section_id, lock=True)
+    course_access(db, section.course_id, user)
+    if body.teacher_id is not None:
+        if body.teacher_id != "":
+            teacher = by_id(db, User, body.teacher_id)
+            if teacher.role not in {"TEACHER", "EXAMINER"}:
+                fail(422, "NOT_TEACHER", "Giao cho giang vien hoac examiner")
+            section.teacher_id = body.teacher_id
+        else:
+            section.teacher_id = None
+    if body.name is not None:
+        section.name = body.name
+    if body.code is not None:
+        section.code = body.code
+    if body.day_of_week is not None:
+        section.day_of_week = body.day_of_week
+    if body.time_slot is not None:
+        section.time_slot = body.time_slot
+    if body.max_students is not None:
+        section.max_students = body.max_students
+    db.commit()
+    teacher = db.get(User, section.teacher_id) if section.teacher_id else None
+    return {
+        **data(section, "id", "name", "code", "day_of_week", "time_slot", "max_students", "status"),
+        "teacher": public_user(teacher) if teacher else None,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────
 # Exam endpoints
 # ─────────────────────────────────────────────────────────────────
+
+@router.get("/exams")
+def list_all_exams(db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all exams across courses with course_id and slot_count."""
+    exams = db.scalars(
+        select(Exam).where(Exam.deleted_at.is_(None)).order_by(Exam.created_at.desc())
+    ).all()
+    return [
+        {
+            **data(e, "name", "description", "status", "time_limit", "question_count"),
+            "course_id": e.course_id,
+            "slot_count": db.scalar(
+                select(func.count()).select_from(ScheduleSlot).where(ScheduleSlot.exam_id == e.id)
+            ) or 0,
+        }
+        for e in exams
+    ]
+
 
 @router.get("/courses/{course_id}/exams")
 def list_course_exams(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
@@ -614,6 +687,7 @@ def assign_teacher_to_slot(
     if teacher.role not in {"TEACHER", "EXAMINER"}:
         fail(422, "NOT_TEACHER", "Chi giao cho giang vien")
 
+    row.status = "READY"
     db.add(Audit(
         user_id=user.id,
         event="SLOT_TEACHER_ASSIGNED",
@@ -621,7 +695,7 @@ def assign_teacher_to_slot(
     ))
     db.commit()
 
-    return {"status": "ASSIGNED", "teacher": public_user(teacher)}
+    return {"status": "ASSIGNED", "slot_status": row.status, "teacher": public_user(teacher)}
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -801,15 +875,27 @@ def get_student_attempts(
 
     rows = db.execute(query.order_by(Attempt.sequence)).all()
 
-    return [
-        {
+    result = []
+    for attempt, _ in rows:
+        audio_upload = db.scalar(
+            select(Upload).where(
+                Upload.attempt_id == attempt.id,
+                Upload.status == "COMPLETED",
+                Upload.kind == "AUDIO",
+            )
+        )
+        audio_url = f"/api/evidence/{audio_upload.id}/content" if audio_upload else None
+
+        result.append({
             "id": attempt.id,
             "sequence": attempt.sequence,
+            "question": attempt.question,
             "transcript": attempt.transcript,
             "stt_confidence": attempt.stt_confidence,
             "grading_message": attempt.assessment.get("grading_message") if attempt.assessment else None,
             "score": attempt.assessment.get("score") if attempt.assessment else None,
             "status": attempt.status,
-        }
-        for attempt, _ in rows
-    ]
+            "audio_url": audio_url,
+        })
+
+    return result

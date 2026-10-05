@@ -3,10 +3,13 @@ import ExamSlotsClient from './ExamSlotsClient';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ examId?: string }>;
 }
 
-export default async function ExamSlotsPage({ params }: PageProps) {
-  await requireRole(['EXAMINER']);
+export default async function ExamSlotsPage({ params, searchParams }: PageProps) {
+  await requireRole(['EXAMINER', 'SYSTEM_ADMIN']);
   const { id } = await params;
-  return <ExamSlotsClient examId={id} />;
+  const sp = searchParams ? await searchParams : {};
+  return <ExamSlotsClient courseId={id} initialExamId={sp.examId} />;
 }
+

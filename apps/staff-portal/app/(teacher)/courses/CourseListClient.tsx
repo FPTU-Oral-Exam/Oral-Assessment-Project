@@ -42,11 +42,15 @@ export default function CourseListClient() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/admin/courses`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/courses`, {
         credentials: 'include',
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          window.location.href = '/login?from=/courses';
+          return;
+        }
         throw new Error(`Failed to fetch courses: ${response.status}`);
       }
 
@@ -72,7 +76,7 @@ export default function CourseListClient() {
 
     try {
       setSubmitting(true);
-      const response = await fetch(`${API_BASE_URL}/admin/courses`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/courses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,13 +111,15 @@ export default function CourseListClient() {
       {/* Page Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900">Môn học phụ trách</h1>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Tạo môn học mới
-        </button>
+        {isSuperUser && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Tạo môn học mới
+          </button>
+        )}
       </div>
 
       {/* Loading State */}

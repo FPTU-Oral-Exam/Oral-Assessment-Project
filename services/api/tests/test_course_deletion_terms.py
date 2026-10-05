@@ -89,7 +89,7 @@ def test_delete_entire_course_requires_admin_confirmation_and_cleans_all_childre
     uploaded, _ = upload(student, attempt_id, "AUDIO")
     untouched = ok(admin.post("/admin/courses", json={"code": "KEEP", "name": "Keep me"}), 201)
     with factory() as db:
-        admin_id = db.scalar(select(User.id).where(User.role == "ADMIN"))
+        admin_id = db.scalar(select(User.id).where(User.role == "SYSTEM_ADMIN"))
         student_id = db.scalar(select(User.id).where(User.username == "student"))
         doc = db.get(Document, context["document"]["id"])
         keys = [doc.storage_key, db.get(Upload, uploaded["id"]).storage_key]
@@ -115,7 +115,7 @@ def test_delete_entire_course_requires_admin_confirmation_and_cleans_all_childre
     assert student.get(f"/exam-sessions/{session['id']}").status_code == 404
     with factory() as db:
         assert db.get(Course, untouched["id"]) is not None
-        assert db.scalar(select(func.count()).select_from(User)) == 5
+        assert db.scalar(select(func.count()).select_from(User)) == 7
         for model in (Assignment, Attempt, BookSection, Chunk, CourseEnrollment, Document, Exam,
                       ExamSession, LearningOutcome, ReviewJob, Rubric, Topic, TopicDocument,
                       TopicOutcome, TopicSection, Upload):

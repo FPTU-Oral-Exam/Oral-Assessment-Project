@@ -286,8 +286,9 @@ def tick():
                     process_document(db, document)
             except Exception as exc:
                 document.status = "FAILED"
-                document.error = "Xử lý tài liệu thất bại. Kiểm tra định dạng và cấu hình AI rồi thử lại."
-                log.warning("document_failed id=%s type=%s", document.id, type(exc).__name__)
+                msg = str(exc).strip()
+                document.error = msg if msg else "Xử lý tài liệu thất bại. Kiểm tra định dạng và thử lại."
+                log.warning("document_failed id=%s type=%s error=%s", document.id, type(exc).__name__, exc)
             db.commit()
             return True
         attempt = db.scalar(

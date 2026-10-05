@@ -3,8 +3,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Users, BookOpen, BarChart3, Loader2, Check } from 'lucide-react';
+import {
+  ArrowLeft,
+  Users,
+  BookOpen,
+  BarChart3,
+  Loader2,
+  Check,
+  GraduationCap,
+  Sparkles,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { toast } from 'sonner';
+
+import SectionsTab from './sections/SectionsClient';
+import EnrollmentsTab from './enrollments/EnrollmentsClient';
+import ExamsTab from './exams/ExamListClient';
+import CourseWorkspaceClient from '@/app/(teacher)/courses/[id]/CourseWorkspaceClient';
 
 interface CourseDetail {
   id: string;
@@ -17,7 +32,7 @@ interface CourseDetail {
   section_count: number;
 }
 
-type TabType = 'sections' | 'enrollments' | 'exams' | 'results';
+type TabType = 'sections' | 'enrollments' | 'exams' | 'results' | 'workspace';
 
 export default function CourseDetailClient({ courseId }: { courseId: string }) {
   const router = useRouter();
@@ -72,10 +87,11 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
   }
 
   const tabs = [
-    { id: 'sections' as TabType, label: 'Lớp học', icon: Users },
-    { id: 'enrollments' as TabType, label: 'Sinh viên', icon: Users },
-    { id: 'exams' as TabType, label: 'Đề thi', icon: BookOpen },
+    { id: 'sections' as TabType, label: 'Lớp học phần', icon: Users },
+    { id: 'enrollments' as TabType, label: 'Danh sách sinh viên', icon: GraduationCap },
+    { id: 'exams' as TabType, label: 'Đề thi & Ca thi', icon: BookOpen },
     { id: 'results' as TabType, label: 'Kết quả', icon: BarChart3 },
+    { id: 'workspace' as TabType, label: 'Học liệu & RAG', icon: Sparkles },
   ];
 
   return (
@@ -87,16 +103,22 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
           className="inline-flex items-center gap-1.5 text-slate-600 hover:text-slate-900 text-sm font-medium mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Quay lại
+          Quay lại danh sách học kỳ
         </button>
 
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              {course.code} — {course.name}
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {course.teacher ? `GV: ${course.teacher.name}` : 'Chưa gán giảng viên'}
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs font-bold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-md">
+                {course.code}
+              </span>
+              <h1 className="text-2xl font-bold text-slate-900">
+                {course.name}
+              </h1>
+            </div>
+            <p className="text-sm text-slate-500 mt-1.5">
+              {course.teacher ? `Giảng viên phụ trách: ${course.teacher.name}` : 'Chưa chỉ định giảng viên phụ trách môn'}
+              {course.description ? ` • ${course.description}` : ''}
             </p>
           </div>
           <span className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${
@@ -106,7 +128,7 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
           }`}>
             <span className="inline-flex items-center gap-1">
               {course.status === 'ACTIVE' && <Check className="w-3 h-3" />}
-              {course.status === 'ACTIVE' ? 'Hoạt động' : course.status}
+              {course.status === 'ACTIVE' ? 'Đang hoạt động' : course.status}
             </span>
           </span>
         </div>
@@ -114,18 +136,18 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
 
       {/* Tab Navigation */}
       <div className="border-b border-slate-200">
-        <nav className="flex space-x-1">
+        <nav className="flex space-x-2 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
+              className={`flex items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
                 activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
+                  ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
               }`}
             >
-              <tab.icon className="w-4 h-4" />
+              <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-blue-600' : 'text-slate-400'}`} />
               {tab.label}
             </button>
           ))}
@@ -138,33 +160,38 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
         {activeTab === 'enrollments' && <EnrollmentsTab courseId={courseId} />}
         {activeTab === 'exams' && <ExamsTab courseId={courseId} />}
         {activeTab === 'results' && <ResultsTab courseId={courseId} />}
+        {activeTab === 'workspace' && <CourseWorkspaceClient courseId={courseId} />}
       </div>
     </div>
   );
 }
 
-// Inline imports to avoid issues
-import SectionsTab from './sections/SectionsClient';
-import EnrollmentsTab from './enrollments/EnrollmentsClient';
-import ExamsTab from './exams/ExamListClient';
-
 function ResultsTab({ courseId }: { courseId: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-      <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-        <BarChart3 className="w-8 h-8 text-slate-400" />
+    <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+      <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <BarChart3 className="w-8 h-8 text-blue-600" />
       </div>
-      <h3 className="text-lg font-bold text-slate-700">Kết quả thi vấn đáp</h3>
-      <p className="text-sm text-slate-500 mt-2">
-        Xem kết quả và xuất báo cáo theo từng ca thi.
+      <h3 className="text-lg font-bold text-slate-900">Bảng điều khiển Kết quả & Xuất FAP</h3>
+      <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
+        Theo dõi điểm số sinh viên, nghe audio trực tiếp từ MinIO, kiểm tra độ tự tin STT và xuất bảng điểm chuẩn FAP.
       </p>
-      <Link
-        href="/results"
-        className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition"
-      >
-        <BarChart3 className="w-4 h-4" />
-        Xem tất cả kết quả
-      </Link>
+      <div className="mt-6 flex items-center justify-center gap-3">
+        <Link
+          href="/results"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xs transition"
+        >
+          <BarChart3 className="w-4 h-4" />
+          Mở Bảng điều khiển Kết quả
+        </Link>
+        <Link
+          href={`/courses/${courseId}/exams`}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm rounded-xl transition"
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+          Xem Ca thi môn học
+        </Link>
+      </div>
     </div>
   );
 }

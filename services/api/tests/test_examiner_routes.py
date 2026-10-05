@@ -329,6 +329,29 @@ class TestCourseManagement:
         updated = ok(update_response)
         assert updated["name"] == "Updated Name"
 
+    def test_list_all_courses(self, env):
+        """Test listing all courses across semesters."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+        examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": "All Courses Test", "code": unique_code()}
+        )
+
+        courses = ok(examiner.get("/api/examiner/courses"))
+        assert isinstance(courses, list)
+        assert len(courses) >= 1
+        assert "name" in courses[0]
+        assert "code" in courses[0]
+        assert "section_count" in courses[0]
+
 
 # ============================================================================
 # Section CRUD Tests
@@ -423,6 +446,45 @@ class TestSectionCRUD:
         data = ok(examiner.get(f"/api/examiner/courses/{course['id']}/sections"))
         assert len(data) >= 1
         assert any(s["code"] == f"{course_code}-T3-A" for s in data)
+
+    def test_update_section(self, env):
+        """Test updating a section and assigning teacher."""
+        clients, factory = env
+        examiner = clients["examiner"]
+
+        with factory() as db:
+            teacher_user = db.execute(select(User).where(User.username == "teacher")).scalar_one()
+            teacher_id = teacher_user.id
+
+        admin = clients["admin"]
+        course_code = unique_code()
+        course = ok(admin.post("/admin/courses", json={"code": course_code, "name": "Section Update Course"}))
+
+        created = ok(examiner.post(
+            f"/api/examiner/courses/{course['id']}/sections",
+            json={
+                "name": "Initial Section",
+                "code": f"{course_code}-SEC-1",
+                "day_of_week": 1,
+                "time_slot": "MORNING",
+                "max_students": 30,
+            }
+        ))
+        section_id = created["id"]
+
+        # Update section with teacher and new max_students
+        updated = ok(examiner.patch(
+            f"/api/examiner/sections/{section_id}",
+            json={
+                "name": "Updated Section Name",
+                "teacher_id": teacher_id,
+                "max_students": 45,
+            }
+        ))
+        assert updated["name"] == "Updated Section Name"
+        assert updated["max_students"] == 45
+        assert updated["teacher"] is not None
+        assert updated["teacher"]["id"] == teacher_id
 
 
 # ============================================================================
@@ -519,6 +581,23 @@ class TestExamManagement:
         assert detail["time_limit"] == 45
         assert detail["slot_count"] == 0
 
+    def test_list_all_exams(self, env):
+        """Test listing all exams across courses."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        _, course = self._create_course(examiner)
+        examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "All Exams Test", "time_limit": 30, "question_count": 3}
+        )
+
+        exams = ok(examiner.get("/api/examiner/exams"))
+        assert isinstance(exams, list)
+        assert len(exams) >= 1
+        assert "name" in exams[0]
+        assert "course_id" in exams[0]
+        assert "slot_count" in exams[0]
+
 
 # ============================================================================
 # Enrollment Import Tests
@@ -528,17 +607,85 @@ class TestExamManagement:
 class TestEnrollmentImport:
     """Test enrollment import from Excel."""
 
-    @pytest.mark.skip(reason="Requires valid student username matching MSSV format")
     def test_import_enrollments(self, env):
         """Test importing students from Excel file."""
-        # This test requires openpyxl and a properly formatted student import
-        # Skipping for now as it requires complex setup
-        pass
+        clients, _ = env
+        examiner = clients["examiner"]
 
-    @pytest.mark.skip(reason="Requires valid student username matching MSSV format")
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        course = ok(course_response, 201)
+
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["MSSV", "Ho ten", "Ma lop"])
+        ws.append(["student", "Test Student", "SEC-01"])
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        res = examiner.post(
+            "/api/examiner/enrollments/import",
+            data={"course_id": course["id"]},
+            files={"file": ("test.xlsx", buffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        data = ok(res)
+        assert data["created_enrollments"] == 1
+        assert data["created_sections"] == 1
+        assert data["skipped"] == 0
+
     def test_import_skips_existing_enrollments(self, env):
         """Test that existing enrollments are skipped."""
-        pass
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        course = ok(course_response, 201)
+
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["MSSV", "Ho ten", "Ma lop"])
+        ws.append(["student", "Test Student", "SEC-02"])
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+
+        # Import first time
+        examiner.post(
+            "/api/examiner/enrollments/import",
+            data={"course_id": course["id"]},
+            files={"file": ("test.xlsx", io.BytesIO(buffer.getvalue()), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+
+        # Import second time
+        res = examiner.post(
+            "/api/examiner/enrollments/import",
+            data={"course_id": course["id"]},
+            files={"file": ("test.xlsx", io.BytesIO(buffer.getvalue()), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        data = ok(res)
+        assert data["created_enrollments"] == 0
+        assert data["skipped"] == 1
 
 
 # ============================================================================
@@ -642,20 +789,46 @@ class TestEnrollmentManagement:
 class TestScheduleSlots:
     """Test ScheduleSlot creation and auto-assignment."""
 
-    @pytest.mark.skip(reason="Requires AI/Knowledge document processing for exam publishing")
+    def _setup_exam_with_enrollment(self, examiner):
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem = ok(sem_response, 201)
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        course = ok(course_response, 201)
+
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["MSSV", "Ho ten", "Ma lop"])
+        ws.append(["student", "Test Student", "SEC-SLOT"])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        examiner.post(
+            "/api/examiner/enrollments/import",
+            data={"course_id": course["id"]},
+            files={"file": ("test.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+
+        exam_res = examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "Midterm Exam", "time_limit": 30, "question_count": 3}
+        )
+        exam = ok(exam_res, 201)
+        return exam
+
     def test_create_slots_with_auto_assignment(self, env):
         """Test creating slots auto-assigns enrolled students."""
-        pass
-
-    @pytest.mark.skip(reason="Requires AI/Knowledge document processing for exam publishing")
-    def test_list_slots(self, env):
-        """Test listing slots for an exam."""
-        pass
-
-    @pytest.mark.skip(reason="Requires AI/Knowledge document processing for exam publishing")
-    def test_lock_unlock_slot(self, env):
-        """Test locking and unlocking a slot."""
-        pass
+        clients, _ = env
+        examiner = clients["examiner"]
+        exam = self._setup_exam_with_enrollment(examiner)
 
         slot_data = ok(examiner.post(
             f"/api/examiner/exams/{exam['id']}/slots",
@@ -669,7 +842,55 @@ class TestScheduleSlots:
                     "max_students": 10,
                 }]
             }
-        ))
+        ), 201)
+        assert slot_data["created"] == 1
+        assert len(slot_data["slots"]) == 1
+        assert slot_data["slots"][0]["student_count"] == 1
+
+    def test_list_slots(self, env):
+        """Test listing slots for an exam."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        exam = self._setup_exam_with_enrollment(examiner)
+
+        examiner.post(
+            f"/api/examiner/exams/{exam['id']}/slots",
+            json={
+                "slots": [{
+                    "slot_number": 1,
+                    "date": 1737158400.0,
+                    "start_time": "08:00",
+                    "end_time": "09:00",
+                    "room": "D101",
+                    "max_students": 10,
+                }]
+            }
+        )
+
+        slots = ok(examiner.get(f"/api/examiner/exams/{exam['id']}/slots"))
+        assert len(slots) == 1
+        assert slots[0]["slot_number"] == 1
+        assert slots[0]["room"] == "D101"
+
+    def test_lock_unlock_slot(self, env):
+        """Test locking and unlocking a slot."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        exam = self._setup_exam_with_enrollment(examiner)
+
+        slot_data = ok(examiner.post(
+            f"/api/examiner/exams/{exam['id']}/slots",
+            json={
+                "slots": [{
+                    "slot_number": 1,
+                    "date": 1737158400.0,
+                    "start_time": "08:00",
+                    "end_time": "09:00",
+                    "room": "D101",
+                    "max_students": 10,
+                }]
+            }
+        ), 201)
         slot_id = slot_data["slots"][0]["id"]
 
         # Lock
@@ -689,15 +910,74 @@ class TestScheduleSlots:
 class TestResultsAndExport:
     """Test results and FAP export endpoints."""
 
-    @pytest.mark.skip(reason="Requires AI/Knowledge document processing for exam publishing")
+    def _setup_slot(self, examiner):
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem = ok(sem_response, 201)
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        course = ok(course_response, 201)
+
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["MSSV", "Ho ten", "Ma lop"])
+        ws.append(["student", "Test Student", "SEC-RES"])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        examiner.post(
+            "/api/examiner/enrollments/import",
+            data={"course_id": course["id"]},
+            files={"file": ("test.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+
+        exam_res = examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "Midterm Exam", "time_limit": 30, "question_count": 3}
+        )
+        exam = ok(exam_res, 201)
+
+        slot_data = ok(examiner.post(
+            f"/api/examiner/exams/{exam['id']}/slots",
+            json={
+                "slots": [{
+                    "slot_number": 1,
+                    "date": 1737158400.0,
+                    "start_time": "08:00",
+                    "end_time": "09:00",
+                    "room": "D101",
+                    "max_students": 10,
+                }]
+            }
+        ), 201)
+        return slot_data["slots"][0]["id"]
+
     def test_slot_results(self, env):
         """Test getting results for a slot."""
-        pass
+        clients, _ = env
+        examiner = clients["examiner"]
+        slot_id = self._setup_slot(examiner)
 
-    @pytest.mark.skip(reason="Requires AI/Knowledge document processing for exam publishing")
+        results = ok(examiner.get(f"/api/examiner/slots/{slot_id}/results"))
+        assert len(results) == 1
+        assert results[0]["username"] == "student"
+
     def test_export_fap(self, env):
         """Test FAP export returns Excel file."""
-        pass
+        clients, _ = env
+        examiner = clients["examiner"]
+        slot_id = self._setup_slot(examiner)
+
+        res = examiner.get(f"/api/examiner/slots/{slot_id}/export")
+        assert res.status_code == 200
+        assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in res.headers.get("content-type", "")
 
 
 # ============================================================================
@@ -708,10 +988,45 @@ class TestResultsAndExport:
 class TestTeacherAssignment:
     """Test teacher assignment to slots."""
 
-    @pytest.mark.skip(reason="Requires AI/Knowledge document processing for exam publishing")
     def test_assign_teacher_to_slot(self, env):
         """Test assigning a teacher to create exam variant."""
-        pass
+        clients, factory = env
+        examiner = clients["examiner"]
+
+        with factory() as db:
+            teacher = db.execute(select(User).where(User.username == "teacher")).scalar_one()
+            teacher_id = teacher.id
+
+        # Setup slot
+        sem_res = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem = ok(sem_res, 201)
+        course_res = examiner.post(
+            f"/api/examiner/semesters/{sem['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        course = ok(course_res, 201)
+        exam_res = examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "Assign Exam", "time_limit": 30, "question_count": 3}
+        )
+        exam = ok(exam_res, 201)
+        slot_res = ok(examiner.post(
+            f"/api/examiner/exams/{exam['id']}/slots",
+            json={"slots": [{"slot_number": 1, "date": 1737158400.0, "start_time": "08:00", "end_time": "09:00", "room": "R1", "max_students": 10}]}
+        ), 201)
+        slot_id = slot_res["slots"][0]["id"]
+
+        assign_res = examiner.post(
+            f"/api/examiner/slots/{slot_id}/assign-teacher",
+            data={"teacher_id": teacher_id, "description": "Create variant A"},
+        )
+        assign_data = ok(assign_res)
+        assert assign_data["status"] == "ASSIGNED"
+        assert assign_data["teacher"]["id"] == teacher_id
 
 
 # ============================================================================
@@ -722,10 +1037,89 @@ class TestTeacherAssignment:
 class TestReEvaluation:
     """Test re-evaluation request endpoint."""
 
-    @pytest.mark.skip(reason="Requires AI/Knowledge document processing for exam publishing")
     def test_request_re_evaluation(self, env):
         """Test creating a re-evaluation request."""
-        pass
+        clients, factory = env
+        examiner = clients["examiner"]
+
+        with factory() as db:
+            teacher = db.execute(select(User).where(User.username == "teacher")).scalar_one()
+            student = db.execute(select(User).where(User.username == "student")).scalar_one()
+            teacher_id = teacher.id
+            student_id = student.id
+
+        sem_res = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem = ok(sem_res, 201)
+        course_res = examiner.post(
+            f"/api/examiner/semesters/{sem['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        course = ok(course_res, 201)
+        exam_res = examiner.post(
+            f"/api/examiner/courses/{course['id']}/exams",
+            json={"name": "ReEval Exam", "time_limit": 30, "question_count": 3}
+        )
+        exam = ok(exam_res, 201)
+
+        # Create session & attempt in db
+        from app.models import Attempt
+        with factory() as db:
+            session = ExamSession(
+                exam_id=exam["id"],
+                student_id=student_id,
+                attempt_number=1,
+                status="SUBMITTED",
+                final_score=7.0,
+            )
+            db.add(session)
+            db.flush()
+            attempt = Attempt(
+                session_id=session.id,
+                sequence=1,
+                question={"text": "Question 1"},
+                status="EVALUATED",
+            )
+            db.add(attempt)
+            db.commit()
+            attempt_id = attempt.id
+
+        re_eval_res = examiner.post(
+            f"/api/examiner/attempts/{attempt_id}/request-re-eval",
+            json={
+                "teacher_id_2": teacher_id,
+                "reason": "RECONTROLL",
+                "reason_detail": "Yeu cau cham phuc khao do lech diem",
+                "blind_marking": True,
+            }
+        )
+        re_eval_data = ok(re_eval_res)
+        assert re_eval_data["status"] == "PENDING"
+        assert "id" in re_eval_data
+
+
+# ============================================================================
+# Student Attempts Tests
+# ============================================================================
+
+
+class TestStudentAttempts:
+    """Test retrieving student attempts with audio and transcript."""
+
+    def test_get_student_attempts(self, env):
+        clients, factory = env
+        examiner = clients["examiner"]
+
+        with factory() as db:
+            student = db.execute(select(User).where(User.username == "student")).scalar_one()
+            student_id = student.id
+
+        attempts = ok(examiner.get(f"/api/examiner/students/{student_id}/attempts"))
+        assert isinstance(attempts, list)
+
 
 
 # ============================================================================

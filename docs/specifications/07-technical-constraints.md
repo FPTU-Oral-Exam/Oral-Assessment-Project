@@ -182,6 +182,8 @@ Tài liệu này ghi lại các ràng buộc kỹ thuật và nguyên tắc ki�
 | **TC-060** | Snapshot không được thay đổi sau khi student bắt đầu thi | Bảo toàn đề thi |
 | **TC-061** | Đổi rubric/knowledge không ảnh hưởng exam đang active | Cô lập thay đổi |
 | **TC-062** | Re-grade dùng snapshot của lần thi, không dùng version mới | Nhất quán kết quả |
+| **TC-062a** | Đề thi `PUBLISHED` là bất biến (Immutable): API chặn triệt để `PUT` / `DELETE` từ Giảng viên; chỉ người quản lý ngân hàng đề (Khảo thí) mới có quyền can thiệp ngân hàng đề | Tuân thủ nguyên tắc "Chỉ thêm, hạn chế sửa" |
+| **TC-062b** | Ngân hàng đề thi che giấu danh sách câu hỏi đã được chọn vào đề thi chính thức đối với Giảng viên | Bảo mật đề thi tập trung, triệt tiêu nguy cơ lộ đề |
 
 ---
 

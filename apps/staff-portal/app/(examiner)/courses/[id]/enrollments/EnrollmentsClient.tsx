@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Trash2, Loader2, Users, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Trash2, Loader2, Users, AlertCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Section {
@@ -23,6 +23,7 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingEnrollments, setLoadingEnrollments] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,8 +79,9 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Xóa thất bại');
-      toast.success('Đã xóa sinh viên');
+      toast.success('Đã xóa sinh viên khỏi lớp');
       fetchEnrollments();
+      fetchSections();
     } catch {
       toast.error('Xóa thất bại');
     } finally {
@@ -87,11 +89,19 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
     }
   };
 
+  const filteredEnrollments = useMemo(() => {
+    if (!searchQuery.trim()) return enrollments;
+    const q = searchQuery.toLowerCase().trim();
+    return enrollments.filter(
+      (e) => e.username.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
+    );
+  }, [enrollments, searchQuery]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 space-y-3">
         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-        <div className="text-slate-500 font-medium text-sm">Đang tải dữ liệu...</div>
+        <div className="text-slate-500 font-medium text-sm">Đang tải dữ liệu sinh viên...</div>
       </div>
     );
   }
@@ -112,21 +122,45 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Section Selector */}
+      {/* Controls Bar: Section Selector & Search */}
       {sections.length > 0 && (
-        <div>
-          <label className="block text-sm font-bold text-slate-700 mb-2">Chọn lớp</label>
-          <select
-            value={selectedSection || ''}
-            onChange={(e) => setSelectedSection(e.target.value)}
-            className="w-full max-w-xs px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {sections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code} — {s.name} ({s.student_count} SV)
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div>
+              <label htmlFor="section-select" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Lớp học phần
+              </label>
+              <select
+                id="section-select"
+                value={selectedSection || ''}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                className="w-full sm:w-64 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {sections.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} — {s.name} ({s.student_count} SV)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="w-full sm:w-72">
+            <label htmlFor="student-search" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Tìm kiếm sinh viên
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                id="student-search"
+                type="text"
+                placeholder="Nhập MSSV hoặc họ tên..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -138,28 +172,28 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
           </div>
           <h3 className="text-lg font-bold text-slate-700">Chưa có lớp học nào</h3>
           <p className="text-sm text-slate-500 mt-2">
-            Hãy tạo lớp học trước để quản lý sinh viên.
+            Hãy tạo lớp học hoặc import Excel trước để quản lý danh sách sinh viên.
           </p>
         </div>
       )}
 
       {/* Enrollments Table */}
       {sections.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-700">
                     MSSV
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Họ tên
+                  <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Họ và tên
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <th className="px-6 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-700">
                     Trạng thái
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <th className="px-6 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-slate-700">
                     Hành động
                   </th>
                 </tr>
@@ -171,19 +205,21 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
                       <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto" />
                     </td>
                   </tr>
-                ) : enrollments.length === 0 ? (
+                ) : filteredEnrollments.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-center text-slate-500 text-sm">
-                      Chưa có sinh viên trong lớp này
+                      {searchQuery
+                        ? `Không tìm thấy sinh viên phù hợp với "${searchQuery}"`
+                        : 'Chưa có sinh viên trong lớp này'}
                     </td>
                   </tr>
                 ) : (
-                  enrollments.map((e) => (
+                  filteredEnrollments.map((e) => (
                     <tr key={e.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-900 font-mono">
                         {e.username}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 font-medium">
                         {e.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -200,7 +236,7 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
                           onClick={() => handleDelete(e.id)}
                           disabled={deleting === e.id}
                           className="inline-flex items-center justify-center p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                          title="Xóa sinh viên"
+                          title="Xóa sinh viên khỏi lớp"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -213,10 +249,18 @@ export default function EnrollmentsClient({ courseId }: { courseId: string }) {
           </div>
 
           {!loadingEnrollments && enrollments.length > 0 && (
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50">
-              <p className="text-sm text-slate-600 font-medium">
-                Tổng cộng: <span className="text-blue-600 font-bold">{enrollments.length}</span> sinh viên
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-600">
+              <p>
+                Hiển thị <span className="font-bold text-slate-900">{filteredEnrollments.length}</span> / {enrollments.length} sinh viên
               </p>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-blue-600 hover:underline font-semibold"
+                >
+                  Xóa bộ lọc tìm kiếm
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -8,10 +8,12 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/audit/,
     /^\/courses/,
     /^\/exams/,
+    /^\/semester/,
     /^\/grading/,
     /^\/results/,
   ],
   EXAMINER: [
+    /^\/semester/,
     /^\/courses/,
     /^\/exams/,
     /^\/schedule/,
