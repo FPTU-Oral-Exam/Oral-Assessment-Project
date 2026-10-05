@@ -62,7 +62,8 @@ export default function Admin({
     [review, setReview] = useState<Review | null>(null),
     [query, setQuery] = useState(""),
     [showCreate, setShowCreate] = useState(false);
-  const editable = user.role === "ADMIN" || user.role === "TEACHER";
+  const isAdmin = (user.role as string) === "ADMIN" || user.role === "SYSTEM_ADMIN";
+  const editable = isAdmin || user.role === "TEACHER";
   const load = useCallback(async () => {
     try {
       const [c, u, r, s] = await Promise.all([
@@ -98,13 +99,13 @@ export default function Admin({
     return () => clearInterval(timer);
   }, [page, load, review?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (loading) return <Empty>Đang tải dữ liệu…</Empty>;
-  if (page === "settings" && user.role === "ADMIN") return <PlatformSettings />;
+  if (page === "settings" && isAdmin) return <PlatformSettings />;
   if (selected && page === "courses")
     return (
       <CourseWorkspace
         course={selected}
         students={users}
-        admin={user.role === "ADMIN"}
+        admin={isAdmin}
         editable={editable}
         back={() => {
           setSelected(null);
@@ -117,7 +118,7 @@ export default function Admin({
     return (
       <ReviewPage
         review={review}
-        admin={user.role === "ADMIN"}
+        admin={isAdmin}
         refresh={async () =>
           setReview(await api<Review>(`/admin/results/${review.id}`))
         }
@@ -356,7 +357,7 @@ export default function Admin({
                 Tài khoản được quản trị viên cấp trước khi giao bài thi.
               </p>
             </div>
-            {user.role === "ADMIN" && (
+            {isAdmin && (
               <button
                 className="button"
                 onClick={() => setShowCreate(!showCreate)}
@@ -398,8 +399,8 @@ export default function Admin({
                     <select name="role">
                       <option value="STUDENT">Sinh viên</option>
                       <option value="TEACHER">Giảng viên</option>
-                      <option value="REVIEWER">Người duyệt</option>
-                      <option value="ADMIN">Quản trị viên</option>
+                      <option value="EXAMINER">Cán bộ coi thi</option>
+                      <option value="SYSTEM_ADMIN">Quản trị viên hệ thống</option>
                     </select>
                   </label>
                 </div>
@@ -429,7 +430,7 @@ export default function Admin({
                     <td>{u.email || u.username}</td>
                     <td>
                       <span className="pill">{u.role}</span>
-                      {user.role === "ADMIN" && (
+                      {isAdmin && (
                         <RoleEditor
                           user={u}
                           saved={async () => {
@@ -463,7 +464,7 @@ export default function Admin({
           <section className="panel">
             <ResultTable
               rows={results}
-              admin={user.role === "ADMIN"}
+              admin={isAdmin}
               refresh={load}
               open={async (id) =>
                 setReview(await api<Review>(`/admin/results/${id}`))
@@ -1756,7 +1757,7 @@ function RoleEditor({
         value={role}
         onChange={(e) => setRole(e.target.value as User["role"])}
       >
-        {["STUDENT", "TEACHER", "REVIEWER", "ADMIN"].map((r) => (
+        {["STUDENT", "TEACHER", "EXAMINER", "SYSTEM_ADMIN", "ADMIN"].map((r) => (
           <option key={r}>{r}</option>
         ))}
       </select>

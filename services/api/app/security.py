@@ -96,18 +96,22 @@ def roles(*allowed):
     return guard
 
 
-staff = roles("SYSTEM_ADMIN", "EXAMINER", "TEACHER")
-editor = roles("SYSTEM_ADMIN", "TEACHER")
+staff = roles("SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER", "TEACHER")
+editor = roles("SYSTEM_ADMIN", "ADMIN", "TEACHER")
 student = roles("STUDENT")
-admin = roles("SYSTEM_ADMIN")
-examiner = roles("SYSTEM_ADMIN", "EXAMINER")
+admin = roles("SYSTEM_ADMIN", "ADMIN")
+examiner = roles("SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER")
 
 
 def course_access(db, course_id, user):
     course = db.get(Course, course_id)
     if not course:
         fail(404, "NOT_FOUND", "Không tìm thấy môn học")
-    if user.role not in {"SYSTEM_ADMIN", "EXAMINER"} and course.owner_id != user.id:
+    if (
+        user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER"}
+        and course.owner_id != user.id
+        and course.code != "ORAL-PRACTICE"
+    ):
         fail(403, "FORBIDDEN", "Bạn không phụ trách môn học này")
     return course
 

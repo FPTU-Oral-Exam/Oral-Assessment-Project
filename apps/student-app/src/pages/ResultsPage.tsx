@@ -3,8 +3,7 @@ import { api } from '../lib/api';
 
 interface AttemptResult {
   sequence: number;
-  question: string;
-  transcript?: string;
+  question: string | { text?: string; [key: string]: any };
   status: string;
   question_score: number | null;
   audio_url?: string;
@@ -22,18 +21,21 @@ interface ResultData {
 
 interface ResultsPageProps {
   sessionId: string;
-  token: string;
+  token?: string;
   onBack: () => void;
+  onRetake?: () => void;
   onLogout: () => void;
 }
 
-export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageProps) {
+export function ResultsPage({ sessionId, token, onBack, onRetake, onLogout }: ResultsPageProps) {
   const [result, setResult] = useState<ResultData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.setToken(token);
+    if (token) {
+      api.setToken(token);
+    }
     loadResult();
   }, [token, sessionId]);
 
@@ -41,9 +43,9 @@ export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageP
     try {
       setLoading(true);
       const data = await api.getResult(sessionId);
-      setResult(data);
+      setResult(data as unknown as ResultData);
     } catch (err) {
-      setError('Failed to load results');
+      setError('Không thể tải kết quả bài thi');
     } finally {
       setLoading(false);
     }
@@ -52,7 +54,7 @@ export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageP
   if (loading) {
     return (
       <div style={styles.container}>
-        <div style={styles.loading}>Đang tải kết quả...</div>
+        <div style={styles.loading}>Đang tải kết quả bài thi...</div>
       </div>
     );
   }
@@ -60,9 +62,9 @@ export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageP
   if (error || !result) {
     return (
       <div style={styles.container}>
-        <div style={styles.error}>{error || 'Failed to load results'}</div>
+        <div style={styles.error}>{error || 'Không thể tải kết quả bài thi'}</div>
         <button onClick={onBack} style={styles.button}>
-          Quay lại
+          Quay lại danh sách bài thi
         </button>
       </div>
     );
@@ -74,14 +76,15 @@ export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageP
   };
 
   const getScoreDisplay = () => {
-    if (result.score === null) return 'Chưa chấm';
+    if (result.score === null) return 'Chờ chấm';
     return `${result.score}/10`;
   };
 
   const getStatusLabel = () => {
     const statusMap: Record<string, string> = {
       IN_PROGRESS: 'Đang thi',
-      SUBMITTED: 'Đã nộp',
+      SUBMITTED: 'Đã nộp bài',
+      REVIEW_REQUIRED: 'Chờ chấm điểm',
       GRADING: 'Đang chấm',
       COMPLETED: 'Hoàn thành',
     };
@@ -120,7 +123,7 @@ export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageP
 
           {result.grading_message && (
             <div style={styles.feedback}>
-              <h3 style={styles.feedbackTitle}>Phản hồi</h3>
+              <h3 style={styles.feedbackTitle}>Ghi chú đánh giá</h3>
               <p>{result.grading_message}</p>
             </div>
           )}
@@ -128,38 +131,75 @@ export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageP
 
         <div style={styles.attempts}>
           <h3 style={styles.attemptsTitle}>Chi tiết câu hỏi</h3>
-          {result.attempts.map((attempt) => (
-            <div key={attempt.sequence} style={styles.attemptCard}>
-              <div style={styles.attemptHeader}>
-                <span style={styles.attemptNumber}>Câu {attempt.sequence}</span>
-                {attempt.question_score !== null && (
-                  <span style={styles.attemptScore}>{attempt.question_score}/10</span>
-                )}
-              </div>
-              <p style={styles.attemptQuestion}>{attempt.question}</p>
-              {attempt.transcript && (
-                <div style={styles.transcript}>
-                  <strong>Transcript:</strong>
-                  <p>{attempt.transcript}</p>
+          {result.attempts.map((attempt) => {
+            const questionText =
+              typeof attempt.question === 'object' && attempt.question !== null
+                ? (attempt.question as any).text || JSON.stringify(attempt.question)
+                : String(attempt.question || '');
+
+            const audioSrc = attempt.audio_url
+              ? attempt.audio_url.startsWith('http')
+                ? attempt.audio_url
+                : `http://localhost:8000${attempt.audio_url}`
+              : null;
+
+            return (
+              <div key={attempt.sequence} style={styles.attemptCard}>
+                <div style={styles.attemptHeader}>
+                  <span style={styles.attemptNumber}>Câu {attempt.sequence}</span>
+                  {attempt.question_score !== null && (
+                    <span style={styles.attemptScore}>{attempt.question_score}/10</span>
+                  )}
                 </div>
-              )}
-              <div style={styles.attemptStatus}>
-                <span
-                  style={{
-                    ...styles.statusBadge,
-                    background: attempt.status === 'GRADED' ? '#16a34a' : '#ca8a04',
-                  }}
-                >
-                  {attempt.status === 'GRADED' ? 'Đã chấm' : 'Chờ chấm'}
-                </span>
+                <p style={styles.attemptQuestion}>{questionText}</p>
+
+                {audioSrc && (
+                  <div style={{ marginBottom: '12px', marginTop: '8px' }}>
+                    <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px', fontWeight: 500 }}>
+                      🎧 Nghe lại câu trả lời đã nộp:
+                    </div>
+                    <audio controls src={audioSrc} style={{ width: '100%', height: '40px' }} />
+                  </div>
+                )}
+
+                <div style={styles.attemptStatus}>
+                  <span
+                    style={{
+                      ...styles.statusBadge,
+                      background: attempt.status === 'GRADED' ? '#16a34a' : '#ca8a04',
+                    }}
+                  >
+                    {attempt.status === 'GRADED' ? 'Đã chấm' : 'Chờ chấm'}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        <button onClick={onBack} style={styles.backButton}>
-          Quay lại danh sách bài thi
-        </button>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+          {onRetake && (
+            <button
+              onClick={onRetake}
+              style={{
+                flex: 1,
+                padding: '1rem',
+                background: '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              🔄 Làm lại bài thi mới
+            </button>
+          )}
+          <button onClick={onBack} style={{ ...styles.backButton, flex: 1 }}>
+            Quay lại danh sách bài thi
+          </button>
+        </div>
       </main>
     </div>
   );
@@ -168,7 +208,7 @@ export function ResultsPage({ sessionId, token, onBack, onLogout }: ResultsPageP
 const styles: Record<string, React.CSSProperties> = {
   container: {
     minHeight: '100vh',
-    background: '#f5f5f5',
+    background: '#f8fafc',
   },
   loading: {
     display: 'flex',
@@ -180,10 +220,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   error: {
     display: 'flex',
+    flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
     color: '#dc2626',
+    gap: '16px',
   },
   header: {
     background: '#2563eb',
@@ -194,6 +236,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    maxWidth: '800px',
+    margin: '0 auto',
   },
   title: {
     fontSize: '1.25rem',
@@ -210,59 +254,67 @@ const styles: Record<string, React.CSSProperties> = {
   main: {
     maxWidth: '800px',
     margin: '0 auto',
-    padding: '2rem',
+    padding: '2rem 1rem',
   },
   summary: {
     background: 'white',
-    borderRadius: '8px',
+    borderRadius: '12px',
     padding: '1.5rem',
     marginBottom: '1.5rem',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
   },
   examName: {
-    fontSize: '1.5rem',
+    fontSize: '1.35rem',
+    fontWeight: 700,
     marginBottom: '1rem',
+    color: '#1e293b',
   },
   stats: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '1rem',
+    display: 'flex',
+    gap: '2rem',
     marginBottom: '1rem',
+    flexWrap: 'wrap',
   },
   stat: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.25rem',
   },
   statLabel: {
     fontSize: '0.875rem',
     color: '#64748b',
+    marginBottom: '0.25rem',
   },
   statValue: {
     fontSize: '1.125rem',
     fontWeight: 600,
+    color: '#1e293b',
   },
   feedback: {
+    background: '#f8fafc',
     padding: '1rem',
-    background: '#f0f9ff',
-    borderRadius: '6px',
-    border: '1px solid #bae6fd',
+    borderRadius: '8px',
+    marginTop: '1rem',
+    borderLeft: '4px solid #2563eb',
   },
   feedbackTitle: {
-    fontSize: '1rem',
-    marginBottom: '0.5rem',
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    marginBottom: '0.25rem',
+    color: '#334155',
   },
   attempts: {
     marginBottom: '1.5rem',
   },
   attemptsTitle: {
     fontSize: '1.125rem',
+    fontWeight: 600,
     marginBottom: '1rem',
+    color: '#1e293b',
   },
   attemptCard: {
     background: 'white',
-    borderRadius: '8px',
-    padding: '1rem',
+    borderRadius: '12px',
+    padding: '1.25rem',
     marginBottom: '1rem',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
   },
@@ -274,6 +326,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   attemptNumber: {
     fontWeight: 600,
+    color: '#2563eb',
   },
   attemptScore: {
     fontWeight: 600,
@@ -282,23 +335,19 @@ const styles: Record<string, React.CSSProperties> = {
   attemptQuestion: {
     marginBottom: '0.75rem',
     lineHeight: 1.5,
-  },
-  transcript: {
-    padding: '0.75rem',
-    background: '#f8fafc',
-    borderRadius: '6px',
-    marginBottom: '0.75rem',
-    fontSize: '0.875rem',
+    color: '#334155',
+    fontWeight: 500,
   },
   attemptStatus: {
     display: 'flex',
+    marginTop: '8px',
   },
   statusBadge: {
-    padding: '0.25rem 0.5rem',
-    borderRadius: '4px',
+    padding: '0.25rem 0.6rem',
+    borderRadius: '6px',
     color: 'white',
     fontSize: '0.75rem',
-    fontWeight: 500,
+    fontWeight: 600,
   },
   button: {
     padding: '0.75rem 1.5rem',
@@ -310,9 +359,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1rem',
   },
   backButton: {
-    width: '100%',
     padding: '1rem',
-    background: '#2563eb',
+    background: '#475569',
     color: 'white',
     border: 'none',
     borderRadius: '8px',

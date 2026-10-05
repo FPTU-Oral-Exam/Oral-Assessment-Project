@@ -15,6 +15,7 @@ interface ExamRoomPageProps {
 export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish }) => {
   const [answeredQuestions, setAnsweredQuestions] = useState<number[]>([]);
   const [recordedAudio, setRecordedAudio] = useState<{ blob: Blob; url: string } | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
 
   const {
@@ -118,6 +119,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   // Handle submitting recorded answer and advancing to the next question
   const handleSubmitAndNext = useCallback(async () => {
     if (!currentAttempt || !recordedAudio) return;
+    setSubmitError(null);
 
     try {
       const audioFile = new File([recordedAudio.blob], 'recording.webm', {
@@ -147,11 +149,13 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       await refreshSession(sessionId);
     } catch (err) {
       console.error('Failed to submit recording:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Có lỗi khi nộp bài; vui lòng thử lại');
     }
   }, [currentAttempt, recordedAudio, upload, token, clearBlobs, resetUpload, refreshSession, sessionId]);
 
   // Handle re-recording
   const handleRerecord = useCallback(() => {
+    setSubmitError(null);
     if (recordedAudio) {
       URL.revokeObjectURL(recordedAudio.url);
       setRecordedAudio(null);
@@ -300,6 +304,20 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                     🎧 Nghe lại câu trả lời vừa ghi âm:
                   </div>
                   <audio ref={audioPreviewRef} controls src={recordedAudio.url} style={{ width: '100%', marginBottom: '16px' }} />
+
+                  {submitError && (
+                    <div style={{
+                      padding: '10px 14px',
+                      marginBottom: '14px',
+                      backgroundColor: '#fee2e2',
+                      color: '#dc2626',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      textAlign: 'center',
+                    }}>
+                      ⚠️ {submitError}
+                    </div>
+                  )}
 
                   <div style={styles.reviewActions}>
                     <button style={styles.submitNextBtn} onClick={handleSubmitAndNext}>
