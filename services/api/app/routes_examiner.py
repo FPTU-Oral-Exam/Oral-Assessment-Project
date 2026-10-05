@@ -407,6 +407,59 @@ async def import_enrollments(
 
 
 # ─────────────────────────────────────────────────────────────────
+# Enrollment Management endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/sections/{section_id}/enrollments")
+def list_section_enrollments(
+    section_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List all enrollments in a section."""
+    section = by_id(db, Section, section_id)
+    enrollments = db.execute(
+        select(ExamEnrollment, User)
+        .join(User, User.id == ExamEnrollment.student_id)
+        .where(ExamEnrollment.section_id == section_id)
+        .order_by(User.username)
+    ).all()
+
+    return [
+        {
+            "id": enrollment.id,
+            "student_id": student.id,
+            "username": student.username,
+            "name": student.name,
+            "status": enrollment.status,
+            "enrolled_at": enrollment.enrolled_at,
+        }
+        for enrollment, student in enrollments
+    ]
+
+
+@router.delete("/enrollments/{enrollment_id}")
+def delete_enrollment(
+    enrollment_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Delete an enrollment."""
+    enrollment = by_id(db, ExamEnrollment, enrollment_id)
+    section = db.get(Section, enrollment.section_id)
+
+    if section:
+        course_access(db, section.course_id, user)
+
+    db.delete(enrollment)
+    db.add(Audit(user_id=user.id, event="ENROLLMENT_DELETED", details={
+        "enrollment_id": enrollment_id,
+    }))
+    db.commit()
+    return {"deleted": True}
+
+
+# ─────────────────────────────────────────────────────────────────
 # ScheduleSlot endpoints
 # ─────────────────────────────────────────────────────────────────
 

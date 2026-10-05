@@ -26,9 +26,11 @@ export interface Section {
 }
 
 export interface StudentEnrollment {
+  id: string;
   student_id: string;
   username: string;
   name: string;
   section_id: string;
   status: "PENDING" | "ACTIVE" | "DROPPED";
+  enrolled_at: number;
 }

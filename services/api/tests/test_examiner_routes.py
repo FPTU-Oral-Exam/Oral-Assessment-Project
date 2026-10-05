@@ -542,6 +542,97 @@ class TestEnrollmentImport:
 
 
 # ============================================================================
+# Enrollment Management Tests
+# ============================================================================
+
+
+class TestEnrollmentManagement:
+    """Test Enrollment management endpoints."""
+
+    def _create_course_with_section(self, examiner):
+        """Helper to create course with section."""
+        sem_response = examiner.post(
+            "/api/examiner/semesters",
+            json={"name": f"Sem {unique_code()}", "year": 2026, "term": "SPRING",
+                  "start_date": 1735689600.0, "end_date": 1748304000.0}
+        )
+        sem_data = ok(sem_response, 201)
+
+        course_response = examiner.post(
+            f"/api/examiner/semesters/{sem_data['id']}/courses",
+            json={"name": f"Course {unique_code()}", "code": unique_code()}
+        )
+        course = ok(course_response, 201)
+
+        sections_response = examiner.get(
+            f"/api/examiner/courses/{course['id']}/sections"
+        )
+        sections = ok(sections_response)
+        return course, sections[0]
+
+    def test_list_section_enrollments(self, env):
+        """Test listing enrollments in a section."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        course, section = self._create_course_with_section(examiner)
+
+        import io
+        wb = __import__("openpyxl").Workbook()
+        ws = wb.active
+        ws.append(["MSSV", "Ho ten", "Ma lop"])
+        ws.append(["student", "Test Student", section["code"]])
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        examiner.post(
+            "/api/examiner/enrollments/import",
+            data={"course_id": course["id"]},
+            files={"file": ("test.xlsx", buffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        )
+
+        response = examiner.get(f"/api/examiner/sections/{section['id']}/enrollments")
+        data = ok(response)
+        assert len(data) == 1
+        assert data[0]["username"] == "student"
+
+    def test_delete_enrollment(self, env):
+        """Test deleting an enrollment."""
+        clients, _ = env
+        examiner = clients["examiner"]
+        course, section = self._create_course_with_section(examiner)
+
+        import io
+        wb = __import__("openpyxl").Workbook()
+        ws = wb.active
+        ws.append(["MSSV", "Ho ten", "Ma lop"])
+        ws.append(["student", "Test Student", section["code"]])
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        examiner.post(
+            "/api/examiner/enrollments/import",
+            data={"course_id": course["id"]},
+            files={"file": ("test.xlsx", buffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+        )
+
+        list_response = examiner.get(f"/api/examiner/sections/{section['id']}/enrollments")
+        enrollments = ok(list_response)
+        assert len(enrollments) == 1
+
+        delete_response = examiner.delete(
+            f"/api/examiner/enrollments/{enrollments[0]['id']}"
+        )
+        assert delete_response.status_code == 200
+
+        list_response2 = examiner.get(f"/api/examiner/sections/{section['id']}/enrollments")
+        assert len(ok(list_response2)) == 0
+
+
+# ============================================================================
 # ScheduleSlot Tests
 # ============================================================================
 
