@@ -424,6 +424,45 @@ class TestSectionCRUD:
         assert len(data) >= 1
         assert any(s["code"] == f"{course_code}-T3-A" for s in data)
 
+    def test_update_section(self, env):
+        """Test updating a section and assigning teacher."""
+        clients, factory = env
+        examiner = clients["examiner"]
+
+        with factory() as db:
+            teacher_user = db.execute(select(User).where(User.username == "teacher")).scalar_one()
+            teacher_id = teacher_user.id
+
+        admin = clients["admin"]
+        course_code = unique_code()
+        course = ok(admin.post("/admin/courses", json={"code": course_code, "name": "Section Update Course"}))
+
+        created = ok(examiner.post(
+            f"/api/examiner/courses/{course['id']}/sections",
+            json={
+                "name": "Initial Section",
+                "code": f"{course_code}-SEC-1",
+                "day_of_week": 1,
+                "time_slot": "MORNING",
+                "max_students": 30,
+            }
+        ))
+        section_id = created["id"]
+
+        # Update section with teacher and new max_students
+        updated = ok(examiner.patch(
+            f"/api/examiner/sections/{section_id}",
+            json={
+                "name": "Updated Section Name",
+                "teacher_id": teacher_id,
+                "max_students": 45,
+            }
+        ))
+        assert updated["name"] == "Updated Section Name"
+        assert updated["max_students"] == 45
+        assert updated["teacher"] is not None
+        assert updated["teacher"]["id"] == teacher_id
+
 
 # ============================================================================
 # Exam Management Tests

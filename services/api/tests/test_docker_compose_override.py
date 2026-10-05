@@ -19,7 +19,8 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+resolved = Path(__file__).resolve()
+REPO_ROOT = resolved.parents[3] if len(resolved.parents) > 3 else resolved.parents[-1]
 OVERRIDE_FILE = REPO_ROOT / "docker-compose.override.yml"
 
 

@@ -226,14 +226,48 @@ def list_sections(course_id: str, db: Session = Depends(get_db), user=Depends(ex
 @router.post("/courses/{course_id}/sections", status_code=201)
 def create_section(course_id: str, body: s.SectionIn, db: Session = Depends(get_db), user=Depends(examiner)):
     course_access(db, course_id, user)
-    # Validate teacher exists before creating section
-    teacher = by_id(db, User, body.teacher_id)
-    if teacher.role not in {"TEACHER", "EXAMINER"}:
-        fail(422, "NOT_TEACHER", "Giao cho giang vien hoac examiner")
+    if body.teacher_id:
+        teacher = by_id(db, User, body.teacher_id)
+        if teacher.role not in {"TEACHER", "EXAMINER"}:
+            fail(422, "NOT_TEACHER", "Giao cho giang vien hoac examiner")
     row = Section(course_id=course_id, **body.model_dump())
     db.add(row)
     db.commit()
-    return data(row, "name", "code", "day_of_week", "time_slot", "max_students", "status")
+    teacher = db.get(User, row.teacher_id) if row.teacher_id else None
+    return {
+        **data(row, "id", "name", "code", "day_of_week", "time_slot", "max_students", "status"),
+        "teacher": public_user(teacher) if teacher else None,
+    }
+
+
+@router.patch("/sections/{section_id}")
+def update_section(section_id: str, body: s.SectionUpdateIn, db: Session = Depends(get_db), user=Depends(examiner)):
+    section = by_id(db, Section, section_id, lock=True)
+    course_access(db, section.course_id, user)
+    if body.teacher_id is not None:
+        if body.teacher_id != "":
+            teacher = by_id(db, User, body.teacher_id)
+            if teacher.role not in {"TEACHER", "EXAMINER"}:
+                fail(422, "NOT_TEACHER", "Giao cho giang vien hoac examiner")
+            section.teacher_id = body.teacher_id
+        else:
+            section.teacher_id = None
+    if body.name is not None:
+        section.name = body.name
+    if body.code is not None:
+        section.code = body.code
+    if body.day_of_week is not None:
+        section.day_of_week = body.day_of_week
+    if body.time_slot is not None:
+        section.time_slot = body.time_slot
+    if body.max_students is not None:
+        section.max_students = body.max_students
+    db.commit()
+    teacher = db.get(User, section.teacher_id) if section.teacher_id else None
+    return {
+        **data(section, "id", "name", "code", "day_of_week", "time_slot", "max_students", "status"),
+        "teacher": public_user(teacher) if teacher else None,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────

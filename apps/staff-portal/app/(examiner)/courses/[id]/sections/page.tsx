@@ -2,11 +2,12 @@ import { requireRole } from '@/lib/auth';
 import SectionsClient from './SectionsClient';
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function SectionsPage({ params }: PageProps) {
-  await requireRole(['EXAMINER']);
+  await requireRole(['EXAMINER', 'SYSTEM_ADMIN']);
+  const { id } = await params;
 
-  return <SectionsClient courseId={params.id} />;
+  return <SectionsClient courseId={id} />;
 }

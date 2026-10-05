@@ -27,6 +27,7 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
   ],
   EXAMINER: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/semester', label: 'Quản lý học kỳ', icon: Calendar },
     { href: '/courses', label: 'Quản lý môn học', icon: BookOpen },
     { href: '/exams', label: 'Quản lý kỳ thi', icon: ClipboardList },
     { href: '/schedule', label: 'Lịch thi vấn đáp', icon: Calendar },

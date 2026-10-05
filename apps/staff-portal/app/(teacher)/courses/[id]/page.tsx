@@ -15,21 +15,22 @@ export default async function CourseDetailPage({ params, searchParams }: PagePro
   const roles = user?.roles || [];
   const isExaminer = roles.includes('EXAMINER');
   const isTeacher = roles.includes('TEACHER');
+  const isAdmin = roles.includes('SYSTEM_ADMIN');
 
-  // Allow explicitly switching view via query param ?view=examiner or ?view=teacher
-  if (sp.view === 'examiner' && (isExaminer || roles.includes('SYSTEM_ADMIN'))) {
+  // Explicit view query param override
+  if (sp.view === 'examiner' && (isExaminer || isAdmin)) {
     return <CourseDetailClient courseId={id} />;
   }
-  if (sp.view === 'teacher' && (isTeacher || roles.includes('SYSTEM_ADMIN'))) {
+  if (sp.view === 'teacher' && (isTeacher || isAdmin)) {
     return <CourseWorkspaceClient courseId={id} />;
   }
 
-  // If examiner (and not teacher), show Examiner CourseDetailClient
-  if (isExaminer && !isTeacher) {
+  // Examiner-specific view
+  if ((isExaminer && !isTeacher) || (isAdmin && !isTeacher)) {
     return <CourseDetailClient courseId={id} />;
   }
 
-  // Default: show Teacher CourseWorkspaceClient (for teachers, admins)
+  // Default: Teacher CourseWorkspaceClient (for teachers, dual-role teachers, etc.)
   return <CourseWorkspaceClient courseId={id} />;
 }
 
