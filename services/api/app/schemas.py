@@ -148,6 +148,28 @@ class ReEvaluationIn(Input):
     blind_marking: bool = True
 
 
+class CriterionScoreIn(Input):
+    name: str = Field(min_length=1, max_length=100)
+    score: float = Field(ge=0, le=100)
+    feedback: str | None = None
+
+
+class ScoreOverrideIn(Input):
+    score: float = Field(ge=0, le=10)
+    reason: str = Field(min_length=3, max_length=2000)
+    criteria: list[CriterionScoreIn] | None = None
+
+
+class RegradeTranscriptIn(Input):
+    corrected_transcript: str = Field(min_length=1, max_length=10000)
+    reason: str = Field(min_length=3, max_length=2000)
+
+
+class ReEvaluationSubmitIn(Input):
+    score_2: float = Field(ge=0, le=10)
+    feedback: str | None = Field(default=None, max_length=2000)
+
+
 class ExaminerExamIn(Input):
     """Simplified Exam schema for Examiner Portal (1 exam per course)."""
     name: str = Field(min_length=1, max_length=200)

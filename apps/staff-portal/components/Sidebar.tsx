@@ -38,7 +38,6 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
   TEACHER: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/courses', label: 'Môn học phụ trách', icon: BookOpen },
-    { href: '/rubrics', label: 'Tiêu chí Rubric', icon: FileText },
     { href: '/proctor', label: 'Coi thi & Giám sát', icon: Radio },
     { href: '/grading', label: 'Đánh giá & Chấm bài', icon: Award },
   ],

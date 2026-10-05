@@ -89,7 +89,6 @@ class StudentApiClient {
       {
         headers: {
           'Idempotency-Key': idempotencyKey,
-          'X-Idempotency-Key': idempotencyKey,
         },
       }
     );
@@ -106,7 +105,6 @@ class StudentApiClient {
       {
         headers: {
           'Idempotency-Key': idempotencyKey,
-          'X-Idempotency-Key': idempotencyKey,
         },
       }
     );

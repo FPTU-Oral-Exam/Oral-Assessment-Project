@@ -15,6 +15,7 @@ Tài liệu này ghi lại các quy tắc nghiệp vụ của hệ thống AI Or
 | **BR-001** | Mỗi môn học phải có mã duy nhất | Tránh trùng lặp và xung đột |
 | **BR-002** | Mã môn học không được thay đổi sau khi tạo | Đảm bảo tính nhất quán với hệ thống khác |
 | **BR-003** | Môn học có thể ở trạng thái: ACTIVE, ARCHIVED | Hỗ trợ lưu trữ mà không xóa dữ liệu |
+| **BR-003a** | Chỉ Khảo thí/Admin được tạo môn học và phân công giảng viên; Giảng viên không tự tạo môn học | Đảm bảo mã môn học và danh mục chuẩn tập trung theo học kỳ |
 | **BR-004** | Môn học đã lưu trữ có thể khôi phục | Cho phép mở lại môn nếu cần |
 
 ### 2.2 Xóa môn học
@@ -79,6 +80,8 @@ Tài liệu này ghi lại các quy tắc nghiệp vụ của hệ thống AI Or
 | **BR-021** | Chỉ đề ở trạng thái DRAFT mới có thể chỉnh sửa | Bảo toàn đề đã công bố |
 | **BR-022** | Đề đã công bố không thể xóa, chỉ có thể archive | Giữ lịch sử kỳ thi |
 | **BR-023** | Đề công bố sẽ tạo ExamSnapshot để freeze rubric/knowledge versions | Đảm bảo đề không thay đổi trong kỳ thi |
+| **BR-023a** | Nguyên tắc "Chỉ thêm, hạn chế sửa": Câu hỏi đã nộp/công bố chuyển sang ngân hàng đề thì chỉ người quản lý ngân hàng đề (Khảo thí / Trưởng bộ môn) mới có quyền chỉnh sửa | Giảng viên chỉ soạn đề nháp mới, bảo toàn tính bất biến của câu hỏi đã nộp |
+| **BR-023b** | Bảo mật ngân hàng đề thi: Giảng viên không được xem các câu hỏi mình đã submit có được chọn vào đề thi chính thức của ngân hàng đề hay không | Triệt tiêu nguy cơ lộ đề thi tập trung |
 
 ### 5.2 Exam Blueprint
 

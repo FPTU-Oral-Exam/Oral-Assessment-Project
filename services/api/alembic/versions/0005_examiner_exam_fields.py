@@ -53,9 +53,9 @@ def upgrade():
         sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"),
     )
 
-    # 4. Student enrollments table
+    # 4. Exam enrollments table
     op.create_table(
-        "student_enrollments",
+        "exam_enrollments",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("created_at", sa.Float(), nullable=False),
         sa.Column("section_id", sa.String(36), sa.ForeignKey("sections.id"), nullable=False),
@@ -150,7 +150,7 @@ def downgrade():
     op.drop_table("slot_assignments")
     op.drop_table("schedule_slots")
     op.drop_table("exam_variants")
-    op.drop_table("student_enrollments")
+    op.drop_table("exam_enrollments")
     op.drop_table("sections")
 
     with op.batch_alter_table("courses", naming_convention=naming_convention) as batch:

@@ -25,11 +25,14 @@ from .models import (
     CourseEnrollment,
     Document,
     Exam,
+    ExamEnrollment,
     ExamSession,
     LearningOutcome,
     MediaCleanup,
+    ReEvaluation,
     ReviewJob,
     Rubric,
+    Section,
     Topic,
     TopicDocument,
     Upload,
@@ -40,6 +43,7 @@ from .retakes import allowance, history_row, sessions_for
 from .runtime_settings import settings
 from .security import admin, by_id, course_access, editor, examiner, fail, hasher, public_user, staff
 from .speech import google_ready, policy
+from .worker import finalize, grade_answer
 
 router = APIRouter()
 
@@ -799,11 +803,35 @@ def change_role(key: str, body: s.RoleIn, db: Session = Depends(get_db), user=De
 
 
 @router.get("/courses/{course_id}/students")
-def course_students(course_id: str, db: Session = Depends(get_db), user=Depends(staff)):
+def course_students(course_id: str, detail: bool = False, db: Session = Depends(get_db), user=Depends(staff)):
     course_access(db, course_id, user)
-    return list(
+    direct_ids = set(
         db.scalars(select(CourseEnrollment.student_id).where(CourseEnrollment.course_id == course_id))
     )
+    sections = db.scalars(select(Section).where(Section.course_id == course_id)).all()
+    section_map = {s.id: s.code for s in sections}
+    section_enrollments = (
+        db.scalars(select(ExamEnrollment).where(ExamEnrollment.section_id.in_(list(section_map.keys())))).all()
+        if section_map
+        else []
+    )
+    student_section = {se.student_id: section_map.get(se.section_id, "") for se in section_enrollments}
+    all_student_ids = direct_ids | set(student_section.keys())
+
+    if not detail:
+        return list(all_student_ids if section_map else direct_ids)
+
+    users = db.scalars(select(User).where(User.id.in_(list(all_student_ids)))).all() if all_student_ids else []
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "name": u.name,
+            "status": u.status,
+            "section_code": student_section.get(u.id, "Mặc định"),
+        }
+        for u in sorted(users, key=lambda x: x.username or "")
+    ]
 
 
 @router.post("/courses/{course_id}/students")
@@ -925,3 +953,302 @@ def delete_result(key: str, db: Session = Depends(get_db), user=Depends(admin)):
     }))
     db.commit()
     return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────
+# Phase 3: Grading Review, Transcript Correction, Score Override & Re-evaluation
+# ─────────────────────────────────────────────────────────────────
+
+@router.post("/attempts/{key}/regrade-transcript")
+def regrade_transcript(
+    key: str,
+    body: s.RegradeTranscriptIn,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    attempt = by_id(db, Attempt, key, lock=True)
+    session = by_id(db, ExamSession, attempt.session_id, lock=True)
+    if session.deleted_at is not None:
+        fail(404, "NOT_FOUND", "Lần thi đã bị xóa")
+    exam = by_id(db, Exam, session.exam_id)
+    course_access(db, exam.course_id, user)
+
+    prev_transcript = attempt.transcript
+    attempt.transcript = body.corrected_transcript
+
+    if not attempt.finished_at:
+        attempt.finished_at = time.time()
+
+    try:
+        assessment = grade_answer(
+            db,
+            exam,
+            session,
+            attempt,
+            body.corrected_transcript,
+            attempt.stt_confidence or 1.0,
+        )
+    except Exception as exc:
+        fail(500, "REGRADE_FAILED", f"Lỗi chấm lại: {exc}")
+
+    assessment["transcript_edited"] = True
+    assessment["original_transcript"] = prev_transcript
+    assessment["edit_reason"] = body.reason
+    assessment["edited_by"] = user.name
+    assessment["edited_at"] = time.time()
+
+    attempt.assessment = assessment
+    attempt.status = "GRADED"
+    db.flush()
+
+    finalize(db, session)
+
+    db.add(
+        Audit(
+            user_id=user.id,
+            event="TRANSCRIPT_REGRADED",
+            details={
+                "attempt_id": key,
+                "session_id": session.id,
+                "reason": body.reason,
+                "score": assessment.get("score"),
+            },
+        )
+    )
+    db.commit()
+
+    return data(attempt, "sequence", "question", "transcript", "stt_confidence", "assessment", "status") | {
+        "assessment": assessment_view(attempt.assessment, exam)
+    }
+
+
+@router.post("/attempts/{key}/override")
+def override_attempt_score(
+    key: str,
+    body: s.ScoreOverrideIn,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    attempt = by_id(db, Attempt, key, lock=True)
+    session = by_id(db, ExamSession, attempt.session_id, lock=True)
+    if session.deleted_at is not None:
+        fail(404, "NOT_FOUND", "Lần thi đã bị xóa")
+    exam = by_id(db, Exam, session.exam_id)
+    course_access(db, exam.course_id, user)
+
+    assessment = dict(attempt.assessment or {})
+    prev_score = assessment.get("score")
+    assessment["score"] = round(body.score, 2)
+    assessment["manual_override"] = True
+    assessment["override_reason"] = body.reason
+    assessment["override_by"] = user.name
+    assessment["overridden_at"] = time.time()
+
+    if body.criteria and "criteria" in assessment:
+        override_map = {c.name: c for c in body.criteria}
+        updated_criteria = []
+        for crit in assessment.get("criteria", []):
+            crit_copy = dict(crit)
+            if crit_copy.get("name") in override_map:
+                item = override_map[crit_copy["name"]]
+                crit_copy["score"] = item.score
+                if item.feedback:
+                    crit_copy["feedback"] = item.feedback
+            updated_criteria.append(crit_copy)
+        assessment["criteria"] = updated_criteria
+
+    attempt.assessment = assessment
+    attempt.status = "GRADED"
+    db.flush()
+
+    # Recalculate session final score
+    attempts = db.scalars(select(Attempt).where(Attempt.session_id == session.id)).all()
+    scores = [a.assessment.get("score") for a in attempts if a.assessment]
+    if scores and all(s is not None for s in scores):
+        session.final_score = round(sum(scores) / len(scores), 2)
+
+    db.add(
+        Audit(
+            user_id=user.id,
+            event="ATTEMPT_SCORE_OVERRIDDEN",
+            details={
+                "attempt_id": key,
+                "session_id": session.id,
+                "prev_score": prev_score,
+                "score": body.score,
+                "reason": body.reason,
+            },
+        )
+    )
+    db.commit()
+    return data(attempt, "sequence", "question", "transcript", "stt_confidence", "assessment", "status") | {
+        "assessment": assessment_view(attempt.assessment, exam)
+    }
+
+
+@router.post("/results/{key}/approve")
+def approve_result(
+    key: str,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    session = by_id(db, ExamSession, key, lock=True)
+    if session.deleted_at is not None:
+        fail(404, "NOT_FOUND", "Lần thi đã bị xóa")
+    exam = by_id(db, Exam, session.exam_id)
+    course_access(db, exam.course_id, user)
+
+    attempts = db.scalars(select(Attempt).where(Attempt.session_id == key)).all()
+    if not attempts:
+        fail(409, "NO_ATTEMPTS", "Chưa có câu trả lời nào để duyệt")
+
+    for a in attempts:
+        if not a.assessment or a.assessment.get("score") is None:
+            fail(409, "INCOMPLETE_GRADING", f"Câu {a.sequence} chưa hoàn tất chấm điểm")
+
+    scores = [a.assessment.get("score") for a in attempts]
+    session.final_score = round(sum(scores) / len(scores), 2)
+    session.status = "COMPLETED"
+
+    db.add(
+        Audit(
+            user_id=user.id,
+            event="EXAM_SESSION_APPROVED",
+            details={"session_id": key, "student_id": session.student_id, "final_score": session.final_score},
+        )
+    )
+    db.commit()
+    return {
+        "id": session.id,
+        "status": session.status,
+        "final_score": session.final_score,
+    }
+
+
+@router.post("/attempts/{key}/request-re-eval")
+def request_re_evaluation_admin(
+    key: str,
+    body: s.ReEvaluationIn,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    attempt = by_id(db, Attempt, key)
+    session = by_id(db, ExamSession, attempt.session_id)
+    exam = by_id(db, Exam, session.exam_id)
+    course_access(db, exam.course_id, user)
+
+    by_id(db, User, body.teacher_id_2)
+
+    original_score = attempt.assessment.get("score") if attempt.assessment else None
+
+    row = ReEvaluation(
+        attempt_id=key,
+        teacher_id_1=user.id,
+        teacher_id_2=body.teacher_id_2,
+        reason=body.reason,
+        reason_detail=body.reason_detail,
+        blind_marking=body.blind_marking,
+        score_1=original_score,
+        status="PENDING",
+    )
+    db.add(row)
+    db.add(
+        Audit(
+            user_id=user.id,
+            event="REEVALUATION_REQUESTED",
+            details={
+                "attempt_id": key,
+                "teacher_id_1": user.id,
+                "teacher_id_2": body.teacher_id_2,
+                "reason": body.reason,
+            },
+        )
+    )
+    db.commit()
+    return {"id": row.id, "status": row.status}
+
+
+@router.get("/re-evaluations")
+def list_re_evaluations(
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    query = select(ReEvaluation).order_by(ReEvaluation.created_at.desc())
+    if user.role == "TEACHER":
+        query = query.where((ReEvaluation.teacher_id_1 == user.id) | (ReEvaluation.teacher_id_2 == user.id))
+    rows = db.scalars(query).all()
+    results = []
+    for r in rows:
+        att = db.get(Attempt, r.attempt_id)
+        sess = db.get(ExamSession, att.session_id) if att else None
+        student = db.get(User, sess.student_id) if sess else None
+        t1 = db.get(User, r.teacher_id_1)
+        t2 = db.get(User, r.teacher_id_2)
+        is_blind = r.blind_marking and user.id == r.teacher_id_2 and r.status != "COMPLETED"
+        results.append({
+            "id": r.id,
+            "attempt_id": r.attempt_id,
+            "session_id": sess.id if sess else None,
+            "student_name": student.name if student else "N/A",
+            "teacher_1_name": t1.name if t1 else "Giảng viên 1",
+            "teacher_2_name": t2.name if t2 else "Giảng viên 2",
+            "reason": r.reason,
+            "reason_detail": r.reason_detail,
+            "status": r.status,
+            "score_1": None if is_blind else r.score_1,
+            "score_2": r.score_2,
+            "final_score": r.final_score,
+            "blind_marking": r.blind_marking,
+            "created_at": r.created_at,
+            "completed_at": r.completed_at,
+        })
+    return results
+
+
+@router.post("/re-evaluations/{key}/submit")
+def submit_re_evaluation(
+    key: str,
+    body: s.ReEvaluationSubmitIn,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    row = by_id(db, ReEvaluation, key, lock=True)
+    if user.role == "TEACHER" and row.teacher_id_2 != user.id:
+        fail(403, "FORBIDDEN", "Bạn không phải giảng viên được phân công chấm thẩm định này")
+
+    row.score_2 = round(body.score_2, 2)
+    if row.score_1 is not None:
+        row.final_score = round((row.score_1 + row.score_2) / 2, 2)
+    else:
+        row.final_score = row.score_2
+    row.status = "COMPLETED"
+    row.completed_at = time.time()
+
+    att = db.get(Attempt, row.attempt_id)
+    if att:
+        assessment = dict(att.assessment or {})
+        assessment["score"] = row.final_score
+        assessment["re_evaluated"] = True
+        assessment["re_eval_id"] = row.id
+        att.assessment = assessment
+        sess = db.get(ExamSession, att.session_id)
+        if sess:
+            attempts = db.scalars(select(Attempt).where(Attempt.session_id == sess.id)).all()
+            scores = [a.assessment.get("score") for a in attempts if a.assessment]
+            if scores and all(s is not None for s in scores):
+                sess.final_score = round(sum(scores) / len(scores), 2)
+
+    db.add(
+        Audit(
+            user_id=user.id,
+            event="REEVALUATION_COMPLETED",
+            details={"re_eval_id": row.id, "score_2": row.score_2, "final_score": row.final_score},
+        )
+    )
+    db.commit()
+    return {
+        "id": row.id,
+        "status": row.status,
+        "score_2": row.score_2,
+        "final_score": row.final_score,
+    }

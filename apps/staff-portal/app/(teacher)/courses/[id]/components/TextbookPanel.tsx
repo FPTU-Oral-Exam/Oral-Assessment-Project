@@ -279,7 +279,7 @@ export default function TextbookPanel({
 
             <div className="flex items-center gap-2">
               <a
-                href={`http://localhost:8000/api/admin/documents/${textbook.id}/content`}
+                href={`/api/admin/documents/${textbook.id}/content`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"

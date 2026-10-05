@@ -169,25 +169,28 @@
 
 ---
 
-### UC-TEACHER-005: Quản lý ngân hàng câu hỏi
+### UC-TEACHER-005: Soạn và nộp câu hỏi vào ngân hàng đề
 
 | Thuộc tính | Mô tả |
 |------------|--------|
 | **UC-ID** | UC-TEACHER-005 |
-| **Tên** | Quản lý ngân hàng câu hỏi |
+| **Tên** | Soạn và nộp câu hỏi vào ngân hàng đề |
 | **Actor** | Giảng viên |
-| **Mô tả** | Giảng viên xem và quản lý câu hỏi đã tạo từ các lần ra đề |
-| **Pre-condition** | Đã có câu hỏi được tạo từ các đề trước |
-| **Post-condition** | Câu hỏi được hiển thị và có thể tái sử dụng |
+| **Mô tả** | Giảng viên biên soạn câu hỏi từ AI RAG và nộp lên ngân hàng đề/Khảo thí |
+| **Pre-condition** | Đề thi nháp đã được AI sinh và giảng viên đã duyệt |
+| **Post-condition** | Câu hỏi được nộp và khóa bất biến (đóng băng snapshot). Giảng viên không được tự ý sửa sau khi nộp |
 
 #### Main Flow
-1. Giảng viên chọn môn → "Ngân hàng câu hỏi"
-2. Hệ thống hiển thị danh sách câu hỏi đã tạo
-3. Giảng viên có thể lọc theo topic, difficulty, ngày tạo
-4. Giảng viên có thể xem chi tiết từng câu hỏi
-5. Giảng viên có thể đánh dấu câu hỏi yêu thích để dùng lại
+1. Giảng viên soạn đề thi nháp từ các chủ đề kiến thức (Topic RAG)
+2. Giảng viên rà soát, chỉnh sửa câu chữ hoặc sinh lại câu hỏi trong trạng thái DRAFT
+3. Giảng viên bấm "Duyệt & Nộp đề" (Công bố)
+4. Hệ thống đóng băng Snapshot đề thi và câu hỏi
+5. Câu hỏi được chuyển sang trạng thái quản lý của Khảo thí / Ngân hàng đề
 
-> **Ghi chú:** Tính năng ngân hàng câu hỏi sẽ được phát triển sau MVP.
+#### Ràng buộc nghiệp vụ & Bảo mật (Chỉ đạo chuyên môn):
+- **Nguyên tắc thiết kế:** Chỉ thêm đề mới, hạn chế chỉnh sửa.
+- **Quyền sửa đổi:** Câu hỏi đã từ Giảng viên qua đến người quản lý ngân hàng đề thì CHỈ CÓ người quản lý (Khảo thí / Trưởng bộ môn) mới được quyền sửa.
+- **Bảo mật ngân hàng đề:** Giảng viên không thể xem được các câu hỏi mình đã submit có được chọn vào đề thi chính thức của ngân hàng đề hay không (chống lộ đề thi tập trung).
 
 ---
 
@@ -354,11 +357,10 @@
 
 ## 5. Ghi chú đặc biệt
 
-### 5.1 Ngân hàng câu hỏi chung
-- Câu hỏi tạo từ mỗi lần ra đề được tự động đưa vào ngân hàng câu hỏi chung
-- Câu hỏi trong ngân hàng có thể được tham khảo khi tạo đề mới
-- Giảng viên có thể đánh dấu câu hỏi yêu thích để ưu tiên sử dụng lại
-- **Lưu ý:** Tính năng ngân hàng câu hỏi sẽ được phát triển sau MVP
+### 5.1 Bảo mật và quản lý Ngân hàng đề thi (Chỉ đạo Thầy Phuonglhk)
+- **Nguyên tắc "Chỉ thêm, hạn chế sửa":** Giảng viên chỉ biên soạn và nộp đề thi mới. Đề thi và câu hỏi sau khi công bố (`PUBLISHED`) sẽ được đóng băng snapshot bất biến.
+- **Phân quyền chỉnh sửa:** Câu hỏi một khi đã chuyển sang ngân hàng đề thi thì CHỈ CÓ người quản lý ngân hàng đề (Khảo thí / Trưởng bộ môn) mới có quyền chỉnh sửa.
+- **Bảo mật ngân hàng đề:** Giảng viên biên soạn câu hỏi độc lập, không có quyền xem các câu hỏi mình đã submit có được lựa chọn vào đề thi chính thức của ngân hàng đề hay không (nhằm triệt tiêu rủi ro lộ đề thi tập trung).
 
 ### 5.2 Gợi ý thuật ngữ tiếng Anh
 - AI gợi ý tối đa 20 thuật ngữ mỗi câu hỏi
@@ -366,7 +368,18 @@
 - Gợi ý chỉ là tham khảo, giảng viên cần kiểm tra độ chính xác
 - Gợi ý được lưu cùng phiên bản đề, không tự cập nhật cho đề cũ
 
-### 5.3 Phân chia trách nhiệm với Khảo thí
-- **Khảo thí:** Tạo môn học, thêm sinh viên, setup lịch thi, điều phối chấm chéo/phúc khảo, chốt điểm và xuất bảng điểm FAP
-- **Giảng viên:** Upload tài liệu, tạo LO/Topics, tạo rubric, ra đề chuẩn dùng chung, giao đề cho lớp mình dạy, chấm thẩm định và thực hiện chấm mù độc lập khi được điều phối
+### 5.3 Phân chia trách nhiệm chuẩn giữa Khảo thí và Giảng viên
+- **Khảo thí (Examiner):** 
+  - Tạo học kỳ, quản lý danh mục môn học chuẩn trong học kỳ.
+  - Phân công Giảng viên phụ trách môn học.
+  - Nhập danh sách sinh viên đủ điều kiện dự thi (Import file Excel danh sách lớp/thí sinh).
+  - Setup ca thi, lịch thi (Schedule Slots), gán đề thi cho ca thi.
+  - Điều phối chấm chéo/phúc khảo, duyệt điểm và xuất bảng điểm FAP.
+- **Giảng viên (Teacher):** 
+  - Tiếp nhận môn học được phân công (không tự tạo môn học).
+  - Quản lý kho kiến thức môn học: Upload giáo trình PDF chuẩn, tạo Chuẩn đầu ra (LO), Chủ đề (Topics) và kiểm tra tra cứu RAG.
+  - Thiết lập tiêu chí chấm điểm (Rubric).
+  - Dùng AI sinh câu hỏi, duyệt câu hỏi và nộp đề thi đóng băng.
+  - Không tự tạo lớp/thêm sinh viên (chỉ xem danh sách thí sinh dự thi do Khảo thí nạp).
+  - Thực hiện chấm thi, nghe audio, sửa transcript và chấm thẩm định/chấm mù độc lập khi được điều phối.
 
