@@ -10,6 +10,7 @@ from .models import (
     Audit,
     Attempt,
     Course,
+    Exam,
     ExamEnrollment,
     ExamSession,
     ExamVariant,
@@ -18,6 +19,7 @@ from .models import (
     Section,
     Semester,
     SlotAssignment,
+    Upload,
     User,
 )
 from .security import by_id, course_access, examiner, fail, public_user
@@ -167,6 +169,25 @@ def create_course_in_semester(
     return {**data(course, "name", "code", "description", "status"), "semester_id": semester_id}
 
 
+@router.get("/courses")
+def list_all_courses(db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all active courses with section count and teacher."""
+    courses = db.scalars(
+        select(Course).order_by(Course.created_at.desc())
+    ).all()
+    return [
+        {
+            **data(c, "name", "code", "description", "status"),
+            "semester_id": c.semester_id,
+            "teacher": public_user(db.get(User, c.teacher_id)) if c.teacher_id else None,
+            "section_count": db.scalar(
+                select(func.count()).select_from(Section).where(Section.course_id == c.id)
+            ) or 0,
+        }
+        for c in courses
+    ]
+
+
 @router.get("/courses/{course_id}")
 def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     """Get course detail with sections count."""
@@ -273,6 +294,24 @@ def update_section(section_id: str, body: s.SectionUpdateIn, db: Session = Depen
 # ─────────────────────────────────────────────────────────────────
 # Exam endpoints
 # ─────────────────────────────────────────────────────────────────
+
+@router.get("/exams")
+def list_all_exams(db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all exams across courses with course_id and slot_count."""
+    exams = db.scalars(
+        select(Exam).where(Exam.deleted_at.is_(None)).order_by(Exam.created_at.desc())
+    ).all()
+    return [
+        {
+            **data(e, "name", "description", "status", "time_limit", "question_count"),
+            "course_id": e.course_id,
+            "slot_count": db.scalar(
+                select(func.count()).select_from(ScheduleSlot).where(ScheduleSlot.exam_id == e.id)
+            ) or 0,
+        }
+        for e in exams
+    ]
+
 
 @router.get("/courses/{course_id}/exams")
 def list_course_exams(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
@@ -648,6 +687,7 @@ def assign_teacher_to_slot(
     if teacher.role not in {"TEACHER", "EXAMINER"}:
         fail(422, "NOT_TEACHER", "Chi giao cho giang vien")
 
+    row.status = "READY"
     db.add(Audit(
         user_id=user.id,
         event="SLOT_TEACHER_ASSIGNED",
@@ -655,7 +695,7 @@ def assign_teacher_to_slot(
     ))
     db.commit()
 
-    return {"status": "ASSIGNED", "teacher": public_user(teacher)}
+    return {"status": "ASSIGNED", "slot_status": row.status, "teacher": public_user(teacher)}
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -835,15 +875,27 @@ def get_student_attempts(
 
     rows = db.execute(query.order_by(Attempt.sequence)).all()
 
-    return [
-        {
+    result = []
+    for attempt, _ in rows:
+        audio_upload = db.scalar(
+            select(Upload).where(
+                Upload.attempt_id == attempt.id,
+                Upload.status == "COMPLETED",
+                Upload.kind == "AUDIO",
+            )
+        )
+        audio_url = f"/api/evidence/{audio_upload.id}/content" if audio_upload else None
+
+        result.append({
             "id": attempt.id,
             "sequence": attempt.sequence,
+            "question": attempt.question,
             "transcript": attempt.transcript,
             "stt_confidence": attempt.stt_confidence,
             "grading_message": attempt.assessment.get("grading_message") if attempt.assessment else None,
             "score": attempt.assessment.get("score") if attempt.assessment else None,
             "status": attempt.status,
-        }
-        for attempt, _ in rows
-    ]
+            "audio_url": audio_url,
+        })
+
+    return result
