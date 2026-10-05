@@ -97,7 +97,7 @@ def roles(*allowed):
 
 
 staff = roles("SYSTEM_ADMIN", "EXAMINER", "TEACHER")
-editor = roles("SYSTEM_ADMIN", "EXAMINER", "TEACHER")
+editor = roles("SYSTEM_ADMIN", "TEACHER")
 student = roles("STUDENT")
 admin = roles("SYSTEM_ADMIN")
 examiner = roles("SYSTEM_ADMIN", "EXAMINER")
