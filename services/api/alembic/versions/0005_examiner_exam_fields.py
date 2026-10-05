@@ -23,11 +23,19 @@ def upgrade():
         sa.Column("end_date", sa.Float(), nullable=False),
     )
 
+    naming_convention = {
+        "ix": "ix_%(column_0_label)s",
+        "uq": "uq_%(table_name)s_%(column_0_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "pk": "pk_%(table_name)s",
+    }
+
     # 2. Add columns to courses
-    with op.batch_alter_table("courses") as batch:
+    with op.batch_alter_table("courses", naming_convention=naming_convention) as batch:
         batch.add_column(sa.Column("credits", sa.Integer(), nullable=False, server_default="3"))
-        batch.add_column(sa.Column("teacher_id", sa.String(36), sa.ForeignKey("users.id"), nullable=True))
-        batch.add_column(sa.Column("semester_id", sa.String(36), sa.ForeignKey("semesters.id"), nullable=True))
+        batch.add_column(sa.Column("teacher_id", sa.String(36), sa.ForeignKey("users.id", name="fk_courses_teacher_id"), nullable=True))
+        batch.add_column(sa.Column("semester_id", sa.String(36), sa.ForeignKey("semesters.id", name="fk_courses_semester_id"), nullable=True))
 
     # 3. Sections table
     op.create_table(
@@ -114,17 +122,24 @@ def upgrade():
     )
 
     # 9. Exams table updates
-    with op.batch_alter_table("exams") as batch:
+    with op.batch_alter_table("exams", naming_convention=naming_convention) as batch:
         batch.alter_column("rubric_id", existing_type=sa.String(), nullable=True, existing_server_default=None)
-    op.add_column("exams", sa.Column("description", sa.Text(), nullable=True, server_default=""))
-    op.add_column("exams", sa.Column("question_count", sa.Integer(), nullable=False, server_default="3"))
-    with op.batch_alter_table("exams") as batch:
+        batch.add_column(sa.Column("description", sa.Text(), nullable=True, server_default=""))
+        batch.add_column(sa.Column("question_count", sa.Integer(), nullable=False, server_default="3"))
         batch.alter_column("blueprint", existing_type=sa.JSON(), nullable=True, existing_server_default=None)
-    op.add_column("exams", sa.Column("deleted_at", sa.Float(), nullable=True))
+        batch.add_column(sa.Column("deleted_at", sa.Float(), nullable=True))
 
 
 def downgrade():
-    with op.batch_alter_table("exams") as batch:
+    naming_convention = {
+        "ix": "ix_%(column_0_label)s",
+        "uq": "uq_%(table_name)s_%(column_0_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "pk": "pk_%(table_name)s",
+    }
+
+    with op.batch_alter_table("exams", naming_convention=naming_convention) as batch:
         batch.drop_column("deleted_at")
         batch.drop_column("question_count")
         batch.drop_column("description")
@@ -138,7 +153,7 @@ def downgrade():
     op.drop_table("student_enrollments")
     op.drop_table("sections")
 
-    with op.batch_alter_table("courses") as batch:
+    with op.batch_alter_table("courses", naming_convention=naming_convention) as batch:
         batch.drop_column("semester_id")
         batch.drop_column("teacher_id")
         batch.drop_column("credits")

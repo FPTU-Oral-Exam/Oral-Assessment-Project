@@ -85,10 +85,19 @@ class SemesterIn(Input):
 class SectionIn(Input):
     name: str = Field(min_length=1, max_length=200)
     code: str = Field(min_length=1, max_length=50)
-    teacher_id: str
+    teacher_id: str | None = Field(default=None)
     day_of_week: int = Field(ge=0, le=6)
     time_slot: Literal["MORNING", "AFTERNOON", "EVENING"] = "MORNING"
     max_students: int = Field(default=50, ge=1, le=500)
+
+
+class SectionUpdateIn(Input):
+    name: str | None = Field(default=None, max_length=200)
+    code: str | None = Field(default=None, max_length=50)
+    teacher_id: str | None = Field(default=None)
+    day_of_week: int | None = Field(default=None, ge=0, le=6)
+    time_slot: Literal["MORNING", "AFTERNOON", "EVENING"] | None = None
+    max_students: int | None = Field(default=None, ge=1, le=500)
 
 
 class CourseIn(Input):

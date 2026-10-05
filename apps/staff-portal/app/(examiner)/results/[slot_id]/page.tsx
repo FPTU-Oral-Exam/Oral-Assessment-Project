@@ -6,7 +6,7 @@ interface PageProps {
 }
 
 export default async function SlotResultsPage({ params }: PageProps) {
-  await requireRole(['EXAMINER']);
+  await requireRole(['EXAMINER', 'SYSTEM_ADMIN']);
   const { slot_id } = await params;
   return <SlotResultsClient slotId={slot_id} />;
 }
