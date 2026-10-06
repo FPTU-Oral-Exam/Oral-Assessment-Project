@@ -5,15 +5,7 @@ import { Plus, BookOpen, Clock, Loader2, ExternalLink, AlertCircle, X } from 'lu
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
-interface Exam {
-  id: string;
-  name: string;
-  description: string;
-  status: 'DRAFT' | 'PUBLISHED';
-  time_limit: number;
-  question_count: number;
-  slot_count: number;
-}
+import type { Exam } from '@oralai/shared';
 
 interface ExamFormData {
   name: string;
@@ -175,7 +167,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                   className="inline-flex items-center gap-2 px-3.5 py-2 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl text-xs font-semibold transition-colors flex-shrink-0"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  {exam.slot_count > 0 ? `Quản lý ca thi (${exam.slot_count})` : 'Tạo ca thi mới'}
+                  {(exam.slot_count ?? 0) > 0 ? `Quản lý ca thi (${exam.slot_count})` : 'Tạo ca thi mới'}
                 </button>
               </div>
             </div>

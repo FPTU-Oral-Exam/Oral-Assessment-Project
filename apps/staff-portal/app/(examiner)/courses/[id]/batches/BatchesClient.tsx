@@ -15,39 +15,12 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface Exam {
-  id: string;
-  name: string;
-  description?: string;
-  status: 'DRAFT' | 'PUBLISHED';
-  time_limit: number;
-  question_count: number;
-}
-
-interface RoomAllocation {
-  room: string;
-  assigned_count: number;
-}
-
-interface ExamBatch {
-  batch_id: string;
-  name: string;
-  date: number;
-  start_time: string;
-  end_time: string;
-  assigned_teacher_id: string;
-  total_assigned: number;
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED';
-  rooms: RoomAllocation[];
-}
-
-interface BatchStudent {
-  roll_number: string;
-  full_name: string;
-  room: string;
-  eligibility_status: 'ELIGIBLE' | 'DISQUALIFIED';
-}
+import type {
+  Exam,
+  RoomAllocation,
+  ExamBatch,
+  BatchStudent,
+} from '@oralai/shared';
 
 interface Teacher {
   id: string;

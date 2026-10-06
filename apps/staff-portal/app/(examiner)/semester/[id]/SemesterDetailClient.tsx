@@ -23,41 +23,11 @@ import {
   Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface CourseItem {
-  id: string;
-  code: string;
-  name: string;
-  description?: string;
-  credits: number;
-  department_code: string;
-  status: string;
-  candidate_count?: number;
-  batch_count?: number;
-}
-
-interface SemesterData {
-  id: string;
-  name: string;
-  year: number;
-  term: 'SPRING' | 'SUMMER' | 'FALL';
-  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED';
-  start_date: number;
-  end_date: number;
-  course_count: number;
-  total_candidates: number;
-  total_batches: number;
-  courses: CourseItem[];
-}
-
-interface MasterCourse {
-  id: string;
-  code: string;
-  name: string;
-  department_code: string;
-  credits: number;
-  description?: string;
-}
+import type {
+  CourseBasic as CourseItem,
+  SemesterDetail as SemesterData,
+  MasterCourse,
+} from '@oralai/shared';
 
 interface ManualCourseForm {
   code: string;

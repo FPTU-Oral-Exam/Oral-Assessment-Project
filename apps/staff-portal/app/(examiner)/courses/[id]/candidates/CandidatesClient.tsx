@@ -16,31 +16,11 @@ import {
   UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface CandidateStats {
-  total: number;
-  eligible: number;
-  disqualified: number;
-  assigned: number;
-  unassigned: number;
-}
-
-interface Candidate {
-  id: string;
-  roll_number: string;
-  full_name: string;
-  eligibility_status: 'ELIGIBLE' | 'DISQUALIFIED';
-  allocation_status: 'UNASSIGNED' | 'ASSIGNED';
-  slot_room?: string | null;
-  batch_name?: string | null;
-}
-
-interface ImportResult {
-  total_rows: number;
-  imported: number;
-  skipped: number;
-  errors: string[];
-}
+import type {
+  CandidateStats,
+  CourseCandidate as Candidate,
+  ImportResult,
+} from '@oralai/shared';
 
 export default function CandidatesClient({ courseId }: { courseId: string }) {
   const [stats, setStats] = useState<CandidateStats | null>(null);
