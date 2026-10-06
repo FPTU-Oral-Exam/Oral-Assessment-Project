@@ -26,6 +26,7 @@ export interface ExamItem {
   name: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   time_limit: number;
+  question_count?: number;
   rubric_id: string;
   blueprint?: Array<{ topic_id: string; difficulty: string; count: number }>;
   questions?: Array<{
@@ -35,6 +36,7 @@ export interface ExamItem {
     topic_id?: string;
   }>;
   snapshot?: any;
+  max_attempts?: number;
 }
 
 interface ExamEditorModalProps {
@@ -84,6 +86,19 @@ export default function ExamEditorModal({
       await onRefresh();
       onClose();
     } catch (err: unknown) {
+      // Kiểm tra xem đề thi đã được AI sinh xong và công bố hay chưa (phòng trường hợp Next.js proxy timeout khi sinh nhiều câu)
+      try {
+        const refreshed = await api<any>(`/admin/courses/${courseId}/workspace`);
+        const publishedExam = refreshed.exams?.find((e: any) => e.id === exam.id && e.status === 'PUBLISHED');
+        if (publishedExam) {
+          await onRefresh();
+          onClose();
+          return;
+        }
+      } catch {
+        // bỏ qua lỗi kiểm tra phụ
+      }
+
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('KNOWLEDGE_NOT_READY')) {
         setError('Tài liệu giáo trình chưa sẵn sàng (READY) với mô hình embedding hiện tại. Vui lòng kiểm tra Tab Giáo trình.');
@@ -170,7 +185,11 @@ export default function ExamEditorModal({
                   Thời gian làm bài
                 </span>
                 <p className="text-xs font-bold text-slate-800">
-                  {exam.time_limit ? `${Math.round(exam.time_limit / 60)} phút (${exam.time_limit}s)` : 'Không giới hạn'}
+                  {exam.time_limit
+                    ? exam.time_limit <= 180
+                      ? `${exam.time_limit} phút`
+                      : `${Math.round(exam.time_limit / 60)} phút (${exam.time_limit}s)`
+                    : 'Không giới hạn'}
                 </p>
               </div>
 
@@ -190,7 +209,13 @@ export default function ExamEditorModal({
                   Số câu hỏi
                 </span>
                 <p className="text-xs font-bold text-slate-800">
-                  {questions.length > 0 ? `${questions.length} câu đã sinh` : `${exam.blueprint?.reduce((sum, r) => sum + r.count, 0) || 0} câu dự kiến`}
+                  {questions.length > 0
+                    ? `${questions.length} câu đã sinh`
+                    : exam.blueprint && exam.blueprint.length > 0
+                    ? `${exam.blueprint.reduce((sum, r) => sum + r.count, 0)} câu Blueprint`
+                    : exam.question_count
+                    ? `${exam.question_count} câu (Quy định Khảo thí)`
+                    : 'Chưa lập ma trận'}
                 </p>
               </div>
             </div>
@@ -313,20 +338,17 @@ export default function ExamEditorModal({
 
             <div className="flex items-center gap-2.5">
               {isPublished ? (
-                <button
-                  type="button"
-                  onClick={() => setAssignModalOpen(true)}
-                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm flex items-center gap-1.5"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Giao bài cho Thí sinh</span>
-                </button>
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Đề thi sẵn sàng cho Khảo thí tổ chức thi
+                </span>
               ) : (
                 <button
                   type="button"
                   onClick={handlePublish}
-                  disabled={publishing}
+                  disabled={publishing || !exam.blueprint || exam.blueprint.length === 0}
                   className="px-5 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
+                  title={!exam.blueprint || exam.blueprint.length === 0 ? 'Vui lòng thiết lập ma trận đề thi (Blueprint) trước' : ''}
                 >
                   {publishing ? (
                     <>
@@ -336,7 +358,11 @@ export default function ExamEditorModal({
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>Kích hoạt AI sinh câu hỏi & Công bố</span>
+                      <span>
+                        {!exam.blueprint || exam.blueprint.length === 0
+                          ? 'Cần thiết lập Ma trận Blueprint trước'
+                          : 'Kích hoạt AI sinh câu hỏi & Công bố'}
+                      </span>
                     </>
                   )}
                 </button>

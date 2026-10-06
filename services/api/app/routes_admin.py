@@ -95,6 +95,154 @@ def courses(db: Session = Depends(get_db), user=Depends(staff)):
     return [data(c, "code", "name", "description", "status", "owner_id", "teacher_id") for c in course_list(db, user)]
 
 
+@router.get("/teacher-semesters")
+def teacher_semesters(db: Session = Depends(get_db), user=Depends(staff)):
+    """Return all semesters that have batches assigned to the current teacher,
+    or courses where teacher is assigned/owner.
+    Each semester entry includes the courses (with exams and batch info) assigned to this teacher.
+    Used by the Teacher Portal landing page to show a semester-first navigation.
+    """
+    from .models import ExamBatch, Semester, ScheduleSlot
+
+    is_super = user.role in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER"}
+
+    # 1. Batches assigned to teacher (or all if superuser)
+    if is_super:
+        batches = db.scalars(select(ExamBatch)).all()
+    else:
+        batches = db.scalars(
+            select(ExamBatch).where(ExamBatch.assigned_teacher_id == user.id)
+        ).all()
+
+    # 2. Courses directly assigned to teacher (or owned by teacher)
+    if is_super:
+        direct_courses = db.scalars(select(Course)).all()
+    else:
+        direct_courses = db.scalars(
+            select(Course).where(or_(Course.teacher_id == user.id, Course.owner_id == user.id))
+        ).all()
+
+    # Pre-load exams and courses for batches
+    exam_ids = list({b.exam_id for b in batches})
+    batch_exams = db.scalars(select(Exam).where(Exam.id.in_(exam_ids))).all() if exam_ids else []
+    exam_map = {e.id: e for e in batch_exams}
+
+    course_ids_from_batches = list({e.course_id for e in batch_exams})
+    all_course_ids = list(set(course_ids_from_batches + [c.id for c in direct_courses]))
+
+    if not all_course_ids:
+        return []
+
+    all_courses = db.scalars(select(Course).where(Course.id.in_(all_course_ids))).all()
+    course_map = {c.id: c for c in all_courses}
+
+    # Collect semester ids
+    semester_ids = list({c.semester_id for c in all_courses if c.semester_id})
+    semester_rows = db.scalars(select(Semester).where(Semester.id.in_(semester_ids))).all() if semester_ids else []
+    semester_map = {s.id: s for s in semester_rows}
+
+    # Group: semester_id -> semester data
+    result_map: dict = {}
+
+    for c in all_courses:
+        sem_id = c.semester_id or "__no_semester__"
+        sem = semester_map.get(sem_id) if sem_id != "__no_semester__" else None
+
+        if sem_id not in result_map:
+            result_map[sem_id] = {
+                "semester_id": sem_id if sem_id != "__no_semester__" else None,
+                "semester_name": sem.name if sem else "Chưa phân học kỳ",
+                "semester_code": getattr(sem, "code", None),
+                "semester_year": sem.year if sem else None,
+                "semester_term": sem.term if sem else None,
+                "semester_status": sem.status if sem else None,
+                "start_date": sem.start_date if sem else None,
+                "end_date": sem.end_date if sem else None,
+                "courses": {},
+            }
+
+        result_map[sem_id]["courses"][c.id] = {
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "description": c.description,
+            "status": c.status,
+            "exams": {},
+        }
+
+    # Attach exams and batches
+    for batch in batches:
+        exam = exam_map.get(batch.exam_id)
+        if not exam:
+            continue
+        course = course_map.get(exam.course_id)
+        if not course:
+            continue
+
+        sem_id = course.semester_id or "__no_semester__"
+        if sem_id not in result_map or course.id not in result_map[sem_id]["courses"]:
+            continue
+
+        course_entry = result_map[sem_id]["courses"][course.id]
+        if exam.id not in course_entry["exams"]:
+            course_entry["exams"][exam.id] = {
+                "id": exam.id,
+                "name": exam.name,
+                "status": exam.status,
+                "time_limit": exam.time_limit,
+                "question_count": exam.question_count,
+                "batches": [],
+            }
+
+        slots = db.scalars(
+            select(ScheduleSlot).where(ScheduleSlot.batch_id == batch.id).order_by(ScheduleSlot.slot_number)
+        ).all()
+        rooms = list(dict.fromkeys(s.room for s in slots if s.room))
+
+        course_entry["exams"][exam.id]["batches"].append({
+            "batch_id": batch.id,
+            "name": batch.name,
+            "date": batch.date,
+            "start_time": batch.start_time,
+            "end_time": batch.end_time,
+            "total_assigned": batch.total_assigned,
+            "status": batch.status,
+            "slot_count": len(slots),
+            "rooms": rooms,
+        })
+
+    # Also load exams for direct courses that might not have batches yet
+    for sem_id, sem_data in result_map.items():
+        for course_id, c_data in sem_data["courses"].items():
+            if not c_data["exams"]:
+                c_exams = db.scalars(select(Exam).where(Exam.course_id == course_id)).all()
+                for e in c_exams:
+                    c_data["exams"][e.id] = {
+                        "id": e.id,
+                        "name": e.name,
+                        "status": e.status,
+                        "time_limit": e.time_limit,
+                        "question_count": e.question_count,
+                        "batches": [],
+                    }
+
+    # Flatten to list
+    output = []
+    for sem_entry in result_map.values():
+        courses_out = []
+        for c_entry in sem_entry["courses"].values():
+            exams_out = list(c_entry["exams"].values())
+            courses_out.append({**c_entry, "exams": exams_out})
+        output.append({**sem_entry, "courses": courses_out})
+
+    def _sem_sort_key(s):
+        status_order = {"ACTIVE": 0, "DRAFT": 1, "COMPLETED": 2}
+        return (status_order.get(s.get("semester_status") or "", 9), -(s.get("semester_year") or 0))
+
+    output.sort(key=_sem_sort_key)
+    return output
+
+
 @router.post("/courses", status_code=201)
 def create_course(body: s.CourseIn, db: Session = Depends(get_db), user=Depends(editor)):
     row = Course(**body.model_dump(), owner_id=user.id)
@@ -180,7 +328,7 @@ def workspace(course_id: str, db: Session = Depends(get_db), user=Depends(staff)
         "chapters": rows(BookSection, "document_id", "title", "level", "start_page", "end_page", "source"),
         "rubrics": rows(Rubric, "name", "version", "criteria"),
         "exams": [
-            data(exam, "name", "status", "blueprint", "time_limit", "rubric_id", "max_attempts")
+            data(exam, "name", "status", "blueprint", "time_limit", "question_count", "rubric_id", "max_attempts")
             | {"questions": [
                 {"text": q["text"], "english_terms": q.get("english_terms", [])}
                 for q in (exam.snapshot or {}).get("questions", [])
@@ -428,7 +576,7 @@ def delete_rubric(key: str, db: Session = Depends(get_db), user=Depends(editor))
 
 def validate_exam(db, body, user):
     course = course_access(db, body.course_id, user)
-    if course.status != "ACTIVE":
+    if course.status == "ARCHIVED":
         fail(409, "ARCHIVED", "Môn học đã lưu trữ")
     if by_id(db, Rubric, body.rubric_id).course_id != body.course_id:
         fail(422, "CROSS_COURSE", "Rubric không thuộc môn học")

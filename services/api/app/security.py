@@ -112,7 +112,21 @@ def course_access(db, course_id, user):
         and user.id not in {course.owner_id, course.teacher_id}
         and course.code != "ORAL-PRACTICE"
     ):
-        fail(403, "FORBIDDEN", "Bạn không phụ trách môn học này")
+        from .models import Exam, ExamBatch, Section
+
+        has_batch = db.scalar(
+            select(ExamBatch.id)
+            .join(Exam, Exam.id == ExamBatch.exam_id)
+            .where(Exam.course_id == course_id, ExamBatch.assigned_teacher_id == user.id)
+            .limit(1)
+        )
+        has_section = db.scalar(
+            select(Section.id)
+            .where(Section.course_id == course_id, Section.teacher_id == user.id)
+            .limit(1)
+        )
+        if not (has_batch or has_section):
+            fail(403, "FORBIDDEN", "Bạn không phụ trách môn học này")
     return course
 
 

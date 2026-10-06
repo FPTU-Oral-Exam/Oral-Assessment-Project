@@ -543,7 +543,7 @@ class TestExamManagement:
 
         response = examiner.post(
             f"/api/examiner/courses/{course['id']}/exams",
-            json={"name": "Second Exam", "time_limit": 30, "question_count": 3}
+            json={"name": "First Exam", "time_limit": 30, "question_count": 3}
         )
         assert response.status_code == 409
 
