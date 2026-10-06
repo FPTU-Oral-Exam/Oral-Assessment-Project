@@ -15,7 +15,10 @@ from . import storage
 from .config import settings
 from .db import get_db
 from .grading import GradingError, check_config
-from .models import Assignment, Attempt, Audit, Course, CourseEnrollment, Exam, ExamSession, Upload
+from .models import (
+    Assignment, Attempt, Audit, Course, CourseCandidate, CourseEnrollment,
+    Exam, ExamSession, ScheduleSlot, SlotAssignment, Upload
+)
 from .practice import COURSE_ID
 from .retakes import ACTIVE, allowance, history_row, sessions_for
 from .security import by_id, course_access, current_user, fail, student
@@ -107,6 +110,15 @@ def available(db: Session = Depends(get_db), user=Depends(current_user)):
                     select(CourseEnrollment.course_id).where(CourseEnrollment.student_id == user.id)
                 ),
                 Exam.id.in_(select(Assignment.exam_id).where(Assignment.student_id == user.id)),
+                Exam.id.in_(
+                    select(ScheduleSlot.exam_id)
+                    .join(SlotAssignment, SlotAssignment.slot_id == ScheduleSlot.id)
+                    .where(SlotAssignment.student_id == user.id)
+                ),
+                Exam.course_id.in_(
+                    select(CourseCandidate.course_id)
+                    .where(CourseCandidate.student_id == user.id, CourseCandidate.eligibility_status == "ELIGIBLE")
+                ),
             ),
         )
         .order_by(Exam.created_at)
@@ -145,6 +157,18 @@ def create_session(body: s.SessionIn, db: Session = Depends(get_db), user=Depend
         )
         or db.scalar(
             select(Assignment.id).where(Assignment.exam_id == exam.id, Assignment.student_id == user.id)
+        )
+        or db.scalar(
+            select(SlotAssignment.id)
+            .join(ScheduleSlot, ScheduleSlot.id == SlotAssignment.slot_id)
+            .where(ScheduleSlot.exam_id == exam.id, SlotAssignment.student_id == user.id)
+        )
+        or db.scalar(
+            select(CourseCandidate.id).where(
+                CourseCandidate.course_id == exam.course_id,
+                CourseCandidate.student_id == user.id,
+                CourseCandidate.eligibility_status == "ELIGIBLE",
+            )
         )
     )
     if exam.status != "PUBLISHED" or not allowed:
