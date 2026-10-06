@@ -13,6 +13,7 @@ interface Course {
   status?: string;
   is_active?: boolean;
   owner_id?: string;
+  teacher_id?: string;
   created_at?: string;
 }
 
@@ -35,7 +36,7 @@ export default function CourseListClient() {
 
   const isSuperUser = user?.roles?.some(r => r === 'SYSTEM_ADMIN' || r === 'EXAMINER');
   const displayedCourses = filterTab === 'mine'
-    ? courses.filter(c => isSuperUser || c.owner_id === user?.id)
+    ? courses.filter(c => isSuperUser || c.owner_id === user?.id || c.teacher_id === user?.id)
     : courses;
 
   const fetchCourses = async () => {

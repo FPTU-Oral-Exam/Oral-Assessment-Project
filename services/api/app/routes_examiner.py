@@ -6,14 +6,20 @@ from sqlalchemy.orm import Session
 
 from . import schemas as s
 from .db import get_db
+from datetime import datetime
+from uuid import uuid4
+from . import schemas_examiner as ex
 from .models import (
     Audit,
     Attempt,
     Course,
+    CourseCandidate,
     Exam,
+    ExamBatch,
     ExamEnrollment,
     ExamSession,
     ExamVariant,
+    MasterCourse,
     ReEvaluation,
     ScheduleSlot,
     Section,
@@ -22,7 +28,7 @@ from .models import (
     Upload,
     User,
 )
-from .security import by_id, course_access, examiner, fail, public_user
+from .security import by_id, course_access, examiner, fail, public_user, hasher
 
 router = APIRouter()
 
@@ -73,13 +79,51 @@ def create_semester(body: s.SemesterIn, db: Session = Depends(get_db), user=Depe
 @router.get("/semesters/{semester_id}")
 def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     semester = by_id(db, Semester, semester_id)
+
+    # 1. Courses directly associated with this semester
+    direct_courses = db.scalars(select(Course).where(Course.semester_id == semester_id)).all()
+    # 2. Courses linked via sections
     sections = db.scalars(select(Section).where(Section.semester_id == semester_id)).all()
-    # Get unique courses from sections
-    course_ids = set(s.course_id for s in sections)
-    courses = [db.get(Course, cid) for cid in course_ids]
+    section_course_ids = set(s.course_id for s in sections)
+
+    course_map = {c.id: c for c in direct_courses}
+    for cid in section_course_ids:
+        if cid not in course_map:
+            c = db.get(Course, cid)
+            if c:
+                course_map[cid] = c
+
+    course_list = []
+    total_candidates = 0
+    total_batches = 0
+
+    for c in course_map.values():
+        cand_count = db.scalar(
+            select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == c.id)
+        ) or 0
+        batch_count = db.scalar(
+            select(func.count()).select_from(ExamBatch).join(Exam, Exam.id == ExamBatch.exam_id).where(Exam.course_id == c.id)
+        ) or 0
+        total_candidates += cand_count
+        total_batches += batch_count
+        course_list.append({
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "description": c.description,
+            "credits": c.credits if c.credits is not None else 3,
+            "department_code": c.department_code or "",
+            "status": c.status,
+            "candidate_count": cand_count,
+            "batch_count": batch_count,
+        })
+
     return {
         **data(semester, "name", "year", "term", "status", "start_date", "end_date"),
-        "courses": [data(c, "code", "name", "description", "status") for c in courses if c],
+        "course_count": len(course_list),
+        "total_candidates": total_candidates,
+        "total_batches": total_batches,
+        "courses": course_list,
     }
 
 
@@ -128,19 +172,36 @@ def list_semester_courses(semester_id: str, db: Session = Depends(get_db), user=
 @router.post("/semesters/{semester_id}/courses", status_code=201)
 def create_course_in_semester(
     semester_id: str,
-    body: s.CourseIn,
+    body: ex.CourseAddIn,
     db: Session = Depends(get_db),
     user=Depends(examiner),
 ):
-    """Create a new course in semester. Creates a default section."""
+    """Create a new course in semester from master course or manual entry."""
     by_id(db, Semester, semester_id)
+
+    if body.master_course_id:
+        master = by_id(db, MasterCourse, body.master_course_id)
+        code = master.code
+        name = master.name
+        description = master.description or ""
+        credits = master.credits
+        department_code = master.department_code
+    else:
+        if not body.code or not body.name:
+            fail(400, "MISSING_FIELDS", "Mã môn học và tên môn học là bắt buộc")
+        code = body.code.strip().upper()
+        name = body.name.strip()
+        description = (body.description or "").strip()
+        credits = body.credits or 3
+        department_code = (body.department_code or "").strip()
 
     course = Course(
         semester_id=semester_id,
-        name=body.name,
-        code=body.code,
-        description=body.description,
-        credits=body.credits,
+        name=name,
+        code=code,
+        description=description,
+        credits=credits,
+        department_code=department_code,
         teacher_id=body.teacher_id,
         owner_id=user.id,
         status="DRAFT",
@@ -153,8 +214,8 @@ def create_course_in_semester(
     section = Section(
         course_id=course.id,
         semester_id=semester_id,
-        name=f"{body.code} - Default",
-        code=body.code,
+        name=f"{code} - Default",
+        code=code,
         teacher_id=section_teacher_id,
         status="DRAFT",
     )
@@ -166,7 +227,12 @@ def create_course_in_semester(
     }))
     db.commit()
 
-    return {**data(course, "name", "code", "description", "status"), "semester_id": semester_id}
+    return {
+        **data(course, "name", "code", "description", "status"),
+        "credits": course.credits,
+        "department_code": course.department_code,
+        "semester_id": semester_id,
+    }
 
 
 @router.get("/courses")
@@ -190,15 +256,31 @@ def list_all_courses(db: Session = Depends(get_db), user=Depends(examiner)):
 
 @router.get("/courses/{course_id}")
 def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
-    """Get course detail with sections count."""
+    """Get course detail with sections count and candidate pool statistics."""
     course = by_id(db, Course, course_id)
     teacher = db.get(User, course.teacher_id) if course.teacher_id else None
     sections = db.scalars(select(Section).where(Section.course_id == course_id)).all()
+
+    total = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id)) or 0
+    eligible = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.eligibility_status == 'ELIGIBLE')) or 0
+    disqualified = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.eligibility_status == 'DISQUALIFIED')) or 0
+    assigned = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.allocation_status == 'ASSIGNED')) or 0
+    unassigned = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.eligibility_status == 'ELIGIBLE', CourseCandidate.allocation_status == 'UNASSIGNED')) or 0
+
     return {
         **data(course, "name", "code", "description", "status"),
+        "credits": course.credits,
+        "department_code": course.department_code,
         "semester_id": course.semester_id,
         "teacher": public_user(teacher) if teacher else None,
         "section_count": len(sections),
+        "stats": {
+            "total": total,
+            "eligible": eligible,
+            "disqualified": disqualified,
+            "assigned": assigned,
+            "unassigned": unassigned,
+        },
     }
 
 
@@ -338,12 +420,16 @@ def create_exam(
 
     course_access(db, course_id, user)
 
-    # Check if exam already exists for this course (1 exam per course)
-    existing = db.scalar(
-        select(Exam).where(Exam.course_id == course_id, Exam.deleted_at.is_(None))
+    # Check if exam with the same name already exists in this course
+    existing_same_name = db.scalar(
+        select(Exam).where(
+            Exam.course_id == course_id,
+            Exam.name == body.name.strip(),
+            Exam.deleted_at.is_(None)
+        )
     )
-    if existing:
-        fail(409, "EXAM_EXISTS", "Mỗi môn chỉ được tạo 1 kỳ thi")
+    if existing_same_name:
+        fail(409, "EXAM_NAME_EXISTS", f"Kỳ thi '{body.name.strip()}' đã tồn tại trong môn học này")
 
     exam = Exam(
         course_id=course_id,
@@ -897,5 +983,452 @@ def get_student_attempts(
             "status": attempt.status,
             "audio_url": audio_url,
         })
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NEW: Candidate Pool & Auto-Allocation Endpoints (Task 3)
+# ═══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────
+# Master Courses endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/master-courses")
+def list_master_courses(db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all master courses (university-wide course catalog)."""
+    courses = db.scalars(select(MasterCourse).order_by(MasterCourse.code)).all()
+    if not courses:
+        defaults = [
+            ("MAS291", "Xác suất & Thống kê", "MATH", 3, "Xác suất ứng dụng và kiểm định thống kê"),
+            ("PRN211", "Lập trình ứng dụng .NET", "SE", 3, "Lập trình C#, kiến trúc phần mềm và ORM Entity Framework"),
+            ("SWE201c", "Nhập môn Kỹ thuật phần mềm", "SE", 3, "Quy trình phát triển phần mềm, phân tích yêu cầu và Agile"),
+            ("CSD201", "Cấu trúc dữ liệu & Giải thuật", "CS", 3, "Cấu trúc dữ liệu động, thuật toán đồ thị và tìm kiếm"),
+            ("CSI104", "Nhập môn Khoa học máy tính", "CS", 3, "Kiến trúc máy tính và nguyên lý tính toán"),
+            ("IOT102", "Internet vạn vật căn bản", "IOT", 3, "Nguyên lý IoT, cảm biến kết nối và nhúng vi xử lý"),
+        ]
+        now = datetime.now().timestamp()
+        for code, name, dept, credits_val, desc in defaults:
+            mc = MasterCourse(
+                id=f"mc_{code.lower()}",
+                code=code,
+                name=name,
+                department_code=dept,
+                credits=credits_val,
+                description=desc,
+                created_at=now,
+            )
+            db.add(mc)
+        db.commit()
+        courses = db.scalars(select(MasterCourse).order_by(MasterCourse.code)).all()
+
+    return [
+        {
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "department_code": c.department_code,
+            "credits": c.credits,
+            "description": c.description,
+        }
+        for c in courses
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────
+# Course Candidates (Candidate Pool) endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.post("/courses/{course_id}/candidates/import", status_code=200)
+async def import_candidates(
+    course_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Import candidates from Excel file. Auto-creates STUDENT accounts."""
+    import openpyxl
+
+    by_id(db, Course, course_id)
+
+    if not file.filename.endswith('.xlsx'):
+        fail(400, "INVALID_FILE", "Chỉ hỗ trợ file .xlsx")
+
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    ws = wb.active
+
+    headers = [cell.value for cell in ws[1]]
+    required = ['MSSV', 'Họ và tên', 'Trạng thái đủ điều kiện']
+    for col in required:
+        if col not in headers:
+            fail(400, "MISSING_COLUMNS", f"Thiếu cột bắt buộc: {col}")
+
+    mssv_idx = headers.index('MSSV')
+    name_idx = headers.index('Họ và tên')
+    status_idx = headers.index('Trạng thái đủ điều kiện')
+
+    imported = 0
+    skipped = 0
+    errors = []
+    now = datetime.now().timestamp()
+
+    for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not row[0]:
+            continue
+
+        roll_number = str(row[mssv_idx]).strip()
+        full_name = str(row[name_idx]).strip()
+        status_raw = str(row[status_idx]).strip().upper()
+
+        eligibility = 'ELIGIBLE' if 'ĐỦ' in status_raw or 'ELIGIBLE' in status_raw else 'DISQUALIFIED'
+
+        # Auto-create student user if not exists
+        existing_user = db.scalar(
+            select(User).where(User.username == roll_number)
+        )
+        if not existing_user:
+            existing_user = User(
+                username=roll_number,
+                email=f"{roll_number}@student.edu.vn",
+                name=full_name,
+                password_hash=hasher.hash(roll_number),
+                role="STUDENT",
+                status="ACTIVE",
+            )
+            db.add(existing_user)
+            db.flush()
+
+        # Check if candidate already exists
+        existing = db.scalar(
+            select(CourseCandidate).where(
+                CourseCandidate.course_id == course_id,
+                CourseCandidate.roll_number == roll_number
+            )
+        )
+        if existing:
+            skipped += 1
+            continue
+
+        candidate = CourseCandidate(
+            course_id=course_id,
+            student_id=existing_user.id,
+            roll_number=roll_number,
+            full_name=full_name,
+            eligibility_status=eligibility,
+            allocation_status='UNASSIGNED',
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(candidate)
+        imported += 1
+
+    db.commit()
+
+    return {
+        "total_rows": imported + skipped,
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors
+    }
+
+
+@router.get("/courses/{course_id}/candidates")
+def list_candidates(
+    course_id: str,
+    eligibility_status: str = None,
+    allocation_status: str = None,
+    search: str = None,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List candidates with optional filters."""
+    query = select(CourseCandidate).where(CourseCandidate.course_id == course_id)
+
+    if eligibility_status:
+        query = query.where(CourseCandidate.eligibility_status == eligibility_status)
+    if allocation_status:
+        query = query.where(CourseCandidate.allocation_status == allocation_status)
+    if search:
+        query = query.where(
+            CourseCandidate.roll_number.ilike(f"%{search}%") |
+            CourseCandidate.full_name.ilike(f"%{search}%")
+        )
+
+    candidates = db.scalars(query.order_by(CourseCandidate.roll_number)).all()
+
+    result = []
+    for c in candidates:
+        slot_info = {"slot_room": None, "batch_name": None}
+        if c.assigned_slot_id:
+            slot = db.get(ScheduleSlot, c.assigned_slot_id)
+            if slot:
+                slot_info["slot_room"] = slot.room
+                if slot.batch_id:
+                    batch = db.get(ExamBatch, slot.batch_id)
+                    if batch:
+                        slot_info["batch_name"] = batch.name
+
+        result.append({
+            "id": c.id,
+            "roll_number": c.roll_number,
+            "full_name": c.full_name,
+            "eligibility_status": c.eligibility_status,
+            "allocation_status": c.allocation_status,
+            **slot_info
+        })
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────
+# Course Detail with Stats
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/courses/{course_id}/detail")
+def get_course_detail(
+    course_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Get course detail with candidate pool statistics."""
+    course = by_id(db, Course, course_id)
+
+    total = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id)
+    ) or 0
+    eligible = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.eligibility_status == 'ELIGIBLE'
+        )
+    ) or 0
+    disqualified = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.eligibility_status == 'DISQUALIFIED'
+        )
+    ) or 0
+    assigned = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.allocation_status == 'ASSIGNED'
+        )
+    ) or 0
+    unassigned = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.eligibility_status == 'ELIGIBLE',
+            CourseCandidate.allocation_status == 'UNASSIGNED'
+        )
+    ) or 0
+
+    return {
+        "id": course.id,
+        "name": course.name,
+        "code": course.code,
+        "description": course.description,
+        "credits": course.credits,
+        "department_code": course.department_code,
+        "status": course.status,
+        "stats": {
+            "total": total,
+            "eligible": eligible,
+            "disqualified": disqualified,
+            "assigned": assigned,
+            "unassigned": unassigned
+        }
+    }
+
+
+# ─────────────────────────────────────────────────────────────────
+# Exam Batches (Auto-Allocation) endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.post("/exams/{exam_id}/batches", status_code=201)
+def create_batch_and_allocate(
+    exam_id: str,
+    body: ex.BatchCreateIn,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Create exam batch and auto-allocate ELIGIBLE candidates to rooms."""
+    exam = by_id(db, Exam, exam_id)
+    if not exam:
+        fail(404, "EXAM_NOT_FOUND", "Kỳ thi không tồn tại")
+
+    teacher = db.get(User, body.assigned_teacher_id)
+    if not teacher or teacher.role != 'TEACHER':
+        fail(400, "INVALID_TEACHER", "Giảng viên phụ trách không hợp lệ")
+
+    rooms = [r.strip() for r in body.rooms if r.strip()]
+    if not rooms:
+        fail(400, "NO_ROOMS", "Danh sách phòng thi không được để trống")
+
+    num_rooms = len(rooms)
+    max_per_room = body.max_students_per_room
+    total_capacity = num_rooms * max_per_room
+
+    # Get ELIGIBLE + UNASSIGNED candidates with row lock
+    candidates = db.scalars(
+        select(CourseCandidate)
+        .where(
+            CourseCandidate.course_id == exam.course_id,
+            CourseCandidate.eligibility_status == "ELIGIBLE",
+            CourseCandidate.allocation_status == "UNASSIGNED"
+        )
+        .order_by(CourseCandidate.roll_number.asc())
+        .with_for_update()
+    ).all()
+
+    if not candidates:
+        fail(400, "NO_CANDIDATES", "Không còn thí sinh đủ điều kiện nào chờ phân bổ")
+
+    candidates_to_assign = list(candidates[:total_capacity])
+    total_to_assign = len(candidates_to_assign)
+
+    # Create ExamBatch
+    now = datetime.now().timestamp()
+    batch = ExamBatch(
+        id=f"btc_{uuid4().hex[:8]}",
+        exam_id=exam.id,
+        name=body.name,
+        date=body.date,
+        start_time=body.start_time,
+        end_time=body.end_time,
+        max_students_per_room=max_per_room,
+        assigned_teacher_id=teacher.id,
+        total_assigned=total_to_assign,
+        status='SCHEDULED',
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(batch)
+    db.flush()
+
+    # Current max slot_number for this exam
+    current_max_slot = db.scalar(
+        select(func.max(ScheduleSlot.slot_number)).where(ScheduleSlot.exam_id == exam.id)
+    ) or 0
+
+    # Create ScheduleSlots for each room
+    slot_objects = []
+    for r_idx, room in enumerate(rooms):
+        slot = ScheduleSlot(
+            id=f"slt_{uuid4().hex[:8]}",
+            batch_id=batch.id,
+            exam_id=exam.id,
+            slot_number=current_max_slot + r_idx + 1,
+            date=body.date,
+            start_time=body.start_time,
+            end_time=body.end_time,
+            room=room,
+            max_students=max_per_room,
+            assigned_students_count=0,
+            status="SCHEDULED",
+        )
+        db.add(slot)
+        slot_objects.append(slot)
+    db.flush()
+
+    # Balanced Round-Robin Distribution
+    room_allocations = [[] for _ in range(num_rooms)]
+    for idx, candidate in enumerate(candidates_to_assign):
+        room_idx = idx % num_rooms
+        room_allocations[room_idx].append(candidate)
+
+    # Update candidates and slot counts
+    room_counts = []
+    for room_idx, assigned_list in enumerate(room_allocations):
+        target_slot = slot_objects[room_idx]
+        target_slot.assigned_students_count = len(assigned_list)
+        room_counts.append({
+            "room": rooms[room_idx],
+            "assigned_count": len(assigned_list)
+        })
+        for cand in assigned_list:
+            cand.allocation_status = "ASSIGNED"
+            cand.assigned_slot_id = target_slot.id
+            cand.updated_at = now
+            db.add(SlotAssignment(
+                slot_id=target_slot.id,
+                student_id=cand.student_id,
+            ))
+
+    db.commit()
+
+    remaining = len(candidates) - total_to_assign
+
+    return {
+        "batch_id": batch.id,
+        "name": batch.name,
+        "date": batch.date,
+        "start_time": batch.start_time,
+        "end_time": batch.end_time,
+        "assigned_teacher_id": batch.assigned_teacher_id,
+        "total_assigned": total_to_assign,
+        "status": batch.status,
+        "rooms": room_counts,
+        "remaining_unassigned": remaining
+    }
+
+
+@router.get("/exams/{exam_id}/batches")
+def list_batches(
+    exam_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List all batches for an exam."""
+    batches = db.scalars(
+        select(ExamBatch).where(ExamBatch.exam_id == exam_id).order_by(ExamBatch.date)
+    ).all()
+
+    result = []
+    for b in batches:
+        slots = db.scalars(
+            select(ScheduleSlot).where(ScheduleSlot.batch_id == b.id)
+        ).all()
+
+        result.append({
+            "batch_id": b.id,
+            "name": b.name,
+            "date": b.date,
+            "start_time": b.start_time,
+            "end_time": b.end_time,
+            "assigned_teacher_id": b.assigned_teacher_id,
+            "total_assigned": b.total_assigned,
+            "status": b.status,
+            "rooms": [{"room": s.room, "assigned_count": s.assigned_students_count} for s in slots]
+        })
+
+    return result
+
+
+@router.get("/batches/{batch_id}/students")
+def list_batch_students(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List all students assigned to a batch."""
+    batch = by_id(db, ExamBatch, batch_id)
+    slots = db.scalars(
+        select(ScheduleSlot).where(ScheduleSlot.batch_id == batch_id)
+    ).all()
+
+    result = []
+    for slot in slots:
+        candidates = db.scalars(
+            select(CourseCandidate).where(CourseCandidate.assigned_slot_id == slot.id)
+        ).all()
+        for c in candidates:
+            result.append({
+                "roll_number": c.roll_number,
+                "full_name": c.full_name,
+                "room": slot.room,
+                "eligibility_status": c.eligibility_status
+            })
 
     return result

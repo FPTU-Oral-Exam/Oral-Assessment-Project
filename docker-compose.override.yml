@@ -21,6 +21,11 @@ services:
     ports:
       - "8000:8000"
 
+  migrate:
+    volumes:
+      - ./services/api:/app
+
   worker:
     volumes:
       - ./services/api:/app
+

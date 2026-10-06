@@ -61,6 +61,7 @@ def upgrade():
         sa.Column("section_id", sa.String(36), sa.ForeignKey("sections.id"), nullable=False),
         sa.Column("student_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"),
+        sa.Column("enrolled_at", sa.Float(), nullable=True),
         sa.UniqueConstraint("section_id", "student_id", name="uq_section_student"),
     )
 

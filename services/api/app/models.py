@@ -42,9 +42,10 @@ class Course(Entity, Base):
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     credits: Mapped[int] = mapped_column(Integer, default=3)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     teacher_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     semester_id: Mapped[str | None] = mapped_column(ForeignKey("semesters.id"), nullable=True)
+    department_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
 
 
@@ -287,12 +288,14 @@ class Section(Entity, Base):
 class ScheduleSlot(Entity, Base):
     __tablename__ = "schedule_slots"
     exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id"))
+    batch_id: Mapped[str | None] = mapped_column(ForeignKey("exam_batches.id", ondelete="CASCADE"), nullable=True)
     slot_number: Mapped[int] = mapped_column(Integer)
     date: Mapped[float] = mapped_column(Float)           # Unix timestamp (date only)
     start_time: Mapped[str] = mapped_column(String(10))  # "08:00"
     end_time: Mapped[str] = mapped_column(String(10))    # "10:00"
     room: Mapped[str] = mapped_column(String(50))        # "A301"
     max_students: Mapped[int] = mapped_column(Integer)
+    assigned_students_count: Mapped[int] = mapped_column(Integer, default=0)
     exam_variant_id: Mapped[str | None] = mapped_column(ForeignKey("exam_variants.id"))
     status: Mapped[str] = mapped_column(String(20), default="PENDING")  # PENDING, READY, IN_PROGRESS, COMPLETED
     grade_locked: Mapped[bool] = mapped_column(default=False)
@@ -336,3 +339,42 @@ class SlotAssignment(Entity, Base):
     __table_args__ = (UniqueConstraint("slot_id", "student_id"),)
     slot_id: Mapped[str] = mapped_column(ForeignKey("schedule_slots.id"))
     student_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+
+
+# === Examiner Candidate Pool Models ===
+
+class MasterCourse(Entity, Base):
+    __tablename__ = "master_courses"
+    code: Mapped[str] = mapped_column(String(50), unique=True)
+    name: Mapped[str] = mapped_column(String(200))
+    department_code: Mapped[str] = mapped_column(String(20))
+    credits: Mapped[int] = mapped_column(Integer, default=3)
+    description: Mapped[str | None] = mapped_column(Text)
+
+
+class CourseCandidate(Entity, Base):
+    __tablename__ = "course_candidates"
+    __table_args__ = (UniqueConstraint("course_id", "roll_number", name="uq_course_candidate_roll"),)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"))
+    student_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    roll_number: Mapped[str] = mapped_column(String(50))
+    full_name: Mapped[str] = mapped_column(String(100))
+    eligibility_status: Mapped[str] = mapped_column(String(20), default="ELIGIBLE")  # ELIGIBLE, DISQUALIFIED
+    allocation_status: Mapped[str] = mapped_column(String(20), default="UNASSIGNED")  # UNASSIGNED, ASSIGNED
+    assigned_slot_id: Mapped[str | None] = mapped_column(ForeignKey("schedule_slots.id", ondelete="SET NULL"))
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class ExamBatch(Entity, Base):
+    __tablename__ = "exam_batches"
+    exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100))
+    date: Mapped[float] = mapped_column(Float)
+    start_time: Mapped[str] = mapped_column(String(10))
+    end_time: Mapped[str] = mapped_column(String(10))
+    max_students_per_room: Mapped[int] = mapped_column(Integer, default=15)
+    assigned_teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    total_assigned: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="SCHEDULED")  # SCHEDULED, IN_PROGRESS, COMPLETED
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+

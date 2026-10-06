@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   Calendar,
@@ -62,6 +63,7 @@ interface CourseFormData {
 }
 
 export default function SemesterListClient() {
+  const router = useRouter();
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,10 +168,15 @@ export default function SemesterListClient() {
         const err = await res.json().catch(() => ({ message: 'Lỗi không xác định' }));
         throw new Error(err.message || err.detail || 'Tạo học kỳ thất bại');
       }
+      const data = await res.json().catch(() => ({}));
       setIsModalOpen(false);
       setFormData({ name: '', year: new Date().getFullYear(), term: 'SPRING', start_date: 0, end_date: 0 });
       toast.success('Tạo học kỳ thành công');
-      fetchSemesters();
+      if (data?.id) {
+        router.push(`/semester/${data.id}`);
+      } else {
+        fetchSemesters();
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Tạo học kỳ thất bại');
     } finally {
@@ -334,7 +341,12 @@ export default function SemesterListClient() {
                         <Calendar className="w-5 h-5 text-blue-600" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-bold text-slate-900 text-sm leading-snug truncate">{semester.name}</h3>
+                        <Link
+                          href={`/semester/${semester.id}`}
+                          className="font-bold text-slate-900 text-sm leading-snug truncate hover:text-blue-600 transition block"
+                        >
+                          {semester.name}
+                        </Link>
                         <p className="text-xs text-slate-500 font-mono mt-0.5">
                           {semester.year} — {termLabel[semester.term] || semester.term}
                         </p>
@@ -447,6 +459,13 @@ export default function SemesterListClient() {
 
                 {/* Card Actions */}
                 <div className="p-4 pt-3 border-t border-slate-100 flex gap-2 bg-slate-50/40">
+                  <Link
+                    href={`/semester/${semester.id}`}
+                    className="inline-flex items-center justify-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition shadow-xs"
+                  >
+                    Chi tiết
+                    <ExternalLink className="w-3 h-3 text-slate-400" />
+                  </Link>
                   {semester.status === 'DRAFT' && (
                     <button
                       onClick={() => handleActivate(semester.id)}

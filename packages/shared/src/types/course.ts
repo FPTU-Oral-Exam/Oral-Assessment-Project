@@ -58,3 +58,37 @@ export interface Workspace {
   topics: Topic[];
   documents: Doc[];
 }
+
+export interface MasterCourse {
+  id: string;
+  code: string;
+  name: string;
+  department_code: string;
+  credits: number;
+  description?: string;
+}
+
+export interface CandidateStats {
+  total: number;
+  eligible: number;
+  disqualified: number;
+  assigned: number;
+  unassigned: number;
+}
+
+export interface CourseCandidate {
+  id: string;
+  roll_number: string;
+  full_name: string;
+  eligibility_status: 'ELIGIBLE' | 'DISQUALIFIED';
+  allocation_status: 'UNASSIGNED' | 'ASSIGNED';
+  slot_room?: string | null;
+  batch_name?: string | null;
+}
+
+export interface ImportResult {
+  total_rows: number;
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
