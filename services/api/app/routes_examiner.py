@@ -79,13 +79,51 @@ def create_semester(body: s.SemesterIn, db: Session = Depends(get_db), user=Depe
 @router.get("/semesters/{semester_id}")
 def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     semester = by_id(db, Semester, semester_id)
+
+    # 1. Courses directly associated with this semester
+    direct_courses = db.scalars(select(Course).where(Course.semester_id == semester_id)).all()
+    # 2. Courses linked via sections
     sections = db.scalars(select(Section).where(Section.semester_id == semester_id)).all()
-    # Get unique courses from sections
-    course_ids = set(s.course_id for s in sections)
-    courses = [db.get(Course, cid) for cid in course_ids]
+    section_course_ids = set(s.course_id for s in sections)
+
+    course_map = {c.id: c for c in direct_courses}
+    for cid in section_course_ids:
+        if cid not in course_map:
+            c = db.get(Course, cid)
+            if c:
+                course_map[cid] = c
+
+    course_list = []
+    total_candidates = 0
+    total_batches = 0
+
+    for c in course_map.values():
+        cand_count = db.scalar(
+            select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == c.id)
+        ) or 0
+        batch_count = db.scalar(
+            select(func.count()).select_from(ExamBatch).join(Exam, Exam.id == ExamBatch.exam_id).where(Exam.course_id == c.id)
+        ) or 0
+        total_candidates += cand_count
+        total_batches += batch_count
+        course_list.append({
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "description": c.description,
+            "credits": c.credits if c.credits is not None else 3,
+            "department_code": c.department_code or "",
+            "status": c.status,
+            "candidate_count": cand_count,
+            "batch_count": batch_count,
+        })
+
     return {
         **data(semester, "name", "year", "term", "status", "start_date", "end_date"),
-        "courses": [data(c, "code", "name", "description", "status") for c in courses if c],
+        "course_count": len(course_list),
+        "total_candidates": total_candidates,
+        "total_batches": total_batches,
+        "courses": course_list,
     }
 
 
@@ -134,19 +172,36 @@ def list_semester_courses(semester_id: str, db: Session = Depends(get_db), user=
 @router.post("/semesters/{semester_id}/courses", status_code=201)
 def create_course_in_semester(
     semester_id: str,
-    body: s.CourseIn,
+    body: ex.CourseAddIn,
     db: Session = Depends(get_db),
     user=Depends(examiner),
 ):
-    """Create a new course in semester. Creates a default section."""
+    """Create a new course in semester from master course or manual entry."""
     by_id(db, Semester, semester_id)
+
+    if body.master_course_id:
+        master = by_id(db, MasterCourse, body.master_course_id)
+        code = master.code
+        name = master.name
+        description = master.description or ""
+        credits = master.credits
+        department_code = master.department_code
+    else:
+        if not body.code or not body.name:
+            fail(400, "MISSING_FIELDS", "Mã môn học và tên môn học là bắt buộc")
+        code = body.code.strip().upper()
+        name = body.name.strip()
+        description = (body.description or "").strip()
+        credits = body.credits or 3
+        department_code = (body.department_code or "").strip()
 
     course = Course(
         semester_id=semester_id,
-        name=body.name,
-        code=body.code,
-        description=body.description,
-        credits=body.credits,
+        name=name,
+        code=code,
+        description=description,
+        credits=credits,
+        department_code=department_code,
         teacher_id=body.teacher_id,
         owner_id=user.id,
         status="DRAFT",
@@ -159,8 +214,8 @@ def create_course_in_semester(
     section = Section(
         course_id=course.id,
         semester_id=semester_id,
-        name=f"{body.code} - Default",
-        code=body.code,
+        name=f"{code} - Default",
+        code=code,
         teacher_id=section_teacher_id,
         status="DRAFT",
     )
@@ -172,7 +227,12 @@ def create_course_in_semester(
     }))
     db.commit()
 
-    return {**data(course, "name", "code", "description", "status"), "semester_id": semester_id}
+    return {
+        **data(course, "name", "code", "description", "status"),
+        "credits": course.credits,
+        "department_code": course.department_code,
+        "semester_id": semester_id,
+    }
 
 
 @router.get("/courses")
@@ -919,6 +979,30 @@ def get_student_attempts(
 def list_master_courses(db: Session = Depends(get_db), user=Depends(examiner)):
     """List all master courses (university-wide course catalog)."""
     courses = db.scalars(select(MasterCourse).order_by(MasterCourse.code)).all()
+    if not courses:
+        defaults = [
+            ("MAS291", "Xác suất & Thống kê", "MATH", 3, "Xác suất ứng dụng và kiểm định thống kê"),
+            ("PRN211", "Lập trình ứng dụng .NET", "SE", 3, "Lập trình C#, kiến trúc phần mềm và ORM Entity Framework"),
+            ("SWE201c", "Nhập môn Kỹ thuật phần mềm", "SE", 3, "Quy trình phát triển phần mềm, phân tích yêu cầu và Agile"),
+            ("CSD201", "Cấu trúc dữ liệu & Giải thuật", "CS", 3, "Cấu trúc dữ liệu động, thuật toán đồ thị và tìm kiếm"),
+            ("CSI104", "Nhập môn Khoa học máy tính", "CS", 3, "Kiến trúc máy tính và nguyên lý tính toán"),
+            ("IOT102", "Internet vạn vật căn bản", "IOT", 3, "Nguyên lý IoT, cảm biến kết nối và nhúng vi xử lý"),
+        ]
+        now = datetime.now().timestamp()
+        for code, name, dept, credits_val, desc in defaults:
+            mc = MasterCourse(
+                id=f"mc_{code.lower()}",
+                code=code,
+                name=name,
+                department_code=dept,
+                credits=credits_val,
+                description=desc,
+                created_at=now,
+            )
+            db.add(mc)
+        db.commit()
+        courses = db.scalars(select(MasterCourse).order_by(MasterCourse.code)).all()
+
     return [
         {
             "id": c.id,

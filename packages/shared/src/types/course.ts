@@ -58,3 +58,12 @@ export interface Workspace {
   topics: Topic[];
   documents: Doc[];
 }
+
+export interface MasterCourse {
+  id: string;
+  code: string;
+  name: string;
+  department_code: string;
+  credits: number;
+  description?: string;
+}

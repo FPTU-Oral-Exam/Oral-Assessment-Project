@@ -80,7 +80,7 @@ def upgrade():
 
     # 4. Add batch_id and assigned_students_count to schedule_slots
     with op.batch_alter_table("schedule_slots", naming_convention=naming_convention) as batch:
-        batch.add_column(sa.Column("batch_id", sa.String(36), sa.ForeignKey("exam_batches.id", ondelete="CASCADE"), nullable=True))
+        batch.add_column(sa.Column("batch_id", sa.String(36), sa.ForeignKey("exam_batches.id", ondelete="CASCADE", name="fk_schedule_slots_batch_id"), nullable=True))
         batch.add_column(sa.Column("assigned_students_count", sa.Integer(), nullable=False, server_default="0"))
 
     # 5. Add department_code to courses and make owner_id nullable

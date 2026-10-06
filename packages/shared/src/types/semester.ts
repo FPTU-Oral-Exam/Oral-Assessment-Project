@@ -34,3 +34,21 @@ export interface StudentEnrollment {
   status: "PENDING" | "ACTIVE" | "DROPPED";
   enrolled_at: number;
 }
+
+export interface CourseBasic {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  credits: number;
+  department_code: string;
+  status: string;
+  candidate_count?: number;
+  batch_count?: number;
+}
+
+export interface SemesterDetail extends Semester {
+  courses: CourseBasic[];
+  total_candidates: number;
+  total_batches: number;
+}

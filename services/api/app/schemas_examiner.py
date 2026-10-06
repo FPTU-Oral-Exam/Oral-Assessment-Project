@@ -58,6 +58,7 @@ class CourseAddIn(BaseModel):
     name: Optional[str] = None
     credits: int = 3
     description: Optional[str] = None
+    teacher_id: Optional[str] = None
 
 
 class CourseDetailOut(BaseModel):

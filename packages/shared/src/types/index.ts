@@ -20,6 +20,7 @@ export type {
 export type {
   Course,
   CourseDetail,
+  MasterCourse,
   LearningOutcome,
   Topic,
   Doc,
@@ -35,6 +36,8 @@ export type {
 } from "./assessment";
 export type {
   Semester,
+  SemesterDetail,
+  CourseBasic,
   Section,
   StudentEnrollment,
 } from "./semester";
