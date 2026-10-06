@@ -25,6 +25,7 @@ from .models import (
     CourseEnrollment,
     Document,
     Exam,
+    ExamBatch,
     ExamEnrollment,
     ExamSession,
     LearningOutcome,
@@ -750,7 +751,17 @@ def results(db: Session = Depends(get_db), user=Depends(staff)):
     )
     if user.role == "TEACHER":
         query = query.join(Course, Course.id == Exam.course_id).where(
-            or_(Course.owner_id == user.id, Course.code == "ORAL-PRACTICE")
+            or_(
+                Course.owner_id == user.id,
+                Course.teacher_id == user.id,
+                Exam.id.in_(
+                    select(ExamBatch.exam_id).where(ExamBatch.assigned_teacher_id == user.id)
+                ),
+                Course.id.in_(
+                    select(Section.course_id).where(Section.teacher_id == user.id)
+                ),
+                Course.code == "ORAL-PRACTICE",
+            )
         )
     return [
         history_row(session)
