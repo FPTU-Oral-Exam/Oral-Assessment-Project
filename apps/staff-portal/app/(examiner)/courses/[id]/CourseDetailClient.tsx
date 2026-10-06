@@ -13,12 +13,16 @@ import {
   GraduationCap,
   Sparkles,
   FileSpreadsheet,
+  UserCheck,
+  CalendarDays,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import SectionsTab from './sections/SectionsClient';
 import EnrollmentsTab from './enrollments/EnrollmentsClient';
 import ExamsTab from './exams/ExamListClient';
+import CandidatesTab from './candidates/CandidatesClient';
+import BatchesTab from './batches/BatchesClient';
 import CourseWorkspaceClient from '@/app/(teacher)/courses/[id]/CourseWorkspaceClient';
 
 interface CourseDetail {
@@ -32,14 +36,14 @@ interface CourseDetail {
   section_count: number;
 }
 
-type TabType = 'sections' | 'enrollments' | 'exams' | 'results' | 'workspace';
+type TabType = 'sections' | 'enrollments' | 'candidates' | 'batches' | 'results' | 'workspace';
 
 export default function CourseDetailClient({ courseId }: { courseId: string }) {
   const router = useRouter();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('sections');
+  const [activeTab, setActiveTab] = useState<TabType>('candidates');
 
   const fetchCourse = useCallback(async () => {
     try {
@@ -87,9 +91,10 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
   }
 
   const tabs = [
+    { id: 'candidates' as TabType, label: 'Danh sách dự thi', icon: UserCheck },
+    { id: 'batches' as TabType, label: 'Đợt thi & Phân bổ', icon: CalendarDays },
     { id: 'sections' as TabType, label: 'Lớp học phần', icon: Users },
-    { id: 'enrollments' as TabType, label: 'Danh sách sinh viên', icon: GraduationCap },
-    { id: 'exams' as TabType, label: 'Đề thi & Ca thi', icon: BookOpen },
+    { id: 'enrollments' as TabType, label: 'Đăng ký SV', icon: GraduationCap },
     { id: 'results' as TabType, label: 'Kết quả', icon: BarChart3 },
     { id: 'workspace' as TabType, label: 'Học liệu & RAG', icon: Sparkles },
   ];
@@ -156,9 +161,10 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
 
       {/* Tab Content */}
       <div>
+        {activeTab === 'candidates' && <CandidatesTab courseId={courseId} />}
+        {activeTab === 'batches' && <BatchesTab courseId={courseId} />}
         {activeTab === 'sections' && <SectionsTab courseId={courseId} />}
         {activeTab === 'enrollments' && <EnrollmentsTab courseId={courseId} />}
-        {activeTab === 'exams' && <ExamsTab courseId={courseId} />}
         {activeTab === 'results' && <ResultsTab courseId={courseId} />}
         {activeTab === 'workspace' && <CourseWorkspaceClient courseId={courseId} />}
       </div>

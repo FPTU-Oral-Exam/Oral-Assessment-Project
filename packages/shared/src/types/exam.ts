@@ -27,6 +27,37 @@ export interface ExamDetail extends Exam {
   slot_count: number;
 }
 
+export interface ExamBatch {
+  batch_id: string;
+  name: string;
+  date: number;
+  start_time: string;
+  end_time: string;
+  assigned_teacher_id: string;
+  total_assigned: number;
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED';
+  rooms: Array<{
+    room: string;
+    assigned_count: number;
+  }>;
+}
+
+export interface AllocationResult {
+  batch_id: string;
+  name: string;
+  date: number;
+  start_time: string;
+  end_time: string;
+  assigned_teacher_id: string;
+  total_assigned: number;
+  status: string;
+  rooms: Array<{
+    room: string;
+    assigned_count: number;
+  }>;
+  remaining_unassigned: number;
+}
+
 export interface Exam {
   id: string;
   course_id: string;
