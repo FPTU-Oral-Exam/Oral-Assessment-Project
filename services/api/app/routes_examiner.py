@@ -256,15 +256,31 @@ def list_all_courses(db: Session = Depends(get_db), user=Depends(examiner)):
 
 @router.get("/courses/{course_id}")
 def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
-    """Get course detail with sections count."""
+    """Get course detail with sections count and candidate pool statistics."""
     course = by_id(db, Course, course_id)
     teacher = db.get(User, course.teacher_id) if course.teacher_id else None
     sections = db.scalars(select(Section).where(Section.course_id == course_id)).all()
+
+    total = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id)) or 0
+    eligible = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.eligibility_status == 'ELIGIBLE')) or 0
+    disqualified = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.eligibility_status == 'DISQUALIFIED')) or 0
+    assigned = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.allocation_status == 'ASSIGNED')) or 0
+    unassigned = db.scalar(select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id, CourseCandidate.eligibility_status == 'ELIGIBLE', CourseCandidate.allocation_status == 'UNASSIGNED')) or 0
+
     return {
         **data(course, "name", "code", "description", "status"),
+        "credits": course.credits,
+        "department_code": course.department_code,
         "semester_id": course.semester_id,
         "teacher": public_user(teacher) if teacher else None,
         "section_count": len(sections),
+        "stats": {
+            "total": total,
+            "eligible": eligible,
+            "disqualified": disqualified,
+            "assigned": assigned,
+            "unassigned": unassigned,
+        },
     }
 
 
@@ -1287,16 +1303,26 @@ def create_batch_and_allocate(
     db.add(batch)
     db.flush()
 
+    # Current max slot_number for this exam
+    current_max_slot = db.scalar(
+        select(func.max(ScheduleSlot.slot_number)).where(ScheduleSlot.exam_id == exam.id)
+    ) or 0
+
     # Create ScheduleSlots for each room
     slot_objects = []
-    for room in rooms:
+    for r_idx, room in enumerate(rooms):
         slot = ScheduleSlot(
             id=f"slt_{uuid4().hex[:8]}",
             batch_id=batch.id,
             exam_id=exam.id,
+            slot_number=current_max_slot + r_idx + 1,
+            date=body.date,
+            start_time=body.start_time,
+            end_time=body.end_time,
             room=room,
             max_students=max_per_room,
             assigned_students_count=0,
+            status="SCHEDULED",
         )
         db.add(slot)
         slot_objects.append(slot)

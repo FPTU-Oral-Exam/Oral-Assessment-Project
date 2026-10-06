@@ -362,6 +362,7 @@ class CourseCandidate(Entity, Base):
     eligibility_status: Mapped[str] = mapped_column(String(20), default="ELIGIBLE")  # ELIGIBLE, DISQUALIFIED
     allocation_status: Mapped[str] = mapped_column(String(20), default="UNASSIGNED")  # UNASSIGNED, ASSIGNED
     assigned_slot_id: Mapped[str | None] = mapped_column(ForeignKey("schedule_slots.id", ondelete="SET NULL"))
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 class ExamBatch(Entity, Base):
@@ -375,4 +376,5 @@ class ExamBatch(Entity, Base):
     assigned_teacher_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     total_assigned: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="SCHEDULED")  # SCHEDULED, IN_PROGRESS, COMPLETED
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
