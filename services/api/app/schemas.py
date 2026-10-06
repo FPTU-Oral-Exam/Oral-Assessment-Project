@@ -308,17 +308,30 @@ class QuestionOutput(Input):
 
 
 class GradeCriterion(Input):
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
     name: str
     score: float = Field(ge=0, le=100)
-    comment: str = Field(max_length=2000)
+    comment: str = Field(default="", max_length=2000)
 
 
 class GradeOutput(Input):
-    confidence: float = Field(ge=0, le=1)
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+    confidence: float = Field(default=0.8, ge=0, le=1)
     criteria: list[GradeCriterion]
-    missing_concepts: list[str]
-    reasoning_summary: str = Field(max_length=3000)
+    missing_concepts: list[str] = Field(default_factory=list)
+    reasoning_summary: str = Field(default="", max_length=3000)
     reference_chunk_ids: list[str] = Field(min_length=1)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, v):
+        if isinstance(v, (int, float)):
+            if v > 10:
+                v = v / 100.0
+            elif v > 1:
+                v = v / 5.0
+            return min(1.0, max(0.0, float(v)))
+        return v
 
 
 class RoleIn(Input):

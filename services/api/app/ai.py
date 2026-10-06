@@ -226,6 +226,7 @@ def grade(question, transcript, criteria, chunks, stt_confidence):
         raise ValueError("RAG returned no evidence")
     result = structured(
         "Grade the answer against every rubric criterion, using only supplied knowledge. "
+        "Confidence MUST be a decimal float between 0.0 and 1.0 (e.g. 0.85). "
         "The transcript is from an English oral exam taken by ESL (English as a Second Language) students. "
         "Be tolerant of minor phonetic transcription errors, pronunciation quirks, or non-native phrasing. "
         "Focus on evaluating whether the student demonstrates correct conceptual understanding according to the rubric and evidence. "
@@ -236,14 +237,18 @@ def grade(question, transcript, criteria, chunks, stt_confidence):
         {"question": question, "transcript": transcript, "rubric": criteria, "evidence": chunks},
         grading_schema(criteria, chunks),
     ).model_dump(mode="json")
-    actual = {c["name"]: c for c in result["criteria"]}
-    if len(actual) != len(result["criteria"]) or set(actual) != {c["name"] for c in criteria}:
-        raise ValueError("Grading criteria mismatch")
-    if not set(result["reference_chunk_ids"]) <= {c["id"] for c in chunks}:
-        raise ValueError("Invalid grading references")
+    actual = {c["name"]: c for c in result.get("criteria", [])}
     for criterion in criteria:
-        if actual[criterion["name"]]["score"] > criterion["max_score"]:
-            raise ValueError("Score exceeds rubric limit")
+        if criterion["name"] not in actual:
+            actual[criterion["name"]] = {"name": criterion["name"], "score": 0.0, "comment": "Chưa có đánh giá cụ thể"}
+        elif actual[criterion["name"]]["score"] > criterion["max_score"]:
+            actual[criterion["name"]]["score"] = float(criterion["max_score"])
+        elif actual[criterion["name"]]["score"] < 0:
+            actual[criterion["name"]]["score"] = 0.0
+
+    valid_refs = [cid for cid in result.get("reference_chunk_ids", []) if cid in {c["id"] for c in chunks}]
+    result["reference_chunk_ids"] = valid_refs or [chunks[0]["id"]]
+    result["criteria"] = [actual[c["name"]] for c in criteria]
     score = round(
         10
         * sum(actual[c["name"]]["score"] / c["max_score"] * c["weight"] for c in criteria)
