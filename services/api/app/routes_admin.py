@@ -72,9 +72,11 @@ def dashboard(db: Session = Depends(get_db), user=Depends(staff)):
 
 
 @router.get("/users")
-def users(db: Session = Depends(get_db), user=Depends(staff)):
+def users(role: str | None = None, db: Session = Depends(get_db), user=Depends(staff)):
     query = select(User).order_by(User.created_at.desc())
-    if user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER"}:
+    if role:
+        query = query.where(User.role == role)
+    elif user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER"}:
         query = query.where(User.role == "STUDENT")
     return [public_user(u) for u in db.scalars(query)]
 
@@ -90,7 +92,7 @@ def create_user(body: s.UserIn, db: Session = Depends(get_db), user=Depends(admi
 
 @router.get("/courses")
 def courses(db: Session = Depends(get_db), user=Depends(staff)):
-    return [data(c, "code", "name", "description", "status", "owner_id") for c in course_list(db, user)]
+    return [data(c, "code", "name", "description", "status", "owner_id", "teacher_id") for c in course_list(db, user)]
 
 
 @router.post("/courses", status_code=201)

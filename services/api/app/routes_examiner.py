@@ -420,12 +420,16 @@ def create_exam(
 
     course_access(db, course_id, user)
 
-    # Check if exam already exists for this course (1 exam per course)
-    existing = db.scalar(
-        select(Exam).where(Exam.course_id == course_id, Exam.deleted_at.is_(None))
+    # Check if exam with the same name already exists in this course
+    existing_same_name = db.scalar(
+        select(Exam).where(
+            Exam.course_id == course_id,
+            Exam.name == body.name.strip(),
+            Exam.deleted_at.is_(None)
+        )
     )
-    if existing:
-        fail(409, "EXAM_EXISTS", "Mỗi môn chỉ được tạo 1 kỳ thi")
+    if existing_same_name:
+        fail(409, "EXAM_NAME_EXISTS", f"Kỳ thi '{body.name.strip()}' đã tồn tại trong môn học này")
 
     exam = Exam(
         course_id=course_id,

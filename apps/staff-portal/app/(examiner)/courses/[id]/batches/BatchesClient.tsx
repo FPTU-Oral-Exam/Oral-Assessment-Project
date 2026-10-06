@@ -65,6 +65,16 @@ export default function BatchesClient({ courseId }: { courseId: string }) {
     assigned_teacher_id: '',
   });
 
+  // Create exam modal
+  const [showCreateExamModal, setShowCreateExamModal] = useState(false);
+  const [creatingExam, setCreatingExam] = useState(false);
+  const [examFormData, setExamFormData] = useState({
+    name: 'Thi Vấn Đáp Cuối Kỳ',
+    description: 'Kỳ thi vấn đáp AI tự động',
+    time_limit: 30,
+    question_count: 3,
+  });
+
   // Fetch exams
   const fetchExams = useCallback(async () => {
     try {
@@ -82,6 +92,41 @@ export default function BatchesClient({ courseId }: { courseId: string }) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách đề thi');
     }
   }, [courseId, selectedExamId]);
+
+  // Create exam for course
+  const handleCreateExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingExam(true);
+    try {
+      const res = await fetch(`/api/examiner/courses/${courseId}/exams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(examFormData),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Tạo đề thi thất bại' }));
+        throw new Error(err.detail || err.message || 'Tạo đề thi thất bại');
+      }
+      const newExam = await res.json();
+      toast.success(`Đã tạo đề thi "${newExam.name || examFormData.name}"`);
+      setShowCreateExamModal(false);
+      setExamFormData({
+        name: 'Thi Vấn Đáp Cuối Kỳ',
+        description: 'Kỳ thi vấn đáp AI tự động',
+        time_limit: 30,
+        question_count: 3,
+      });
+      await fetchExams();
+      if (newExam.id) {
+        setSelectedExamId(newExam.id);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Tạo đề thi thất bại');
+    } finally {
+      setCreatingExam(false);
+    }
+  };
 
   // Fetch batches for selected exam
   const fetchBatches = useCallback(async (examId: string) => {
@@ -281,17 +326,31 @@ export default function BatchesClient({ courseId }: { courseId: string }) {
 
         <div className="flex-shrink-0">
           {exams.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowCreateExamModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+                title="Tạo thêm đề thi khác cho môn học"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Đề thi mới
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xs transition"
+              >
+                <Plus className="w-4 h-4" />
+                Tạo đợt thi mới
+              </button>
+            </div>
+          ) : (
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => setShowCreateExamModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xs transition"
             >
               <Plus className="w-4 h-4" />
-              Tạo đợt thi mới
+              Tạo đề thi mới
             </button>
-          ) : (
-            <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
-              Cần tạo đề thi trước khi tạo đợt thi
-            </div>
           )}
         </div>
       </div>
@@ -317,8 +376,15 @@ export default function BatchesClient({ courseId }: { courseId: string }) {
           </div>
           <h3 className="text-lg font-bold text-slate-800">Môn học chưa có đề thi</h3>
           <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-            Vui lòng tạo đề thi cho môn học trước khi thiết lập các đợt thi và phân bổ thí sinh.
+            Mỗi đợt thi cần gắn liền với một đề thi/kỳ thi cụ thể. Hãy tạo đề thi cho môn học để bắt đầu thiết lập các ca thi và phân bổ thí sinh tự động.
           </p>
+          <button
+            onClick={() => setShowCreateExamModal(true)}
+            className="mt-6 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            Tạo đề thi ngay
+          </button>
         </div>
       )}
 
@@ -652,6 +718,109 @@ export default function BatchesClient({ courseId }: { courseId: string }) {
                 >
                   {creating && <Loader2 className="w-4 h-4 animate-spin" />}
                   {creating ? 'Đang tạo...' : 'Tạo & Phân bổ tự động'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Exam Modal */}
+      {showCreateExamModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Tạo Đề thi / Kỳ thi mới</h3>
+                  <p className="text-xs text-slate-500">Thiết lập cấu hình bài thi vấn đáp cho môn học</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateExamModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateExam} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Tên kỳ thi / Đề thi <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={examFormData.name}
+                  onChange={(e) => setExamFormData({ ...examFormData, name: e.target.value })}
+                  placeholder="VD: Thi Vấn Đáp Cuối Kỳ - Final Exam"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Mô tả bài thi
+                </label>
+                <textarea
+                  value={examFormData.description}
+                  onChange={(e) => setExamFormData({ ...examFormData, description: e.target.value })}
+                  rows={2}
+                  placeholder="Mô tả nội dung, phạm vi kiến thức thi..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                    Thời lượng (phút) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={examFormData.time_limit}
+                    onChange={(e) => setExamFormData({ ...examFormData, time_limit: parseInt(e.target.value, 10) || 30 })}
+                    min={5}
+                    max={180}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                    Số câu hỏi <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={examFormData.question_count}
+                    onChange={(e) => setExamFormData({ ...examFormData, question_count: parseInt(e.target.value, 10) || 3 })}
+                    min={1}
+                    max={20}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateExamModal(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingExam || !examFormData.name.trim()}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-xs transition disabled:opacity-50"
+                >
+                  {creatingExam && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {creatingExam ? 'Đang tạo...' : 'Tạo đề thi'}
                 </button>
               </div>
             </form>

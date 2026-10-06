@@ -53,11 +53,11 @@ dependencies = [
 
 Tuân thủ PEP 8 với các exceptions sau:
 
-| Rule | Setting |
-|------|---------|
-| **Line length** | 110 characters (via Ruff) |
+| Rule                   | Setting                        |
+| ---------------------- | ------------------------------ |
+| **Line length**  | 110 characters (via Ruff)      |
 | **Import order** | stdlib → third-party → local |
-| **Docstrings** | Google style |
+| **Docstrings**   | Google style                   |
 
 ### 3.2 Import Organization
 

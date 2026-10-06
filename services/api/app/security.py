@@ -109,7 +109,7 @@ def course_access(db, course_id, user):
         fail(404, "NOT_FOUND", "Không tìm thấy môn học")
     if (
         user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER"}
-        and course.owner_id != user.id
+        and user.id not in {course.owner_id, course.teacher_id}
         and course.code != "ORAL-PRACTICE"
     ):
         fail(403, "FORBIDDEN", "Bạn không phụ trách môn học này")

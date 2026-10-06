@@ -4,7 +4,8 @@
   "description": "OralAI Student Desktop App - Thin Client for Oral Exams",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --mode web",
+    "dev:electron": "vite",
     "build": "tsc && vite build",
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder --win --x64",
