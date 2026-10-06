@@ -4,7 +4,6 @@ import { useState } from 'react';
 import {
   ClipboardList,
   Plus,
-  Send,
   Eye,
   Trash2,
   Lock,
@@ -13,13 +12,12 @@ import {
   Award,
   Layers,
   ShieldCheck,
-  Languages,
+  CheckCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { RubricItem } from './RubricsPanel';
 import ExamBlueprintModal from './ExamBlueprintModal';
 import ExamEditorModal, { ExamItem } from './ExamEditorModal';
-import AssignExamModal from './AssignExamModal';
 
 interface ExamsPanelProps {
   courseId: string;
@@ -29,6 +27,12 @@ interface ExamsPanelProps {
   onRefresh: () => Promise<void>;
 }
 
+export const formatTimeLimit = (limit?: number) => {
+  if (!limit) return 'Không giới hạn';
+  if (limit <= 180) return `${limit} phút`;
+  return `${Math.round(limit / 60)} phút`;
+};
+
 export default function ExamsPanel({
   courseId,
   exams,
@@ -37,8 +41,8 @@ export default function ExamsPanel({
   onRefresh,
 }: ExamsPanelProps) {
   const [isBlueprintModalOpen, setIsBlueprintModalOpen] = useState(false);
+  const [selectedExamForBlueprint, setSelectedExamForBlueprint] = useState<ExamItem | null>(null);
   const [selectedExamForDetail, setSelectedExamForDetail] = useState<ExamItem | null>(null);
-  const [selectedExamForAssign, setSelectedExamForAssign] = useState<ExamItem | null>(null);
 
   const topicsMap = topics.reduce((acc, t) => {
     acc[t.id] = t.name;
@@ -49,6 +53,19 @@ export default function ExamsPanel({
     acc[r.id] = r.name;
     return acc;
   }, {} as Record<string, string>);
+
+  const handleOpenBlueprintModal = (target?: ExamItem | null) => {
+    if (target) {
+      setSelectedExamForBlueprint(target);
+    } else {
+      // Nếu có kỳ thi DRAFT chưa cấu hình ma trận từ Khảo thí, tự động gợi ý kỳ thi đó
+      const unconfiguredDraft = exams.find(
+        (e) => e.status === 'DRAFT' && (!e.blueprint || e.blueprint.length === 0)
+      );
+      setSelectedExamForBlueprint(unconfiguredDraft || null);
+    }
+    setIsBlueprintModalOpen(true);
+  };
 
   const handleDeleteDraftExam = async (examId: string, examName: string) => {
     if (!confirm(`Bạn có chắc chắn muốn xóa bài thi nháp "${examName}"?`)) {
@@ -76,17 +93,17 @@ export default function ExamsPanel({
             </div>
             <div>
               <h2 className="text-xl font-bold text-slate-800">
-                Bài thi vấn đáp & Giao bài ({exams.length})
+                Soạn đề thi & Ngân hàng câu hỏi ({exams.length})
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Thiết kế khung ma trận đề thi (Blueprint), kích hoạt AI RAG sinh câu hỏi, duyệt thuật ngữ và giao bài cho thí sinh.
+                Thiết kế khung ma trận đề thi (Blueprint), kích hoạt AI RAG sinh câu hỏi, duyệt thuật ngữ chuyên ngành và hoàn thiện đề thi cho khảo thí.
               </p>
             </div>
           </div>
         </div>
 
         <button
-          onClick={() => setIsBlueprintModalOpen(true)}
+          onClick={() => handleOpenBlueprintModal(null)}
           className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 text-white font-bold text-xs rounded-xl hover:bg-amber-700 transition-all shadow-sm"
         >
           <Plus className="w-4 h-4" />
@@ -98,7 +115,7 @@ export default function ExamsPanel({
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-start gap-3">
         <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
         <div className="text-xs text-slate-700 leading-relaxed">
-          <strong>Nguyên tắc Khảo thí Thầy Phuonglhk (BR-023a & BR-023b):</strong> Giảng viên soạn đề thi nháp từ các chủ đề kiến thức. Khi bấm công bố, đề thi sẽ được AI sinh câu hỏi, đóng băng bất biến snapshot và chuyển vào ngân hàng đề thi. Giảng viên không được tự ý sửa câu hỏi đã công bố.
+          <strong>Nguyên tắc Khảo thí Thầy Phuonglhk (BR-023a & BR-023b):</strong> Giảng viên soạn đề thi nháp từ các chủ đề kiến thức theo số lượng câu hỏi và thời gian mà Khảo thí đã giao. Khi bấm công bố, đề thi sẽ được AI sinh câu hỏi, đóng băng bất biến snapshot và chuyển vào ngân hàng đề thi.
         </div>
       </div>
 
@@ -111,7 +128,7 @@ export default function ExamsPanel({
             Sau khi hoàn tất kho kiến thức (Giáo trình & Chủ đề) và Rubric, bạn có thể tạo đề thi vấn đáp được AI hỗ trợ sinh câu hỏi.
           </p>
           <button
-            onClick={() => setIsBlueprintModalOpen(true)}
+            onClick={() => handleOpenBlueprintModal(null)}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -123,6 +140,10 @@ export default function ExamsPanel({
           {exams.map((exam) => {
             const isPublished = exam.status === 'PUBLISHED';
             const questions = exam.questions || [];
+            const hasBlueprint = Boolean(exam.blueprint && exam.blueprint.length > 0);
+            const blueprintTotal = hasBlueprint
+              ? exam.blueprint!.reduce((sum, r) => sum + r.count, 0)
+              : 0;
 
             return (
               <div
@@ -170,7 +191,7 @@ export default function ExamsPanel({
                   <div className="flex items-center gap-1.5 text-slate-600">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
                     <span>
-                      Thời lượng: {exam.time_limit ? `${Math.round(exam.time_limit / 60)} phút` : 'Không giới hạn'}
+                      Thời lượng: {formatTimeLimit(exam.time_limit)}
                     </span>
                   </div>
 
@@ -179,10 +200,30 @@ export default function ExamsPanel({
                     <span>
                       {isPublished
                         ? `${questions.length} câu đã sinh`
-                        : `${exam.blueprint?.reduce((sum, r) => sum + r.count, 0) || 0} câu Blueprint`}
+                        : hasBlueprint
+                        ? `${blueprintTotal} câu Blueprint (${exam.question_count || blueprintTotal} câu chỉ tiêu)`
+                        : `Chưa lập ma trận (${exam.question_count || 3} câu Khảo thí)`}
                     </span>
                   </div>
                 </div>
+
+                {/* Unconfigured Blueprint Callout */}
+                {!isPublished && !hasBlueprint && (
+                  <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                    <div className="flex items-center gap-2 text-amber-900">
+                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>
+                        Khảo thí giao: <strong>{exam.question_count || 3} câu</strong> ({formatTimeLimit(exam.time_limit)}). Chưa soạn ma trận.
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleOpenBlueprintModal(exam)}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition-colors shrink-0 shadow-sm text-center"
+                    >
+                      Soạn ma trận ngay
+                    </button>
+                  </div>
+                )}
 
                 {/* Question Preview or English terms hint */}
                 {isPublished && questions.length > 0 && (
@@ -203,23 +244,50 @@ export default function ExamsPanel({
 
                 {/* Actions Bar */}
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => setSelectedExamForDetail(exam)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>{isPublished ? 'Xem đề & thuật ngữ' : 'Xem & Kích hoạt AI'}</span>
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isPublished ? (
+                      <button
+                        onClick={() => setSelectedExamForDetail(exam)}
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Xem đề & thuật ngữ</span>
+                      </button>
+                    ) : hasBlueprint ? (
+                      <>
+                        <button
+                          onClick={() => setSelectedExamForDetail(exam)}
+                          className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Xem & Kích hoạt AI</span>
+                        </button>
+                        <button
+                          onClick={() => handleOpenBlueprintModal(exam)}
+                          className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                          title="Chỉnh sửa ma trận phân bổ câu hỏi"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Sửa ma trận</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleOpenBlueprintModal(exam)}
+                        className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Thiết lập Ma trận Đề (Blueprint)</span>
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5">
                     {isPublished ? (
-                      <button
-                        onClick={() => setSelectedExamForAssign(exam)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
-                      >
-                        <Send className="w-3 h-3" />
-                        <span>Giao bài</span>
-                      </button>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                        Sẵn sàng khảo thí
+                      </span>
                     ) : (
                       <button
                         onClick={() => handleDeleteDraftExam(exam.id, exam.name)}
@@ -243,7 +311,11 @@ export default function ExamsPanel({
           courseId={courseId}
           rubrics={rubrics}
           topics={topics}
-          onClose={() => setIsBlueprintModalOpen(false)}
+          targetExam={selectedExamForBlueprint}
+          onClose={() => {
+            setIsBlueprintModalOpen(false);
+            setSelectedExamForBlueprint(null);
+          }}
           onSuccess={onRefresh}
         />
       )}
@@ -257,17 +329,6 @@ export default function ExamsPanel({
           topicsMap={topicsMap}
           onClose={() => setSelectedExamForDetail(null)}
           onRefresh={onRefresh}
-        />
-      )}
-
-      {/* Quick Assign Modal */}
-      {selectedExamForAssign && (
-        <AssignExamModal
-          courseId={courseId}
-          examId={selectedExamForAssign.id}
-          examName={selectedExamForAssign.name}
-          onClose={() => setSelectedExamForAssign(null)}
-          onSuccess={onRefresh}
         />
       )}
     </div>

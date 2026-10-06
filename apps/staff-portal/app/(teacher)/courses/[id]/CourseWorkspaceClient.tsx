@@ -47,11 +47,13 @@ export interface ExamItem {
   id: string;
   name: string;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
-  blueprint?: Array<{ topic_id: string; easy: number; medium: number; hard: number }>;
+  blueprint?: Array<{ topic_id: string; difficulty: string; count: number }>;
   time_limit?: number;
+  question_count?: number;
   rubric_id?: string;
   max_attempts?: number;
   questions?: Array<{ text: string; english_terms?: Array<{ term: string; meaning: string }> }>;
+  snapshot?: any;
 }
 
 export interface WorkspaceResponse {
@@ -80,7 +82,7 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
   const [error, setError] = useState<string | null>(null);
 
   // Tab state
-  const [mainTab, setMainTab] = useState<'knowledge' | 'rubric' | 'exams' | 'students'>('knowledge');
+  const [mainTab, setMainTab] = useState<'knowledge' | 'rubric' | 'exams'>('knowledge');
   const [knowledgeSubTab, setKnowledgeSubTab] = useState<'textbook' | 'outcomes' | 'topics' | 'rag'>('textbook');
 
   // Load Course and Workspace Data
@@ -207,10 +209,16 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
                 className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
                   course?.status === 'ACTIVE'
                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : course?.status === 'DRAFT'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
                     : 'bg-slate-100 text-slate-600 border border-slate-200'
                 }`}
               >
-                {course?.status === 'ACTIVE' ? 'Đang hoạt động' : 'Lưu trữ'}
+                {course?.status === 'ACTIVE'
+                  ? 'Đang hoạt động'
+                  : course?.status === 'DRAFT'
+                  ? 'Đang chuẩn bị'
+                  : 'Lưu trữ'}
               </span>
               {isTextbookReady ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
@@ -306,22 +314,10 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
           }`}
         >
           <ClipboardList className="w-4 h-4" />
-          <span>03 · Bài thi & Giao bài</span>
+          <span>03 · Soạn đề thi</span>
           <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
             {workspace.exams.length}
           </span>
-        </button>
-
-        <button
-          onClick={() => setMainTab('students')}
-          className={`flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
-            mainTab === 'students'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>04 · Thí sinh dự thi</span>
         </button>
       </div>
 
@@ -447,11 +443,6 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
           topics={workspace.topics.map((t) => ({ id: t.id, name: t.name }))}
           onRefresh={() => loadData(true)}
         />
-      )}
-
-      {/* Main Tab 4: Thí sinh dự thi (Read-only từ Khảo thí) */}
-      {mainTab === 'students' && (
-        <CandidateRosterPanel courseId={courseId} />
       )}
     </div>
   );
