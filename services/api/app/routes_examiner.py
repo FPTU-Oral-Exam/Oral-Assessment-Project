@@ -6,14 +6,20 @@ from sqlalchemy.orm import Session
 
 from . import schemas as s
 from .db import get_db
+from datetime import datetime
+from uuid import uuid4
+from . import schemas_examiner as ex
 from .models import (
     Audit,
     Attempt,
     Course,
+    CourseCandidate,
     Exam,
+    ExamBatch,
     ExamEnrollment,
     ExamSession,
     ExamVariant,
+    MasterCourse,
     ReEvaluation,
     ScheduleSlot,
     Section,
@@ -22,7 +28,7 @@ from .models import (
     Upload,
     User,
 )
-from .security import by_id, course_access, examiner, fail, public_user
+from .security import by_id, course_access, examiner, fail, public_user, hasher
 
 router = APIRouter()
 
@@ -897,5 +903,418 @@ def get_student_attempts(
             "status": attempt.status,
             "audio_url": audio_url,
         })
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NEW: Candidate Pool & Auto-Allocation Endpoints (Task 3)
+# ═══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────
+# Master Courses endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/master-courses")
+def list_master_courses(db: Session = Depends(get_db), user=Depends(examiner)):
+    """List all master courses (university-wide course catalog)."""
+    courses = db.scalars(select(MasterCourse).order_by(MasterCourse.code)).all()
+    return [
+        {
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "department_code": c.department_code,
+            "credits": c.credits,
+            "description": c.description,
+        }
+        for c in courses
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────
+# Course Candidates (Candidate Pool) endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.post("/courses/{course_id}/candidates/import", status_code=200)
+async def import_candidates(
+    course_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Import candidates from Excel file. Auto-creates STUDENT accounts."""
+    import openpyxl
+
+    by_id(db, Course, course_id)
+
+    if not file.filename.endswith('.xlsx'):
+        fail(400, "INVALID_FILE", "Chỉ hỗ trợ file .xlsx")
+
+    contents = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(contents))
+    ws = wb.active
+
+    headers = [cell.value for cell in ws[1]]
+    required = ['MSSV', 'Họ và tên', 'Trạng thái đủ điều kiện']
+    for col in required:
+        if col not in headers:
+            fail(400, "MISSING_COLUMNS", f"Thiếu cột bắt buộc: {col}")
+
+    mssv_idx = headers.index('MSSV')
+    name_idx = headers.index('Họ và tên')
+    status_idx = headers.index('Trạng thái đủ điều kiện')
+
+    imported = 0
+    skipped = 0
+    errors = []
+    now = datetime.now().timestamp()
+
+    for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not row[0]:
+            continue
+
+        roll_number = str(row[mssv_idx]).strip()
+        full_name = str(row[name_idx]).strip()
+        status_raw = str(row[status_idx]).strip().upper()
+
+        eligibility = 'ELIGIBLE' if 'ĐỦ' in status_raw or 'ELIGIBLE' in status_raw else 'DISQUALIFIED'
+
+        # Auto-create student user if not exists
+        existing_user = db.scalar(
+            select(User).where(User.username == roll_number)
+        )
+        if not existing_user:
+            existing_user = User(
+                username=roll_number,
+                email=f"{roll_number}@student.edu.vn",
+                name=full_name,
+                password_hash=hasher.hash(roll_number),
+                role="STUDENT",
+                status="ACTIVE",
+            )
+            db.add(existing_user)
+            db.flush()
+
+        # Check if candidate already exists
+        existing = db.scalar(
+            select(CourseCandidate).where(
+                CourseCandidate.course_id == course_id,
+                CourseCandidate.roll_number == roll_number
+            )
+        )
+        if existing:
+            skipped += 1
+            continue
+
+        candidate = CourseCandidate(
+            course_id=course_id,
+            student_id=existing_user.id,
+            roll_number=roll_number,
+            full_name=full_name,
+            eligibility_status=eligibility,
+            allocation_status='UNASSIGNED',
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(candidate)
+        imported += 1
+
+    db.commit()
+
+    return {
+        "total_rows": imported + skipped,
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors
+    }
+
+
+@router.get("/courses/{course_id}/candidates")
+def list_candidates(
+    course_id: str,
+    eligibility_status: str = None,
+    allocation_status: str = None,
+    search: str = None,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List candidates with optional filters."""
+    query = select(CourseCandidate).where(CourseCandidate.course_id == course_id)
+
+    if eligibility_status:
+        query = query.where(CourseCandidate.eligibility_status == eligibility_status)
+    if allocation_status:
+        query = query.where(CourseCandidate.allocation_status == allocation_status)
+    if search:
+        query = query.where(
+            CourseCandidate.roll_number.ilike(f"%{search}%") |
+            CourseCandidate.full_name.ilike(f"%{search}%")
+        )
+
+    candidates = db.scalars(query.order_by(CourseCandidate.roll_number)).all()
+
+    result = []
+    for c in candidates:
+        slot_info = {"slot_room": None, "batch_name": None}
+        if c.assigned_slot_id:
+            slot = db.get(ScheduleSlot, c.assigned_slot_id)
+            if slot:
+                slot_info["slot_room"] = slot.room
+                if slot.batch_id:
+                    batch = db.get(ExamBatch, slot.batch_id)
+                    if batch:
+                        slot_info["batch_name"] = batch.name
+
+        result.append({
+            "id": c.id,
+            "roll_number": c.roll_number,
+            "full_name": c.full_name,
+            "eligibility_status": c.eligibility_status,
+            "allocation_status": c.allocation_status,
+            **slot_info
+        })
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────
+# Course Detail with Stats
+# ─────────────────────────────────────────────────────────────────
+
+@router.get("/courses/{course_id}/detail")
+def get_course_detail(
+    course_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Get course detail with candidate pool statistics."""
+    course = by_id(db, Course, course_id)
+
+    total = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(CourseCandidate.course_id == course_id)
+    ) or 0
+    eligible = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.eligibility_status == 'ELIGIBLE'
+        )
+    ) or 0
+    disqualified = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.eligibility_status == 'DISQUALIFIED'
+        )
+    ) or 0
+    assigned = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.allocation_status == 'ASSIGNED'
+        )
+    ) or 0
+    unassigned = db.scalar(
+        select(func.count()).select_from(CourseCandidate).where(
+            CourseCandidate.course_id == course_id,
+            CourseCandidate.eligibility_status == 'ELIGIBLE',
+            CourseCandidate.allocation_status == 'UNASSIGNED'
+        )
+    ) or 0
+
+    return {
+        "id": course.id,
+        "name": course.name,
+        "code": course.code,
+        "description": course.description,
+        "credits": course.credits,
+        "department_code": course.department_code,
+        "status": course.status,
+        "stats": {
+            "total": total,
+            "eligible": eligible,
+            "disqualified": disqualified,
+            "assigned": assigned,
+            "unassigned": unassigned
+        }
+    }
+
+
+# ─────────────────────────────────────────────────────────────────
+# Exam Batches (Auto-Allocation) endpoints
+# ─────────────────────────────────────────────────────────────────
+
+@router.post("/exams/{exam_id}/batches", status_code=201)
+def create_batch_and_allocate(
+    exam_id: str,
+    body: ex.BatchCreateIn,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Create exam batch and auto-allocate ELIGIBLE candidates to rooms."""
+    exam = by_id(db, Exam, exam_id)
+    if not exam:
+        fail(404, "EXAM_NOT_FOUND", "Kỳ thi không tồn tại")
+
+    teacher = db.get(User, body.assigned_teacher_id)
+    if not teacher or teacher.role != 'TEACHER':
+        fail(400, "INVALID_TEACHER", "Giảng viên phụ trách không hợp lệ")
+
+    rooms = [r.strip() for r in body.rooms if r.strip()]
+    if not rooms:
+        fail(400, "NO_ROOMS", "Danh sách phòng thi không được để trống")
+
+    num_rooms = len(rooms)
+    max_per_room = body.max_students_per_room
+    total_capacity = num_rooms * max_per_room
+
+    # Get ELIGIBLE + UNASSIGNED candidates with row lock
+    candidates = db.scalars(
+        select(CourseCandidate)
+        .where(
+            CourseCandidate.course_id == exam.course_id,
+            CourseCandidate.eligibility_status == "ELIGIBLE",
+            CourseCandidate.allocation_status == "UNASSIGNED"
+        )
+        .order_by(CourseCandidate.roll_number.asc())
+        .with_for_update()
+    ).all()
+
+    if not candidates:
+        fail(400, "NO_CANDIDATES", "Không còn thí sinh đủ điều kiện nào chờ phân bổ")
+
+    candidates_to_assign = list(candidates[:total_capacity])
+    total_to_assign = len(candidates_to_assign)
+
+    # Create ExamBatch
+    now = datetime.now().timestamp()
+    batch = ExamBatch(
+        id=f"btc_{uuid4().hex[:8]}",
+        exam_id=exam.id,
+        name=body.name,
+        date=body.date,
+        start_time=body.start_time,
+        end_time=body.end_time,
+        max_students_per_room=max_per_room,
+        assigned_teacher_id=teacher.id,
+        total_assigned=total_to_assign,
+        status='SCHEDULED',
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(batch)
+    db.flush()
+
+    # Create ScheduleSlots for each room
+    slot_objects = []
+    for room in rooms:
+        slot = ScheduleSlot(
+            id=f"slt_{uuid4().hex[:8]}",
+            batch_id=batch.id,
+            exam_id=exam.id,
+            room=room,
+            max_students=max_per_room,
+            assigned_students_count=0,
+        )
+        db.add(slot)
+        slot_objects.append(slot)
+    db.flush()
+
+    # Balanced Round-Robin Distribution
+    room_allocations = [[] for _ in range(num_rooms)]
+    for idx, candidate in enumerate(candidates_to_assign):
+        room_idx = idx % num_rooms
+        room_allocations[room_idx].append(candidate)
+
+    # Update candidates and slot counts
+    room_counts = []
+    for room_idx, assigned_list in enumerate(room_allocations):
+        target_slot = slot_objects[room_idx]
+        target_slot.assigned_students_count = len(assigned_list)
+        room_counts.append({
+            "room": rooms[room_idx],
+            "assigned_count": len(assigned_list)
+        })
+        for cand in assigned_list:
+            cand.allocation_status = "ASSIGNED"
+            cand.assigned_slot_id = target_slot.id
+            cand.updated_at = now
+            db.add(SlotAssignment(
+                slot_id=target_slot.id,
+                student_id=cand.student_id,
+            ))
+
+    db.commit()
+
+    remaining = len(candidates) - total_to_assign
+
+    return {
+        "batch_id": batch.id,
+        "name": batch.name,
+        "date": batch.date,
+        "start_time": batch.start_time,
+        "end_time": batch.end_time,
+        "assigned_teacher_id": batch.assigned_teacher_id,
+        "total_assigned": total_to_assign,
+        "status": batch.status,
+        "rooms": room_counts,
+        "remaining_unassigned": remaining
+    }
+
+
+@router.get("/exams/{exam_id}/batches")
+def list_batches(
+    exam_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List all batches for an exam."""
+    batches = db.scalars(
+        select(ExamBatch).where(ExamBatch.exam_id == exam_id).order_by(ExamBatch.date)
+    ).all()
+
+    result = []
+    for b in batches:
+        slots = db.scalars(
+            select(ScheduleSlot).where(ScheduleSlot.batch_id == b.id)
+        ).all()
+
+        result.append({
+            "batch_id": b.id,
+            "name": b.name,
+            "date": b.date,
+            "start_time": b.start_time,
+            "end_time": b.end_time,
+            "assigned_teacher_id": b.assigned_teacher_id,
+            "total_assigned": b.total_assigned,
+            "status": b.status,
+            "rooms": [{"room": s.room, "assigned_count": s.assigned_students_count} for s in slots]
+        })
+
+    return result
+
+
+@router.get("/batches/{batch_id}/students")
+def list_batch_students(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List all students assigned to a batch."""
+    batch = by_id(db, ExamBatch, batch_id)
+    slots = db.scalars(
+        select(ScheduleSlot).where(ScheduleSlot.batch_id == batch_id)
+    ).all()
+
+    result = []
+    for slot in slots:
+        candidates = db.scalars(
+            select(CourseCandidate).where(CourseCandidate.assigned_slot_id == slot.id)
+        ).all()
+        for c in candidates:
+            result.append({
+                "roll_number": c.roll_number,
+                "full_name": c.full_name,
+                "room": slot.room,
+                "eligibility_status": c.eligibility_status
+            })
 
     return result
