@@ -17,7 +17,20 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Outcome } from './OutcomesPanel';
-import { Chapter, Doc } from './TextbookPanel';
+
+export interface Chapter {
+  id: string;
+  title: string;
+  level: number;
+  start_page: number;
+  end_page: number;
+}
+
+export interface Doc {
+  id: string;
+  filename: string;
+  kind?: string;
+}
 
 export interface Topic {
   id: string;
@@ -119,10 +132,6 @@ export default function TopicsPanel({
     }
     if (selectedLOs.length === 0) {
       setFormError('Vui lòng chọn ít nhất một Chuẩn đầu ra (LO)');
-      return;
-    }
-    if (selectedChapters.length === 0) {
-      setFormError('Vui lòng chọn ít nhất một chương/mục giáo trình');
       return;
     }
 
@@ -486,111 +495,11 @@ export default function TopicsPanel({
                 )}
               </div>
 
-              {/* Chương / Mục giáo trình */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-blue-500" />
-                    Chương/mục giáo trình <span className="text-red-500">*</span>
-                  </label>
-                  <span className="text-xs text-slate-400">
-                    Đã chọn {selectedChapters.length} chương
-                  </span>
-                </div>
-                {sortedChapters.length === 0 ? (
-                  <p className="text-xs text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                    Chưa có mục lục chương nào trong giáo trình. Vui lòng thêm chương ở tab Giáo trình.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl">
-                    {sortedChapters.map((ch) => {
-                      const isChecked = selectedChapters.includes(ch.id);
-                      return (
-                        <div
-                          key={ch.id}
-                          onClick={() => toggleChapter(ch.id)}
-                          className={`flex items-center justify-between gap-3 p-2.5 rounded-lg cursor-pointer transition-colors border ${
-                            isChecked
-                              ? 'bg-blue-50/80 border-blue-200 text-blue-950'
-                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div
-                              className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                                isChecked
-                                  ? 'bg-blue-600 border-blue-600 text-white'
-                                  : 'border-slate-300 bg-white'
-                              }`}
-                            >
-                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                            </div>
-                            <span
-                              className="text-xs font-medium truncate"
-                              style={{ paddingLeft: `${(ch.level - 1) * 12}px` }}
-                            >
-                              {ch.title}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-400 font-mono flex-shrink-0">
-                            tr. {ch.start_page}–{ch.end_page}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Tài liệu bổ sung (nếu có) */}
-              {supplementDocs.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-emerald-500" />
-                      Tài liệu bổ sung (tùy chọn)
-                    </label>
-                    <span className="text-xs text-slate-400">
-                      Đã chọn {selectedDocs.length} tài liệu
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 max-h-36 overflow-y-auto p-2 bg-slate-50 border border-slate-200 rounded-xl">
-                    {supplementDocs.map((doc) => {
-                      const isChecked = selectedDocs.includes(doc.id);
-                      return (
-                        <div
-                          key={doc.id}
-                          onClick={() => toggleDoc(doc.id)}
-                          className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors border ${
-                            isChecked
-                              ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
-                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
-                          }`}
-                        >
-                          <div
-                            className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                              isChecked
-                                ? 'bg-emerald-600 border-emerald-600 text-white'
-                                : 'border-slate-300 bg-white'
-                            }`}
-                          >
-                            {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                          </div>
-                          <span className="text-xs font-medium truncate">
-                            {doc.filename}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* Guidance footer */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2 text-xs text-slate-500">
-                <HelpCircle className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+              <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl flex items-start gap-2.5 text-xs text-indigo-900 leading-relaxed">
+                <HelpCircle className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
                 <p>
-                  Khi sinh đề thi bằng AI, hệ thống sẽ sử dụng các trang giáo trình và tài liệu đã chọn ở đây để truy xuất ngữ cảnh chính xác theo chuẩn RAG.
+                  Chủ đề kiến thức được liên kết trực tiếp với các Chuẩn đầu ra (LO). Hệ thống sẽ dùng cấu trúc này để xây dựng Ma trận đề thi chuẩn (Master Blueprint) và phân loại câu hỏi trong Ngân hàng đề thi (Item Bank).
                 </p>
               </div>
 

@@ -20,6 +20,7 @@ import {
   Unlock,
   Layers,
   Sparkles,
+  FileText,
   ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -63,6 +64,7 @@ interface ScheduleSlotItem {
   course_name: string;
   course_code: string;
   semester_name: string;
+  exam_variant_name?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { color: string; label: string; bgBadge: string }> = {
@@ -150,6 +152,7 @@ export default function ScheduleClient() {
                 course_name: course?.name || 'Môn học',
                 course_code: course?.code || 'N/A',
                 semester_name: sem?.name || 'Toàn trường',
+                exam_variant_name: s.exam_variant?.name || null,
               });
             });
           } catch {
@@ -462,14 +465,24 @@ export default function ScheduleClient() {
                     <tr key={slot.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Slot & Room */}
                       <td className="py-3.5 px-4 font-medium text-slate-900">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center">
-                            #{slot.slot_number}
-                          </span>
-                          <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{slot.room}</span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center">
+                              #{slot.slot_number}
+                            </span>
+                            <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{slot.room}</span>
+                            </div>
                           </div>
+                          {slot.exam_variant_name ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                              <FileText className="w-2.5 h-2.5" />
+                              {slot.exam_variant_name}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 font-medium">Chưa sinh mã đề</span>
+                          )}
                         </div>
                       </td>
 

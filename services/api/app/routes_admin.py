@@ -1,4 +1,5 @@
 import hashlib
+import random
 import time
 from copy import deepcopy
 from pathlib import Path
@@ -30,6 +31,7 @@ from .models import (
     ExamSession,
     LearningOutcome,
     MediaCleanup,
+    QuestionItem,
     ReEvaluation,
     ReviewJob,
     Rubric,
@@ -64,7 +66,7 @@ def dashboard(db: Session = Depends(get_db), user=Depends(staff)):
     return {
         "courses": len(ids),
         "exams": db.scalar(select(func.count()).select_from(Exam).where(Exam.course_id.in_(ids))),
-        "documents": db.scalar(select(func.count()).select_from(Document).where(Document.course_id.in_(ids))),
+        "items": db.scalar(select(func.count()).select_from(QuestionItem).where(QuestionItem.course_id.in_(ids), QuestionItem.deleted_at.is_(None))) or 0,
         "sessions": db.scalar(
             select(func.count()).select_from(ExamSession).join(Exam).where(Exam.course_id.in_(ids), ExamSession.deleted_at.is_(None))
         ),
@@ -315,18 +317,8 @@ def workspace(course_id: str, db: Session = Depends(get_db), user=Depends(staff)
             topic_data(db, t)
             for t in db.scalars(select(Topic).where(Topic.course_id == course_id).order_by(Topic.created_at))
         ],
-        "documents": rows(
-            Document,
-            "filename",
-            "status",
-            "error",
-            "topic_id",
-            "version",
-            "embedding_model",
-            "kind",
-            "page_count",
-        ),
-        "chapters": rows(BookSection, "document_id", "title", "level", "start_page", "end_page", "source"),
+        "documents": [],
+        "chapters": [],
         "rubrics": rows(Rubric, "name", "version", "criteria"),
         "exams": [
             data(exam, "name", "status", "blueprint", "time_limit", "question_count", "rubric_id", "max_attempts")
@@ -335,6 +327,24 @@ def workspace(course_id: str, db: Session = Depends(get_db), user=Depends(staff)
                 for q in (exam.snapshot or {}).get("questions", [])
             ]}
             for exam in db.scalars(select(Exam).where(Exam.course_id == course_id).order_by(Exam.created_at))
+        ],
+        "items": [
+            {
+                "id": it.id,
+                "topic_id": it.topic_id,
+                "learning_outcome_id": it.learning_outcome_id,
+                "difficulty": it.difficulty,
+                "prompt": it.prompt,
+                "expected_points": it.expected_points or [],
+                "key_terms": it.key_terms or [],
+                "status": it.status,
+                "usage_count": it.usage_count,
+            }
+            for it in db.scalars(
+                select(QuestionItem)
+                .where(QuestionItem.course_id == course_id, QuestionItem.deleted_at.is_(None))
+                .order_by(QuestionItem.created_at)
+            )
         ],
     }
 
@@ -396,6 +406,332 @@ def delete_topic(key: str, db: Session = Depends(get_db), user=Depends(editor)):
     ):
         fail(409, "IN_USE", "Chủ đề đang được sử dụng trong bài thi")
     db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
+# === Item Bank (Ngân hàng câu hỏi) Endpoints ===
+
+@router.get("/courses/{course_id}/items")
+def list_question_items(
+    course_id: str,
+    topic_id: str | None = None,
+    difficulty: str | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    course_access(db, course_id, user)
+    stmt = select(QuestionItem).where(QuestionItem.course_id == course_id, QuestionItem.deleted_at.is_(None))
+    if topic_id:
+        stmt = stmt.where(QuestionItem.topic_id == topic_id)
+    if difficulty:
+        stmt = stmt.where(QuestionItem.difficulty == difficulty)
+    if status:
+        stmt = stmt.where(QuestionItem.status == status)
+    items = db.scalars(stmt.order_by(QuestionItem.created_at.desc())).all()
+    return [
+        {
+            "id": it.id,
+            "topic_id": it.topic_id,
+            "learning_outcome_id": it.learning_outcome_id,
+            "difficulty": it.difficulty,
+            "prompt": it.prompt,
+            "expected_points": it.expected_points or [],
+            "key_terms": it.key_terms or [],
+            "status": it.status,
+            "usage_count": it.usage_count,
+            "created_at": it.created_at,
+        }
+        for it in items
+    ]
+
+
+@router.post("/courses/{course_id}/items", status_code=201)
+def create_question_item(
+    course_id: str,
+    body: s.QuestionBankItemIn,
+    db: Session = Depends(get_db),
+    user=Depends(editor),
+):
+    course_access(db, course_id, user)
+    topic = by_id(db, Topic, body.topic_id)
+    if topic.course_id != course_id:
+        fail(400, "INVALID_TOPIC", "Chủ đề không thuộc môn học này")
+    item = QuestionItem(
+        course_id=course_id,
+        topic_id=body.topic_id,
+        learning_outcome_id=body.learning_outcome_id or topic.learning_outcome_id,
+        difficulty=body.difficulty,
+        prompt=body.prompt.strip(),
+        expected_points=[p.strip() for p in body.expected_points if p.strip()],
+        key_terms=[t.strip() for t in body.key_terms if t.strip()],
+        status=body.status,
+        author_id=user.id,
+    )
+    db.add(item)
+    db.commit()
+    return {
+        "id": item.id,
+        "topic_id": item.topic_id,
+        "learning_outcome_id": item.learning_outcome_id,
+        "difficulty": item.difficulty,
+        "prompt": item.prompt,
+        "expected_points": item.expected_points,
+        "key_terms": item.key_terms,
+        "status": item.status,
+    }
+
+
+@router.post("/courses/{course_id}/items/import", status_code=201)
+def import_question_items(
+    course_id: str,
+    body: s.QuestionBankItemImportIn,
+    db: Session = Depends(get_db),
+    user=Depends(editor),
+):
+    course_access(db, course_id, user)
+    created = []
+    for q in body.items:
+        topic = db.get(Topic, q.topic_id)
+        if not topic or topic.course_id != course_id:
+            continue
+        item = QuestionItem(
+            course_id=course_id,
+            topic_id=q.topic_id,
+            learning_outcome_id=q.learning_outcome_id or topic.learning_outcome_id,
+            difficulty=q.difficulty,
+            prompt=q.prompt.strip(),
+            expected_points=[p.strip() for p in q.expected_points if p.strip()],
+            key_terms=[t.strip() for t in q.key_terms if t.strip()],
+            status=q.status,
+            author_id=user.id,
+        )
+        db.add(item)
+        created.append(item)
+    db.commit()
+    return {"imported_count": len(created)}
+
+
+@router.get("/courses/{course_id}/items/export-template")
+def export_question_items_template(
+    course_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from fastapi.responses import StreamingResponse
+
+    course = course_access(db, course_id, user)
+    topics = db.scalars(select(Topic).where(Topic.course_id == course_id)).all()
+    los = db.scalars(select(LearningOutcome).where(LearningOutcome.course_id == course_id)).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Ngan_Hang_Cau_Hoi"
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+    align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    headers = [
+        "Tên hoặc Mã Chủ đề (*)",
+        "Mã Chuẩn đầu ra (LO)",
+        "Độ khó (EASY / MEDIUM / HARD)",
+        "Nội dung câu hỏi thi vấn đáp (*)",
+        "Điểm mấu chốt (cách nhau bởi dấu ;)",
+        "Từ khóa chuyên môn (cách nhau bởi dấu ,)",
+        "Trạng thái (APPROVED / DRAFT)",
+    ]
+    ws.append(headers)
+    ws.row_dimensions[1].height = 28
+
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = align_center
+
+    sample_topic = topics[0].name if topics else "Cấu trúc dữ liệu nâng cao"
+    sample_lo = los[0].code if los else "LO1"
+    sample_rows = [
+        [
+            sample_topic,
+            sample_lo,
+            "MEDIUM",
+            "Trình bày điều kiện cân bằng của cây AVL và giải thích cơ chế quay đơn khi bị mất cân bằng.",
+            "Cây nhị phân tìm kiếm; Hệ số cân bằng Balance Factor trong khoảng -1, 0, 1; Thực hiện phép quay trái hoặc quay phải khi mất cân bằng tại nút cha",
+            "AVL Tree, Balance Factor, Single Rotation, Left-Right Rotation",
+            "APPROVED",
+        ],
+        [
+            sample_topic,
+            sample_lo,
+            "HARD",
+            "So sánh độ phức tạp thời gian và không gian giữa thuật toán Dijkstra và Bellman-Ford trong tìm đường đi ngắn nhất.",
+            "Dijkstra dùng hàng đợi ưu tiên O((V+E)logV), chỉ áp dụng cho trọng số không âm; Bellman-Ford O(V*E), phát hiện được chu trình âm",
+            "Dijkstra, Bellman-Ford, Shortest Path, Negative Cycle, Time Complexity",
+            "APPROVED",
+        ]
+    ]
+    for row in sample_rows:
+        ws.append(row)
+
+    col_widths = [28, 20, 22, 55, 45, 38, 18]
+    for i, w in enumerate(col_widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # Sheet 2: Danh mục tham chiếu
+    ws2 = wb.create_sheet(title="Danh_Muc_Tham_Chieu")
+    ws2.append(["DANH MỤC CHỦ ĐỀ HIỆN CÓ CỦA MÔN", "", "DANH MỤC CHUẨN ĐẦU RA (LO)"])
+    ws2.append(["Tên chủ đề", "ID chủ đề", "Mã LO", "Mô tả LO"])
+    ws2.row_dimensions[1].height = 24
+    ws2.row_dimensions[2].height = 20
+
+    ref_header_fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
+    for c in range(1, 5):
+        cell = ws2.cell(row=2, column=c)
+        cell.font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+        cell.fill = ref_header_fill
+
+    max_len = max(len(topics), len(los), 1)
+    for idx in range(max_len):
+        t_name = topics[idx].name if idx < len(topics) else ""
+        t_id = topics[idx].id if idx < len(topics) else ""
+        l_code = los[idx].code if idx < len(los) else ""
+        l_desc = los[idx].description if idx < len(los) else ""
+        ws2.append([t_name, t_id, l_code, l_desc])
+
+    ws2.column_dimensions['A'].width = 30
+    ws2.column_dimensions['B'].width = 38
+    ws2.column_dimensions['C'].width = 15
+    ws2.column_dimensions['D'].width = 45
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"Template_Ngan_Hang_Cau_Hoi_{course.code}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/courses/{course_id}/items/import-excel", status_code=201)
+async def import_question_items_excel(
+    course_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(editor),
+):
+    import io
+    import openpyxl
+
+    course_access(db, course_id, user)
+    content = await file.read()
+    if not content:
+        fail(400, "EMPTY_FILE", "File tải lên không có dữ liệu")
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+    except Exception as e:
+        fail(400, "INVALID_EXCEL", f"Không thể đọc file Excel: {str(e)}")
+
+    ws = wb.active
+    topics = db.scalars(select(Topic).where(Topic.course_id == course_id)).all()
+    topic_map = {}
+    for t in topics:
+        topic_map[t.id.lower()] = t.id
+        topic_map[t.name.lower().strip()] = t.id
+
+    los = db.scalars(select(LearningOutcome).where(LearningOutcome.course_id == course_id)).all()
+    lo_map = {}
+    for l in los:
+        lo_map[l.id.lower()] = l.id
+        lo_map[l.code.lower().strip()] = l.id
+
+    imported_items = []
+    errors = []
+
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        fail(400, "EMPTY_DATA", "File không có dữ liệu câu hỏi (tối thiểu cần 1 dòng sau tiêu đề)")
+
+    for row_idx, row in enumerate(rows[1:], start=2):
+        if not row or not any(row):
+            continue
+
+        topic_raw = str(row[0]).strip() if len(row) > 0 and row[0] is not None else ""
+        lo_raw = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ""
+        diff_raw = str(row[2]).strip().upper() if len(row) > 2 and row[2] is not None else "MEDIUM"
+        prompt_raw = str(row[3]).strip() if len(row) > 3 and row[3] is not None else ""
+        expected_raw = str(row[4]).strip() if len(row) > 4 and row[4] is not None else ""
+        terms_raw = str(row[5]).strip() if len(row) > 5 and row[5] is not None else ""
+        status_raw = str(row[6]).strip().upper() if len(row) > 6 and row[6] is not None else "APPROVED"
+
+        if not prompt_raw:
+            errors.append(f"Dòng {row_idx}: Nội dung câu hỏi không được để trống")
+            continue
+
+        topic_id = topic_map.get(topic_raw.lower())
+        if not topic_id:
+            if topics:
+                topic_id = topics[0].id
+            else:
+                errors.append(f"Dòng {row_idx}: Không tìm thấy chủ đề '{topic_raw}' trong môn học")
+                continue
+
+        lo_id = lo_map.get(lo_raw.lower()) if lo_raw else None
+        if not lo_id:
+            matched_topic = next((t for t in topics if t.id == topic_id), None)
+            lo_id = matched_topic.learning_outcome_id if matched_topic else None
+
+        difficulty = diff_raw if diff_raw in {"EASY", "MEDIUM", "HARD"} else "MEDIUM"
+        status = "DRAFT" if status_raw == "DRAFT" else "APPROVED"
+
+        expected_points = [p.strip() for p in expected_raw.split(";") if p.strip()] if expected_raw else []
+        if not expected_points and "\n" in expected_raw:
+            expected_points = [p.strip() for p in expected_raw.split("\n") if p.strip()]
+
+        key_terms = []
+        if terms_raw:
+            sep = ";" if ";" in terms_raw else ","
+            key_terms = [t.strip() for t in terms_raw.split(sep) if t.strip()]
+
+        item = QuestionItem(
+            course_id=course_id,
+            topic_id=topic_id,
+            learning_outcome_id=lo_id,
+            difficulty=difficulty,
+            prompt=prompt_raw,
+            expected_points=expected_points,
+            key_terms=key_terms,
+            status=status,
+            author_id=user.id,
+        )
+        db.add(item)
+        imported_items.append(item)
+
+    if imported_items:
+        db.commit()
+
+    return {
+        "imported_count": len(imported_items),
+        "errors": errors,
+        "total_rows_processed": len(rows) - 1,
+    }
+
+
+@router.delete("/items/{key}")
+def delete_question_item(key: str, db: Session = Depends(get_db), user=Depends(editor)):
+    item = by_id(db, QuestionItem, key)
+    course_access(db, item.course_id, user)
+    item.deleted_at = time.time()
     db.commit()
     return {"ok": True}
 
@@ -649,76 +985,122 @@ def publish(key: str, db: Session = Depends(get_db), user=Depends(editor)):
     course_access(db, exam.course_id, user)
     if exam.status == "PUBLISHED":
         return {"status": exam.status}
-    rubric = by_id(db, Rubric, exam.rubric_id)
-    docs = db.scalars(
-        select(Document).where(
-            Document.course_id == exam.course_id,
-            Document.status == "READY",
-            Document.embedding_model == ai.embedding_name(),
+
+    rubric = db.get(Rubric, exam.rubric_id) if exam.rubric_id else None
+    if not rubric:
+        rubric = db.scalar(
+            select(Rubric).where(Rubric.course_id == exam.course_id).order_by(Rubric.created_at.desc())
         )
-    ).all()
-    if not docs:
-        fail(409, "KNOWLEDGE_NOT_READY", "Cần tài liệu READY với cấu hình embedding hiện tại")
+
     questions = []
-    topic_scopes = {}
-    mappings = {}
-    for row in exam.blueprint:
-        topic = by_id(db, Topic, row["topic_id"])
-        topic_scopes[topic.id] = chunk_scope(db, exam.course_id, topic.id, ai.embedding_name())
-        mappings[topic.id] = topic_data(db, topic)
-        mappings[topic.id]["outcomes"] = [
-            data(by_id(db, LearningOutcome, lo), "code", "description", "weight")
-            for lo in mappings[topic.id]["learning_outcome_ids"]
-        ]
-        mappings[topic.id]["chapters"] = [
-            data(by_id(db, BookSection, chapter), "title", "level", "start_page", "end_page")
-            for chapter in mappings[topic.id]["chapter_ids"]
-        ]
-        chunks = ai.retrieve(
-            db, exam.course_id, topic.id, topic.name, [d.id for d in docs], topic_scopes[topic.id]
-        )
-        if not chunks:
-            fail(409, "NO_EVIDENCE", f"Chủ đề {topic.name} chưa có tài liệu READY")
-        for _ in range(row["count"]):
-            question = ai.generate_question(
-                topic,
-                row["difficulty"],
-                chunks,
-                [q["text"] for q in questions],
-                outcomes=mappings[topic.id]["outcomes"],
+    blueprint = exam.blueprint or []
+
+    # Lắp ráp đề thi từ Ngân hàng câu hỏi (Item Bank) dựa theo Ma trận chuẩn (Blueprint)
+    if not blueprint:
+        # Nếu chưa có blueprint chi tiết, bốc từ tất cả câu hỏi APPROVED của môn
+        available_items = db.scalars(
+            select(QuestionItem).where(
+                QuestionItem.course_id == exam.course_id,
+                QuestionItem.status == "APPROVED",
+                QuestionItem.deleted_at.is_(None),
+            ).order_by(QuestionItem.usage_count.asc())
+        ).all()
+        target_count = exam.question_count or 3
+        if len(available_items) < target_count:
+            fail(
+                400,
+                "INSUFFICIENT_ITEMS",
+                f"Ngân hàng câu hỏi của môn chỉ có {len(available_items)} câu khả dụng, cần tối thiểu {target_count} câu để tạo đề thi. Vui lòng nạp thêm câu hỏi.",
             )
-            questions.append(
-                question
-                | {
-                    "topic_id": topic.id,
-                    "learning_outcome_id": topic.learning_outcome_id,
-                    "learning_outcome_ids": mappings[topic.id]["learning_outcome_ids"],
-                    "chapter_ids": mappings[topic.id]["chapter_ids"],
-                    "difficulty": row["difficulty"],
-                }
+        selected_items = random.sample(available_items, target_count)
+        for item in selected_items:
+            questions.append({
+                "item_id": item.id,
+                "text": item.prompt,
+                "expected_points": item.expected_points or [],
+                "key_terms": item.key_terms or [],
+                "english_terms": [{"term": t, "meaning": ""} for t in (item.key_terms or [])],
+                "topic_id": item.topic_id,
+                "learning_outcome_id": item.learning_outcome_id,
+                "difficulty": item.difficulty,
+            })
+            item.usage_count += 1
+    else:
+        for row in blueprint:
+            topic_id = row.get("topic_id")
+            difficulty = row.get("difficulty")
+            count = int(row.get("count", 1))
+
+            query = select(QuestionItem).where(
+                QuestionItem.course_id == exam.course_id,
+                QuestionItem.status == "APPROVED",
+                QuestionItem.deleted_at.is_(None),
             )
-    doc_ids = sorted(d.id for d in docs)
+            if topic_id:
+                query = query.where(QuestionItem.topic_id == topic_id)
+            if difficulty:
+                query = query.where(QuestionItem.difficulty == difficulty)
+
+            matched_items = db.scalars(query.order_by(QuestionItem.usage_count.asc())).all()
+
+            # Nếu không đủ câu hỏi đúng mức độ khó yêu cầu, nới lỏng sang các câu hỏi khác trong cùng topic
+            if len(matched_items) < count and topic_id:
+                matched_items = db.scalars(
+                    select(QuestionItem).where(
+                        QuestionItem.course_id == exam.course_id,
+                        QuestionItem.topic_id == topic_id,
+                        QuestionItem.status == "APPROVED",
+                        QuestionItem.deleted_at.is_(None),
+                    ).order_by(QuestionItem.usage_count.asc())
+                ).all()
+
+            if len(matched_items) < count:
+                topic = db.get(Topic, topic_id) if topic_id else None
+                topic_name = topic.name if topic else "Đã chọn"
+                fail(
+                    400,
+                    "INSUFFICIENT_ITEMS",
+                    f"Chủ đề '{topic_name}' chỉ có {len(matched_items)} câu hỏi khả dụng trong Ngân hàng, không đủ {count} câu theo ma trận đề thi. Vui lòng bổ sung thêm câu hỏi vào Ngân hàng.",
+                )
+
+            selected_items = random.sample(matched_items, count)
+            for item in selected_items:
+                questions.append({
+                    "item_id": item.id,
+                    "text": item.prompt,
+                    "expected_points": item.expected_points or [],
+                    "key_terms": item.key_terms or [],
+                    "english_terms": [{"term": t, "meaning": ""} for t in (item.key_terms or [])],
+                    "topic_id": item.topic_id,
+                    "learning_outcome_id": item.learning_outcome_id,
+                    "difficulty": item.difficulty,
+                })
+                item.usage_count += 1
+
+    criteria = (
+        rubric.criteria
+        if rubric
+        else [
+            {"name": "Độ chính xác kiến thức", "max_score": 5.0, "weight": 0.5},
+            {"name": "Lập luận và bản chất", "max_score": 3.0, "weight": 0.3},
+            {"name": "Thuật ngữ chuyên ngành", "max_score": 2.0, "weight": 0.2},
+        ]
+    )
+
     exam.snapshot = {
-        "exam_version": 2,
-        "generation_prompt_version": "topic-los-english-terms-v3",
-        "topic_chunk_ids": topic_scopes,
-        "topic_mappings": mappings,
-        "rubric_id": rubric.id,
-        "rubric_version": rubric.version,
-        "criteria": rubric.criteria,
-        "document_ids": doc_ids,
+        "exam_version": 3,
+        "assembly_mode": "ITEM_BANK_BLUEPRINT",
+        "rubric_id": rubric.id if rubric else None,
+        "rubric_version": rubric.version if rubric else 1,
+        "criteria": criteria,
         "questions": questions,
-        "knowledge_version": hashlib.sha256(
-            ",".join(sorted({c for ids in topic_scopes.values() for c in ids})).encode()
-        ).hexdigest(),
         "ai_provider": settings().ai_provider,
         "llm_model": settings().llm_model,
-        "embedding_model": ai.embedding_name(),
         "prompt_version": ai.PROMPT_VERSION,
         "published_at": time.time(),
     }
     exam.status = "PUBLISHED"
-    db.add(Audit(user_id=user.id, event="EXAM_PUBLISHED", details={"exam_id": exam.id}))
+    db.add(Audit(user_id=user.id, event="EXAM_PUBLISHED", details={"exam_id": exam.id, "questions_count": len(questions)}))
     db.commit()
     return {"status": exam.status, "question_count": len(questions)}
 

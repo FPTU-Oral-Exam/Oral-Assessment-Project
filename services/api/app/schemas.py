@@ -15,7 +15,7 @@ class Login(Input):
 class UserIn(Login):
     password: str = Field(min_length=12, max_length=128)
     name: str = Field(min_length=1, max_length=150)
-    role: Literal["SYSTEM_ADMIN", "EXAMINER", "TEACHER", "STUDENT", "ADMIN", "REVIEWER"] = "STUDENT"
+    role: Literal["SYSTEM_ADMIN", "ACADEMY", "EXAMINER", "TEACHER", "STUDENT", "ADMIN", "REVIEWER"] = "STUDENT"
 
 
 class CourseIn(Input):
@@ -48,8 +48,6 @@ class TopicIn(Input):
             self.learning_outcome_ids = [self.learning_outcome_id]
         if not self.learning_outcome_ids:
             raise ValueError("Chọn ít nhất một LO")
-        if not self.chapter_ids and not self.learning_outcome_id:
-            raise ValueError("Chọn ít nhất một chương/mục giáo trình")
         return self
 
 
@@ -336,3 +334,17 @@ class GradeOutput(Input):
 
 class RoleIn(Input):
     role: Literal["SYSTEM_ADMIN", "EXAMINER", "TEACHER", "STUDENT", "ADMIN", "REVIEWER"]
+
+
+class QuestionBankItemIn(Input):
+    topic_id: str
+    learning_outcome_id: str | None = None
+    difficulty: Literal["EASY", "MEDIUM", "HARD"] = "MEDIUM"
+    prompt: str = Field(min_length=5, max_length=5000)
+    expected_points: list[str] = Field(default_factory=list)
+    key_terms: list[str] = Field(default_factory=list)
+    status: Literal["DRAFT", "APPROVED"] = "APPROVED"
+
+
+class QuestionBankItemImportIn(Input):
+    items: list[QuestionBankItemIn]

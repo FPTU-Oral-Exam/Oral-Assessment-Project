@@ -1,4 +1,5 @@
 import io
+import random
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
@@ -20,11 +21,14 @@ from .models import (
     ExamSession,
     ExamVariant,
     MasterCourse,
+    QuestionItem,
     ReEvaluation,
+    Rubric,
     ScheduleSlot,
     Section,
     Semester,
     SlotAssignment,
+    Topic,
     Upload,
     User,
 )
@@ -785,6 +789,248 @@ def assign_teacher_to_slot(
 
 
 # ─────────────────────────────────────────────────────────────────
+# Automated Test Assembly (ATA) & Variant Generation
+# ─────────────────────────────────────────────────────────────────
+
+def _assemble_slot_variant(
+    db: Session,
+    exam: Exam,
+    slot: ScheduleSlot,
+    available_items: list[QuestionItem],
+    user_id: str,
+) -> ExamVariant:
+    """
+    Assemble an exam variant for a shift/slot from vetted QuestionItem bank
+    strictly adhering to the Academy Master Blueprint.
+    Balances item usage count to achieve parallel forms with minimal overlap.
+    """
+    blueprint = exam.blueprint or []
+    target_count = exam.question_count or 3
+    selected_items: list[QuestionItem] = []
+
+    if blueprint:
+        for rule in blueprint:
+            topic_id = rule.get("topic_id")
+            difficulty = rule.get("difficulty")
+            count = int(rule.get("count", 1))
+
+            candidates = [
+                it for it in available_items
+                if (not topic_id or it.topic_id == topic_id)
+                and (not difficulty or it.difficulty == difficulty)
+                and it not in selected_items
+            ]
+            if len(candidates) < count and topic_id:
+                # Relax difficulty within same topic
+                candidates = [
+                    it for it in available_items
+                    if it.topic_id == topic_id and it not in selected_items
+                ]
+            if len(candidates) < count:
+                # Relax to any available items of the course
+                candidates = [it for it in available_items if it not in selected_items]
+
+            if candidates:
+                # Prioritize items with lowest usage_count; randomize among ties
+                candidates.sort(key=lambda x: (x.usage_count or 0, random.random()))
+                picked = candidates[:count]
+                selected_items.extend(picked)
+                for it in picked:
+                    it.usage_count = (it.usage_count or 0) + 1
+    else:
+        candidates = [it for it in available_items if it not in selected_items]
+        candidates.sort(key=lambda x: (x.usage_count or 0, random.random()))
+        picked = candidates[:target_count]
+        selected_items.extend(picked)
+        for it in picked:
+            it.usage_count = (it.usage_count or 0) + 1
+
+    if not selected_items and available_items:
+        selected_items = list(available_items[:target_count])
+
+    questions = [
+        {
+            "sequence": idx + 1,
+            "item_id": item.id,
+            "text": item.prompt,
+            "prompt": item.prompt,
+            "expected_points": item.expected_points or [],
+            "key_terms": item.key_terms or [],
+            "english_terms": [{"term": t, "meaning": ""} for t in (item.key_terms or [])],
+            "topic_id": item.topic_id,
+            "learning_outcome_id": item.learning_outcome_id,
+            "difficulty": item.difficulty,
+        }
+        for idx, item in enumerate(selected_items)
+    ]
+
+    variant_name = f"Mã đề {100 + slot.slot_number} (Ca {slot.slot_number} - {slot.room or 'Phòng'})"
+    variant = db.get(ExamVariant, slot.exam_variant_id) if slot.exam_variant_id else None
+    if not variant:
+        variant = ExamVariant(
+            id=f"var_{uuid4().hex[:8]}",
+            exam_id=exam.id,
+            name=variant_name,
+            questions=questions,
+            created_by=user_id,
+            status="ASSIGNED",
+        )
+        db.add(variant)
+        db.flush()
+        slot.exam_variant_id = variant.id
+    else:
+        variant.name = variant_name
+        variant.questions = questions
+        variant.status = "ASSIGNED"
+
+    if slot.status in ("PENDING", "SCHEDULED"):
+        slot.status = "READY"
+
+    return variant
+
+
+@router.post("/exams/{exam_id}/generate-variants")
+def generate_variants_for_exam(
+    exam_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """
+    Automated Test Assembly (ATA):
+    Generate parallel exam variants for all shifts/slots of an exam from the vetted QuestionItem bank,
+    strictly adhering to the Academy Master Blueprint.
+    """
+    exam = by_id(db, Exam, exam_id)
+    slots = db.scalars(
+        select(ScheduleSlot).where(ScheduleSlot.exam_id == exam_id).order_by(ScheduleSlot.slot_number)
+    ).all()
+    if not slots:
+        fail(400, "NO_SLOTS", "Chưa có ca thi nào cho kỳ thi này. Vui lòng tạo ca thi trước khi sinh mã đề.")
+
+    available_items = db.scalars(
+        select(QuestionItem).where(
+            QuestionItem.course_id == exam.course_id,
+            QuestionItem.status == "APPROVED",
+            QuestionItem.deleted_at.is_(None),
+        )
+    ).all()
+    if not available_items:
+        fail(
+            400,
+            "NO_ITEMS",
+            "Ngân hàng câu hỏi của môn chưa có câu hỏi nào được duyệt (APPROVED). Ban Học thuật (ACADEMY) cần nạp và duyệt câu hỏi trước.",
+        )
+
+    rubric = db.get(Rubric, exam.rubric_id) if exam.rubric_id else None
+    if not rubric:
+        rubric = db.scalar(
+            select(Rubric).where(Rubric.course_id == exam.course_id).order_by(Rubric.created_at.desc())
+        )
+
+    generated = []
+    last_questions = []
+    for slot in slots:
+        var = _assemble_slot_variant(db, exam, slot, available_items, user.id)
+        last_questions = var.questions or []
+        generated.append({
+            "slot_id": slot.id,
+            "slot_number": slot.slot_number,
+            "room": slot.room,
+            "variant_id": var.id,
+            "variant_name": var.name,
+            "questions_count": len(var.questions or []),
+            "status": slot.status,
+        })
+
+    # Prepare exam snapshot and mark exam PUBLISHED
+    if not exam.snapshot:
+        exam.snapshot = {
+            "assembly_mode": "ITEM_BANK_BLUEPRINT",
+            "blueprint": exam.blueprint or [],
+            "criteria": rubric.criteria if rubric else [],
+            "questions": last_questions,
+        }
+    else:
+        snap = dict(exam.snapshot)
+        snap["assembly_mode"] = "ITEM_BANK_BLUEPRINT"
+        if rubric and not snap.get("criteria"):
+            snap["criteria"] = rubric.criteria
+        if not snap.get("questions"):
+            snap["questions"] = last_questions
+        exam.snapshot = snap
+
+    if exam.status == "DRAFT":
+        exam.status = "PUBLISHED"
+
+    db.add(Audit(
+        user_id=user.id,
+        event="EXAM_VARIANTS_GENERATED",
+        details={"exam_id": exam.id, "slots_count": len(slots)},
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "exam_id": exam.id,
+        "variants_count": len(generated),
+        "slots": generated,
+    }
+
+
+@router.post("/slots/{slot_id}/generate-variant")
+def generate_variant_for_slot(
+    slot_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Generate or regenerate exam variant for a single shift/slot via ATA."""
+    slot = by_id(db, ScheduleSlot, slot_id, lock=True)
+    exam = by_id(db, Exam, slot.exam_id)
+
+    available_items = db.scalars(
+        select(QuestionItem).where(
+            QuestionItem.course_id == exam.course_id,
+            QuestionItem.status == "APPROVED",
+            QuestionItem.deleted_at.is_(None),
+        )
+    ).all()
+    if not available_items:
+        fail(400, "NO_ITEMS", "Ngân hàng câu hỏi của môn chưa có câu hỏi nào được duyệt (APPROVED).")
+
+    variant = _assemble_slot_variant(db, exam, slot, available_items, user.id)
+
+    db.add(Audit(
+        user_id=user.id,
+        event="SLOT_VARIANT_GENERATED",
+        details={"slot_id": slot.id, "variant_id": variant.id},
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "slot_id": slot.id,
+        "variant_id": variant.id,
+        "variant_name": variant.name,
+        "questions_count": len(variant.questions or []),
+        "slot_status": slot.status,
+    }
+
+
+@router.post("/exams/{exam_id}/publish")
+def publish_examiner_exam(
+    exam_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Publish exam so eligible students can enter."""
+    exam = by_id(db, Exam, exam_id, lock=True)
+    exam.status = "PUBLISHED"
+    db.add(Audit(user_id=user.id, event="EXAM_PUBLISHED", details={"exam_id": exam.id}))
+    db.commit()
+    return {"status": "PUBLISHED", "id": exam.id}
+
+
+# ─────────────────────────────────────────────────────────────────
 # Results and FAP Export endpoints
 # ─────────────────────────────────────────────────────────────────
 
@@ -1400,7 +1646,16 @@ def list_batches(
             "assigned_teacher_id": b.assigned_teacher_id,
             "total_assigned": b.total_assigned,
             "status": b.status,
-            "rooms": [{"room": s.room, "assigned_count": s.assigned_students_count} for s in slots]
+            "rooms": [
+                {
+                    "slot_id": s.id,
+                    "room": s.room,
+                    "assigned_count": s.assigned_students_count,
+                    "variant_id": s.exam_variant_id,
+                    "variant_name": db.get(ExamVariant, s.exam_variant_id).name if s.exam_variant_id else None,
+                }
+                for s in slots
+            ]
         })
 
     return result
