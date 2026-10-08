@@ -87,7 +87,6 @@ export default function ExamEditorModal({
       await onRefresh();
       onClose();
     } catch (err: unknown) {
-      // Kiểm tra xem đề thi đã được AI sinh xong và công bố hay chưa (phòng trường hợp Next.js proxy timeout khi sinh nhiều câu)
       try {
         const refreshed = await api<any>(`/admin/courses/${courseId}/workspace`);
         const publishedExam = refreshed.exams?.find((e: any) => e.id === exam.id && e.status === 'PUBLISHED');
@@ -101,12 +100,10 @@ export default function ExamEditorModal({
       }
 
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('KNOWLEDGE_NOT_READY')) {
-        setError('Tài liệu giáo trình chưa sẵn sàng (READY) với mô hình embedding hiện tại. Vui lòng kiểm tra Tab Giáo trình.');
-      } else if (msg.includes('NO_EVIDENCE')) {
-        setError('Một số chủ đề trong đề thi chưa tìm thấy đoạn tài liệu tương ứng trong giáo trình.');
+      if (msg.includes('INSUFFICIENT_ITEMS')) {
+        setError(msg);
       } else {
-        setError(msg || 'Lỗi khi kích hoạt AI sinh câu hỏi & công bố đề');
+        setError(msg || 'Lỗi khi lắp ráp đề thi từ Ngân hàng câu hỏi');
       }
     } finally {
       setPublishing(false);
