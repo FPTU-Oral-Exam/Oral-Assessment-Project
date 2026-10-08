@@ -2,263 +2,148 @@
 
 ## 1. Giới thiệu
 
-**AI Oral Assessment Platform** (mã nguồn: `AI-Oral-Assessment-Platform`) là hệ thống thi vấn đáp trên máy tính dành cho sinh viên, trong đó:
+**AI Oral Assessment Platform** (mã nguồn: `AI-Oral-Assessment-Platform`) là nền tảng thi vấn đáp tự động trên máy tính dành cho các trường đại học, được xây dựng theo chuẩn khung đo lường giáo dục **12 bước của Steven M. Downing** (Educational Measurement).
 
-- Sinh viên đăng nhập vào ứn- Sinh viên đăng nhập vào ứng dụng desktop (Student App Thin-Client) để làm bài thi
-- Câu hỏi được sinh bởi AI dựa trên môn học, Learning Outcome, chủ đề, độ khó và blueprint
-- Sinh viên trả lời bằng giọng nói; ứng dụng ghi âm raw và lọc nhiễu real-time qua RNNoise WASM
-- Audio được chia chunk 4MB kèm SHA-256 integrity checksum tải trực tiếp lên MinIO
-- Audio được chuyển thành văn bản (STT - Speech-to-Text) bởi PhoWhisper Server-Side Worker từ file âm thanh trên MinIO
-- Chống gian lận (Anti-tampering): Không STT local, không cho phép sinh viên xem hay sửa transcript trên client
-- Việc chấm điểm dựa trên: câu hỏi + transcript server + rubric + kiến thức từ RAG (pgvector)
-- Audio/video là **bằng chứng pháp lý (evidence)** bất biến để giảng viên/khảo thí đối soát và xử lý phúc khảo
+Hệ thống số hóa toàn diện quy trình khảo thí vấn đáp, giải quyết triệt để các hạn chế của hình thức thi vấn đáp truyền thống (thiếu tính đồng nhất, tốn nhân lực giám khảo, dễ lộ đề giữa các ca thi và thiếu bằng chứng pháp lý để phúc khảo):
 
-> **Giai đoạn hiện tại:** Đã hoàn thành kiến trúc Dual-Frontend, chuẩn hóa 4 vai trò đại học và E2E testing khép kín.
+- **Phân định 4 vai trò đại học chuẩn mực:**
+  1. **Ban Học thuật (`ACADEMY`):** Đỉnh tháp chuyên môn — quản lý chuẩn môn học, xây dựng Chuẩn đầu ra (LO), Cây chủ đề (Topics), Khung Rubric chuẩn dùng chung, Ma trận đề thi chuẩn (Master Blueprint) cố định, và Ngân hàng câu hỏi đã thẩm định (Item Bank).
+  2. **Phòng Khảo thí (`EXAMINER`):** Vận hành & giám sát kỳ thi — quản lý Học kỳ (Semester), Kì thi (Final Exam), mở môn thi trong kỳ (Course Offering), nạp danh sách sinh viên & lớp học, xếp lịch & phân bổ Ca thi (Schedule Slots), sinh các mã đề thi song song (Exam Variants) từ Item Bank của Academy, phân công giảng viên coi thi & chấm thi, giám sát thi trực tiếp và khóa sổ điểm FAP.
+  3. **Giảng viên Coi thi & Chấm thi (`TEACHER`):** Giám sát ca thi và rà soát/chấm điểm bài thi. Giảng viên **không** can thiệp vào LO, Rubric hay Ma trận đề thi; chỉ đối soát bằng chứng (Audio ghi âm câu trả lời + Transcript server bóc băng), xem điểm và nhận xét chi tiết do AI chấm theo Rubric chuẩn của Academy, sau đó xác nhận hoặc điều chỉnh điểm (override kèm giải trình).
+  4. **Sinh viên (`STUDENT`):** Thí sinh dự thi trên ứng dụng Desktop Thin-Client (Electron). Kiểm tra thiết bị & kiểm tra ồn môi trường 10 giây qua RNNoise WASM. Nhận mã đề thi ngẫu nhiên gán riêng cho ca thi, trả lời bằng giọng nói trực tiếp theo thời gian đếm ngược từng câu.
+  5. **Quản trị hệ thống (`SYSTEM_ADMIN`):** Quản lý tài khoản, phân quyền, cấu hình hạ tầng AI Provider (Ollama / Gemini), Faster-Whisper STT Server, Object Storage MinIO và sao lưu dữ liệu.
+
+- **Nguyên tắc "Zero AI Question Generation":** Tuyệt đối không để AI tự ý sinh câu hỏi tự do trong phòng thi. 100% câu hỏi thi được trích xuất từ Ngân hàng câu hỏi đã qua thẩm định chuyên môn (Item Bank) và được lắp ráp tự động (Automated Test Assembly - ATA) theo Ma trận đề thi chuẩn (Master Blueprint) do Ban Học thuật ban hành.
+- **Bảo mật & Chống gian lận (Anti-Tampering):** Sinh viên làm bài bằng giọng nói thuần túy (Audio-only, không gõ phím). Âm thanh được chia chunk 4MB kèm SHA-256 integrity checksum tải trực tiếp lên MinIO. Tuyệt đối không chạy STT trên máy sinh viên và không cho sinh viên sửa transcript.
+- **Server-Side STT & AI Grading có ranh giới (Rubric-Bounded):** Worker Server sử dụng mô hình **Faster-Whisper** bóc băng trực tiếp từ file âm thanh MinIO. Công cụ AI Grader (Ollama / Gemini) chấm điểm và viết nhận xét chi tiết strictly bounded theo tiêu chí Rubric và điểm chuẩn (expected points/key terms) của câu hỏi.
+- **Bằng chứng pháp lý bất biến (Immutable Evidence):** Bản ghi âm và video của sinh viên là bằng chứng pháp lý để Giảng viên rà soát và Khảo thí xử lý các ca phúc khảo hoặc chấm chéo độc lập.
 
 ---
 
 ## 2. Mục tiêu nghiệp vụ
 
-| # | Mục tiêu                                           |
-| - | ---------------------------------------------------- |
-| 1 | Chuẩn hóa thi vấn đáp tự động bằng AI               |
-| 2 | Giảm tải việc ra đề thủ công và chấm thi diện rộng   |
-| 3 | Chấm điểm sơ bộ/tự động minh bạch theo Rubric chuẩn  |
-| 4 | Cho phép giảng viên/khảo thí audit lại kết quả dễ dàng|
-| 5 | Lưu evidence để xử lý khiếu nại và phúc khảo         |
-| 6 | Tạo nhiều bài thi cho nhiều môn học khác nhau       |
-| 7 | Tái sử dụng chung nền tảng qua Dual-Frontend         |
+| # | Mục tiêu | Mô tả chi tiết |
+| - | -------- | -------------- |
+| 1 | **Chuẩn hóa đo lường khảo thí (Downing Framework)** | Bám sát khung 12 bước của Steven M. Downing: từ xây dựng ma trận đề (Test Blueprint), ngân hàng câu hỏi (Item Bank), lắp ráp đề song song (ATA) đến chấm điểm bằng Rubric chuẩn. |
+| 2 | **Tách bạch vai trò học thuật và khảo thí** | Ban Học thuật (Academy) kiểm soát chất lượng đề và chuẩn đầu ra; Phòng Khảo thí (Examiner) độc lập vận hành kỳ thi; Giảng viên (Teacher) thuần túy coi thi và chấm thi. |
+| 3 | **Công bằng và chống lộ đề giữa các ca thi** | Hệ thống tự động sinh các mã đề thi song song (Parallel Exam Variants) có cấu trúc ma trận tương đương nhau cho từng ca thi (Shift), không trùng câu hỏi giữa các ca. |
+| 4 | **Đánh giá tự động minh bạch & Khách quan** | AI chấm điểm sơ bộ chi tiết đến từng tiêu chí Rubric, trích dẫn bằng chứng từ transcript, triệt tiêu độ lệch cảm tính giữa các giám khảo. |
+| 5 | **Tiết kiệm thời gian và nhân lực tổ chức thi** | Giảm thiểu thời gian chấm thi vấn đáp thủ công từ hàng tuần xuống còn vài giờ; giảng viên chỉ cần rà soát bài thi với đầy đủ audio và phân tích AI. |
+| 6 | **Bảo vệ quyền lợi sinh viên qua Bằng chứng bất biến** | Lưu trữ audio/video gốc có mã băm SHA-256 trên MinIO làm căn cứ xử lý khiếu nại, phúc khảo hoặc chấm chéo công khai. |
 
 ---
 
 ## 3. Kiến trúc tổng thể
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                    STUDENT APP (Thin-Client Desktop)                 │
-│  (Electron 33 + Vite + React 18 + RNNoise WASM + ChunkedUploader)    │
-│  • Đăng nhập (Memory-only JWT / Google OIDC)                         │
-│  • Xem danh sách bài thi được giao                                   │
-│  • Kiểm tra micro/camera & đo độ ồn môi trường 10 giây               │
-│  • Ghi âm raw câu trả lời (Audio-only, không gõ phím)                │
-│  • Upload chunk 4MB có SHA-256 checksum trực tiếp lên MinIO          │
-│  • Gọi Submit Audio Endpoint (gửi upload_id, AWAITING_STT)           │
-│  • Xem kết quả bài thi sau khi Server hoàn tất chấm điểm             │
-└──────────────────────────────────┬───────────────────────────────────┘
-                                   │ HTTPS REST / WebSocket
-                                   ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                    STAFF PORTAL (Web Cán bộ & Giảng viên)            │
-│  (Next.js 15 App Router + TypeScript + Tailwind CSS + RBAC)          │
-│  • Phân quyền 3 Route Groups nghiêm ngặt:                            │
-│    ├── (admin): Quản trị người dùng, cấu hình hệ thống, audit log    │
-│    ├── (examiner): Quản lý kỳ thi, lịch thi, sinh viên, duyệt điểm   │
-│    └── (teacher): Quản lý môn học, giáo trình RAG, Rubric, chấm bài  │
-└──────────────────────────────────┬───────────────────────────────────┘
-                                   │
-                                   ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                     BACKEND API (FastAPI Python 3.12+)               │
-│                                                                      │
-│  Auth │ Users │ Courses │ Documents │ Exams │ Grading │ Evidence     │
-│                                                                      │
-│  ┌─────────────┐         ┌─────────────┐                             │
-│  │ PostgreSQL  │         │ Object S3   │                             │
-│  │ + pgvector  │         │ (MinIO)     │                             │
-│  └─────────────┘         └─────────────┘                             │
-│           │                                                          │
-│           ▼                                                          │
-│  ┌────────────────────────────────────────────────────────────┐      │
-│  │               BACKGROUND WORKER (Celery / Redis)           │      │
-│  │  • Server STT Pipeline: PhoWhisper từ audio MinIO          │      │
-│  │  • RAG Engine: Bóc tách PDF, embedding 768 chiều (pgvector)│      │
-│  │  • Grading Engine: LLM Judge (Gemini / Ollama) theo Rubric │      │
-│  └────────────────────────────────────────────────────────────┘      │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      STUDENT APP (Thin-Client Desktop)                       │
+│    (Electron 33 + Vite + React 18 + RNNoise WASM + ChunkedUploader MinIO)    │
+│  • Đăng nhập (Memory-only JWT / Google OIDC)                                 │
+│  • Xem lịch ca thi và bài thi được Khảo thí xếp lịch                         │
+│  • Kiểm tra micro/camera & đo độ ồn môi trường 10 giây (RNNoise Filter)      │
+│  • Nhận mã đề thi ngẫu nhiên của ca (sinh từ Item Bank theo Master Blueprint)│
+│  • Ghi âm raw câu trả lời (Audio-only, không gõ phím)                        │
+│  • Tải chunk 4MB có mã băm SHA-256 trực tiếp lên MinIO                       │
+│  • Nộp bài thi (chuyển trạng thái AWAITING_STT)                              │
+│  • Xem kết quả & nhận xét chi tiết sau khi Khảo thí công bố                  │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │ HTTPS REST / WebSocket
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      STAFF PORTAL (Web Cán bộ & Giảng viên)                  │
+│       (Next.js 15 App Router + TypeScript + Tailwind CSS + RBAC)             │
+│                                                                              │
+│  ├── [ACADEMY] Ban Học thuật & Bộ môn:                                       │
+│  │   • Quản lý môn học gốc (Master Course Catalog)                           │
+│  │   • Chuẩn đầu ra (LOs) & Cây chủ đề (Topics)                              │
+│  │   • Khung Rubric chuẩn dùng chung theo môn                                │
+│  │   • Ma trận đề thi chuẩn (Master Blueprint) cố định                       │
+│  │   • Ngân hàng câu hỏi (Item Bank) + Import Excel câu hỏi thẩm định        │
+│  │                                                                           │
+│  ├── [EXAMINER] Phòng Khảo thí:                                              │
+│  │   • Quản lý Học kỳ (Semester: Fall_2026, Spring_2026...)                  │
+│  │   • Quản lý Kỳ thi (Final Exam Batch) & Mở môn trong kỳ (Course Offering) │
+│  │   • Import danh sách sinh viên, quản lý lớp học (SE1801, SE1802...)       │
+│  │   • Thiết lập lịch thi & Ca thi (Shifts: Ca 1, Ca 2, Ca 3, phòng thi...)   │
+│  │   • Sinh mã đề song song (ATA) từ Item Bank & Gán mã đề cho từng ca       │
+│  │   • Phân công Giảng viên coi thi & chấm thi cho ca/lớp                    │
+│  │   • Giám sát phòng thi trực tiếp & Điều phối chấm chéo/phúc khảo          │
+│  │   • Phê duyệt điểm thi & Xuất báo cáo điểm chuẩn FAP                      │
+│  │                                                                           │
+│  ├── [TEACHER] Giảng viên Coi thi & Chấm thi:                                │
+│  │   • Xem ca thi được phân công coi thi                                     │
+│  │   • Danh sách bài thi cần chấm/rà soát theo ca hoặc lớp                   │
+│  │   • Nghe Audio bằng chứng + Đọc Transcript Server bóc băng                │
+│  │   • Đối soát điểm & nhận xét AI chấm theo Rubric chuẩn của Academy        │
+│  │   • Xác nhận điểm hoặc Điều chỉnh điểm (Override score kèm giải trình)    │
+│  │                                                                           │
+│  └── [SYSTEM_ADMIN] Quản trị kỹ thuật:                                       │
+│      • Quản lý tài khoản người dùng & Phân quyền (ACADEMY, EXAMINER...)      │
+│      • Cấu hình STT Faster-Whisper, LLM Provider (Ollama/Gemini), MinIO S3   │
+│      • Monitoring hệ thống, audit log và database backups                    │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                       BACKEND API (FastAPI Python 3.12+)                     │
+│                                                                              │
+│  Auth │ Users │ Courses │ Blueprints │ ItemBank │ Semesters │ Slots │ Exams  │
+│  Grading Engine │ Evidence Vault │ FAP Export │ Audit Logs                   │
+│                                                                              │
+│  ┌─────────────┐         ┌─────────────┐                                     │
+│  │ PostgreSQL  │         │ Object S3   │                                     │
+│  │ 16 Relational│        │ (MinIO)     │                                     │
+│  └─────────────┘         └─────────────┘                                     │
+│           │                                                                  │
+│           ▼                                                                  │
+│  ┌────────────────────────────────────────────────────────────────────┐      │
+│  │                 BACKGROUND WORKER (Celery / Redis)                 │      │
+│  │  • Server STT Pipeline: Faster-Whisper (Anh/Việt) từ audio MinIO   │      │
+│  │  • Automated Test Assembly (ATA): Sinh mã đề song song ngẫu nhiên │      │
+│  │  • Grading Engine: LLM Grader (Ollama / Gemini) theo Rubric Academy│      │
+│  │  • Synthesize Evidence: Đối soát transcript với Expected Points    │      │
+│  └────────────────────────────────────────────────────────────────────┘      │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Các thành phần chính
+## 4. Ma trận phân quyền 5 Vai trò (RBAC Matrix)
 
-### 4.1 Student App (Thin-Client Desktop)
-
-- **Công nghệ:** Electron 33 + Vite + React 18 + TypeScript + `@oralai/shared`
-- **Đặc tính chống gian lận (Anti-tampering):**
-  - Zero-STT-Local: Không chạy PhoWhisper trên client, không sinh transcript.
-  - Zero-Manual-Input: Không cho phép gõ bàn phím nhập câu trả lời.
-  - Bộ nhớ an toàn: Lưu JWT token trong memory, không lưu localStorage/cookie.
-  - Chunked Uploader: Chia nhỏ audio thành các chunk 4MB kèm SHA-256 checksum chống giả mạo khi truyền file lên MinIO.
-  - RNNoise WASM AudioWorklet: Lọc tạp âm nền real-time ở tần số 48 kHz.
-
-### 4.2 Staff Portal (Cổng Thông tin Cán bộ)
-
-- **Công nghệ:** Next.js 15 App Router + React 18 + TypeScript + Tailwind CSS
-- **Chức năng:**
-  - RBAC Middleware kiểm soát quyền truy cập theo 3 role: `SYSTEM_ADMIN`, `EXAMINER`, `TEACHER`.
-  - Quản lý môn học toàn trường (Khảo thí) và phân công môn học (Giảng viên).
-  - Upload giáo trình PDF, trích xuất mục lục, chunking và sinh embedding RAG.
-  - Tạo Learning Outcomes, Topics, Rubrics đa tiêu chí có trọng số.
-  - Thiết kế Exam Blueprint và công bố đề thi với Exam Snapshot Versioning.
-  - Chấm bài, thẩm định các bài thi có biên độ tự tin thấp (`REVIEW_REQUIRED`), phúc khảo độc lập.
-  - Duyệt và khóa sổ điểm, xuất bảng điểm chuẩn FAP.
-
-### 4.3 Backend API & Background Worker
-
-- **Công nghệ:** FastAPI + Python 3.12+ + SQLAlchemy 2.0 + Alembic + Celery + Redis
-- **Chức năng:**
-  - Authentication kép: HTTP-only Cookie (cho Staff Web) và JWT Bearer Token (cho Student App).
-  - Quản lý phiên thi (Exam Sessions) và phân bổ câu hỏi.
-  - Endpoint chuyên dụng `POST /api/question-attempts/{key}/submit-audio` tiếp nhận bài nộp audio từ client.
-  - Background Worker chạy tác vụ nặng: PhoWhisper STT từ file MinIO, RAG vector retrieval, chấm điểm LLM.
-
-### 4.4 Database
-
-- **PostgreSQL 16 + pgvector** (Chuẩn 3NF gồm 23 bảng):
-  - Users, Courses, Enrollments
-  - Learning Outcomes, Topics, Documents, Chunks (vector 768 chiều)
-  - Rubrics, Exams, ExamSnapshots (đóng băng JSONB), Exam Sessions, Question Attempts
-  - Assessments, Evidence, Audit Logs, MediaCleanup
-
-### 4.5 Object Storage
-
-- **MinIO/S3** cho:
-  - Audio/video files bằng chứng thi (tổ chức theo `uploads/`)
-  - Giáo trình PDF gốc và tài liệu bổ sung RAG
+| Chức năng hệ thống | ACADEMY | EXAMINER | TEACHER | STUDENT | SYSTEM_ADMIN |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Quản lý Môn học gốc (Master Course)** | **Toàn quyền** | Chỉ xem | Chỉ xem | Không | Toàn quyền |
+| **Tạo Chuẩn đầu ra (LO) & Chủ đề (Topics)** | **Toàn quyền** | Chỉ xem | Chỉ xem | Không | Toàn quyền |
+| **Thiết lập Khung Rubric chuẩn môn** | **Toàn quyền** | Chỉ xem | Chỉ xem | Không | Toàn quyền |
+| **Thiết lập Ma trận đề thi chuẩn (Blueprint)** | **Toàn quyền** | Chỉ xem | Chỉ xem | Không | Toàn quyền |
+| **Quản lý Ngân hàng câu hỏi (Item Bank)** | **Toàn quyền** | Chỉ xem | Không | Không | Toàn quyền |
+| **Import câu hỏi từ Excel vào Item Bank** | **Toàn quyền** | Không | Không | Không | Toàn quyền |
+| **Tạo Học kỳ (Semester) & Kỳ thi (Final Exam)** | Không | **Toàn quyền** | Không | Không | Toàn quyền |
+| **Mở môn thi trong kỳ (Course Offering)** | Không | **Toàn quyền** | Không | Không | Toàn quyền |
+| **Import Sinh viên & Quản lý Lớp học** | Không | **Toàn quyền** | Chỉ xem | Không | Toàn quyền |
+| **Lập lịch Ca thi (Schedule Slots)** | Không | **Toàn quyền** | Chỉ xem | Không | Toàn quyền |
+| **Sinh mã đề song song (ATA) & Gán cho ca** | Không | **Toàn quyền** | Không | Không | Toàn quyền |
+| **Phân công Giảng viên coi & chấm ca thi** | Không | **Toàn quyền** | Không | Không | Toàn quyền |
+| **Giám sát phòng thi trực tiếp** | Không | **Toàn quyền** | **Phòng phụ trách** | Không | Toàn quyền |
+| **Tham gia làm bài thi vấn đáp (Desktop)** | Không | Không | Không | **Thực hiện** | Không |
+| **Xem điểm sơ bộ & Nhận xét do AI chấm** | Chỉ xem thống kê | Toàn quyền | **Lớp phụ trách** | Khi công bố | Toàn quyền |
+| **Rà soát & Override điểm bài thi** | Không | Duyệt cuối | **Thực hiện** | Không | Toàn quyền |
+| **Điều phối Chấm chéo / Phúc khảo** | Không | **Toàn quyền** | Khi được giao | Xem đơn | Toàn quyền |
+| **Khóa sổ điểm & Xuất báo cáo điểm FAP** | Không | **Toàn quyền** | Không | Không | Toàn quyền |
+| **Cấp tài khoản & Cấu hình AI/Whisper/MinIO**| Không | Không | Không | Không | **Toàn quyền** |
 
 ---
 
-## 5. Actors (Người dùng hệ thống)
+## 5. Danh mục tài liệu đặc tả kiến trúc
 
-| Actor                                     | Vai trò         | Mô tả                                                                                          |
-| ----------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------ |
-| **Khảo thí (Examiner)**          | `EXAMINER`        | Quản lý kỳ thi: danh mục môn học toàn trường, giao đề, thêm sinh viên, setup lịch thi, chốt điểm |
-| **Giảng viên (Teacher)**          | `TEACHER`      | Nhận yêu cầu ra đề, upload giáo trình RAG, tạo rubric, công bố đề, chấm điểm và rà soát        |
-| **Sinh viên (Student)**            | `STUDENT`      | Thi trên máy tính qua Student App, ghi âm trả lời và tải bằng chứng                            |
-| **Admin hệ thống (System Admin)** | `SYSTEM_ADMIN` | Quản trị tài khoản, cấu hình hệ thống (AI provider, storage, audit logs)                         |
-
----
-
-## 6. Luồng chính của hệ thống
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        LUỒNG TẠO ĐỀ THI                                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│  1. Khảo thí tạo môn học và giao yêu cầu làm đề cho Giảng viên         │
-│  2. Giảng viên upload giáo trình (PDF) → extract → chunk → embedding    │
-│  3. Giảng viên tạo Learning Outcomes (LO) cho môn                       │
-│  4. Giảng viên tạo Topics (liên kết LO + chương giáo trình)             │
-│  5. Giảng viên tạo Rubric (tiêu chí đánh giá & trọng số)                │
-│  6. Giảng viên tạo Exam Blueprint (phân bổ câu hỏi theo topic/độ khó)   │
-│  7. Giảng viên bấm "Sinh câu hỏi & công bố" (Exam Snapshot đóng băng)   │
-│  8. Khảo thí setup ca thi và giao đề cho sinh viên dự thi               │
-└─────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        LUỒNG LÀM BÀI THI (STUDENT APP)                  │
-├─────────────────────────────────────────────────────────────────────────┤
-│  1. Sinh viên đăng nhập vào Student App (Electron)                      │
-│  2. Sinh viên chọn bài thi đã được giao                                 │
-│  3. Kiểm tra camera/micro & đo tiếng ồn môi trường 10 giây (RNNoise)   │
-│  4. Sinh viên trả lời từng câu hỏi:                                     │
-│     - Bấm "Bắt đầu trả lời" → ghi âm raw MediaRecorder                  │
-│     - Bấm "Kết thúc trả lời" → dừng ghi âm                              │
-│     - Student App tự động chia chunk 4MB (SHA-256) tải lên MinIO        │
-│     - Gọi API submit-audio gửi upload_id (Backend gán AWAITING_STT)     │
-│  5. Sinh viên bấm "Nộp bài thi" khi hoàn thành các câu hỏi             │
-│  6. Background Worker tự động:                                          │
-│     - Phiên âm PhoWhisper từ file audio MinIO                           │
-│     - RAG vector search tài liệu đã snapshot                            │
-│     - LLM Judge chấm điểm theo Rubric và tính AI Confidence             │
-│  7. Sinh viên xem kết quả trên màn hình Results                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        LUỒNG CHẤM ĐIỂM & DUYỆT                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│  1. AI chấm điểm → sinh điểm số và confidence score                     │
-│  2. Nếu confidence ≥ threshold → auto accept                            │
-│  3. Nếu confidence < threshold → đánh dấu REVIEW_REQUIRED               │
-│  4. Giảng viên nghe audio MinIO, đối chiếu transcript và rubric         │
-│  5. Giảng viên có thể:                                                  │
-│     - Yêu cầu chấm lại (re-grade)                                       │
-│     - Điều chỉnh điểm kèm lý do giải trình bắt buộc                     │
-│  6. Khảo thí duyệt điểm chính thức, khóa sổ điểm và xuất file FAP       │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 7. Các thuật ngữ quan trọng
-
-| Thuật ngữ                     | Giải thích                                                            |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| **Learning Outcome (LO)** | Chuẩn đầu ra - kiến thức/kỹ năng cần đánh giá                |
-| **Topic**                 | Chủ đề - liên kết LO với chương giáo trình                    |
-| **Rubric**                | Tiêu chí đánh giá - gồm các tiêu chí, mô tả, điểm tối đa, trọng số|
-| **Exam Blueprint**        | Bản thiết kế - phân bổ số câu hỏi theo topic/difficulty         |
-| **Exam Snapshot**         | Ảnh chụp đề - freeze rubric, knowledge, prompt versions bất biến       |
-| **RAG**                   | Retrieval-Augmented Generation - truy xuất kiến thức giáo trình    |
-| **Server-Side STT**       | Phiên âm giọng nói tập trung tại server bằng PhoWhisper Worker       |
-| **Evidence**              | Bằng chứng - audio raw tải lên MinIO được bảo toàn toàn vẹn     |
-
----
-
-## 8. Trạng thái các thực thể chính
-
-### Exam Status
-
-| Status        | Mô tả                                  |
-| ------------- | ---------------------------------------- |
-| `DRAFT`     | Bản nháp, chưa công bố              |
-| `PUBLISHED` | Đã công bố, sinh viên có thể làm |
-| `ARCHIVED`  | Đã lưu trữ                           |
-
-### ExamSession Status
-
-| Status              | Mô tả                    |
-| ------------------- | -------------------------- |
-| `DEVICE_CHECK`    | Đang kiểm tra thiết bị |
-| `IN_PROGRESS`     | Đang làm bài            |
-| `UPLOADING`       | Đang upload media         |
-| `SUBMITTED`       | Đã nộp, chờ chấm      |
-| `REVIEW_REQUIRED` | Cần giảng viên duyệt   |
-| `COMPLETED`       | Hoàn thành               |
-
-### QuestionAttempt Status
-
-| Status         | Mô tả              |
-| -------------- | -------------------- |
-| `READY`      | Sẵn sàng trả lời |
-| `RECORDING`  | Đang ghi âm        |
-| `PROCESSING` | Đang xử lý STT/chấm điểm |
-| `SUBMITTED`  | Đã nộp            |
-| `GRADED`     | Đã chấm điểm    |
-
----
-
-## 9. Đặc tả hiện tại
-
-- Hỗ trợ thi vấn đáp tự động với Server-Side PhoWhisper và AI LLM Judge (Gemini/Ollama).
-- Thin-Client Electron với RNNoise WASM AudioWorklet lọc tạp âm real-time 48 kHz.
-- Upload phân mảnh 4MB có SHA-256 integrity checksum chống giả mạo bằng chứng.
-- Snapshot bất biến đề thi, rubric và vector embedding khi công bố.
-
----
-
-## 10. Tài liệu liên quan
-
-| Tài liệu | Đường dẫn |
-| :--- | :--- |
-| User Guide | [user-guide.md](../user-guide.md) |
-| Database Schema & ERD (3NF) | [database-schema.md](../architecture/database-schema.md) |
-| Master Spec: Dual-Frontend | [2026-09-30-dual-frontend-architecture.md](../superpowers/specs/2026-09-30-dual-frontend-architecture.md) |
-| Actor: Khảo thí | [02-actor-examiner.md](02-actor-examiner.md) |
-| Actor: Giảng viên | [03-actor-teacher.md](03-actor-teacher.md) |
-| Actor: Sinh viên | [04-actor-student.md](04-actor-student.md) |
-| Actor: System Admin | [05-actor-system-admin.md](05-actor-system-admin.md) |
-| Business Rules | [06-business-rules.md](06-business-rules.md) |
-| Technical Constraints | [07-technical-constraints.md](07-technical-constraints.md) |
-| Kho lưu trữ MVP cũ | [legacy-mvp](../archive/legacy-mvp/README.md) |
-
+| Tài liệu | Đường dẫn | Mô tả nội dung |
+| :--- | :--- | :--- |
+| **Actor: Ban Học thuật** | [`02-actor-academy.md`](02-actor-academy.md) | Đặc tả vai trò quản lý môn học, LO, Rubric, Ma trận chuẩn, Item Bank và Import Excel. |
+| **Actor: Khảo thí** | [`03-actor-examiner.md`](03-actor-examiner.md) | Đặc tả vai trò tổ chức kỳ thi, học kỳ, ca thi, sinh mã đề song song, phân công chấm và duyệt FAP. |
+| **Actor: Giảng viên** | [`04-actor-teacher.md`](04-actor-teacher.md) | Đặc tả vai trò coi thi và chấm/rà soát bài thi theo Rubric Academy (không sửa đề/rubric). |
+| **Actor: Sinh viên** | [`05-actor-student.md`](05-actor-student.md) | Đặc tả quy trình làm bài trên máy tính cá nhân qua Student App Thin-Client. |
+| **Actor: Admin hệ thống** | [`06-actor-system-admin.md`](06-actor-system-admin.md) | Đặc tả quản trị tài khoản, phân quyền, cấu hình hạ tầng và sao lưu. |
+| **Quy tắc nghiệp vụ** | [`07-business-rules.md`](07-business-rules.md) | Toàn bộ quy tắc bất biến về học thuật, khảo thí, chấm điểm và bảo mật. |
+| **Ràng buộc kỹ thuật** | [`08-technical-constraints.md`](08-technical-constraints.md) | Ràng buộc kiến trúc: Server STT Faster-Whisper, RNNoise, MinIO Chunked Upload. |
+| **Cơ sở dữ liệu** | [`database-schema.md`](../architecture/database-schema.md) | Thiết kế bảng CSDL, ERD Mermaid, Data Dictionary bảng `question_items`. |

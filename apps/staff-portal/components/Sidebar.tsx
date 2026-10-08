@@ -26,20 +26,23 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/audit', label: 'Nhật ký kiểm toán', icon: FileText },
   ],
 
+  ACADEMY: [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/courses', label: 'Môn học & Học thuật', icon: BookOpen },
+  ],
+
   EXAMINER: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/semester', label: 'Quản lý học kỳ', icon: Calendar },
-    { href: '/courses', label: 'Quản lý môn học', icon: BookOpen },
-    { href: '/exams', label: 'Quản lý kỳ thi', icon: ClipboardList },
-    { href: '/schedule', label: 'Lịch thi vấn đáp', icon: Calendar },
+    { href: '/schedule', label: 'Lịch thi & Ca thi', icon: Calendar },
     { href: '/proctor', label: 'Coi thi & Giám sát', icon: Radio },
     { href: '/students', label: 'Danh sách thí sinh', icon: GraduationCap },
     { href: '/results', label: 'Phê duyệt kết quả', icon: CheckCircle },
   ],
   TEACHER: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/courses', label: 'Môn học phụ trách', icon: BookOpen },
-    { href: '/proctor', label: 'Coi thi & Giám sát', icon: Radio },
+    { href: '/schedule', label: 'Lịch coi thi được gán', icon: Calendar },
+    { href: '/proctor', label: 'Phòng coi thi & Giám sát', icon: Radio },
     { href: '/grading', label: 'Đánh giá & Chấm bài', icon: Award },
   ],
 };
@@ -100,9 +103,11 @@ export default function Sidebar() {
           <span className="text-xs font-medium text-slate-300">
             {user.roles.includes('SYSTEM_ADMIN')
               ? 'Quản trị hệ thống'
+              : user.roles.includes('ACADEMY')
+              ? 'Ban Học thuật'
               : user.roles.includes('EXAMINER')
               ? 'Cán bộ Khảo thí'
-              : 'Giảng viên Chấm thi'}
+              : 'Giảng viên Coi & Chấm thi'}
           </span>
         </div>
       </div>

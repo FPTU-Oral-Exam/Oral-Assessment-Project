@@ -17,7 +17,7 @@ from .db import get_db
 from .grading import GradingError, check_config
 from .models import (
     Assignment, Attempt, Audit, Course, CourseCandidate, CourseEnrollment,
-    Exam, ExamSession, ScheduleSlot, SlotAssignment, Upload
+    Exam, ExamSession, ExamVariant, ScheduleSlot, SlotAssignment, Upload
 )
 from .practice import COURSE_ID
 from .retakes import ACTIVE, allowance, history_row, sessions_for
@@ -127,15 +127,18 @@ def available(db: Session = Depends(get_db), user=Depends(current_user)):
     for exam in exams:
         sessions = sessions_for(db, exam.id, user.id)
         session = next((s for s in sessions if s.status in ACTIVE), sessions[0] if sessions else None)
+        snap = exam.snapshot or {}
+        questions = snap.get("questions") or []
+        course_obj = db.get(Course, exam.course_id)
         result.append(
             {
                 "id": exam.id,
                 "name": exam.name,
                 "course_id": exam.course_id,
-                "course_name": db.get(Course, exam.course_id).name,
-                "practice": bool(exam.snapshot.get("practice")),
+                "course_name": course_obj.name if course_obj else "",
+                "practice": bool(snap.get("practice")),
                 "time_limit": exam.time_limit,
-                "question_count": len(exam.snapshot["questions"]),
+                "question_count": len(questions) if questions else (exam.question_count or 3),
                 "session_id": session.id if session else None,
                 "status": session.status if session else "ASSIGNED",
                 **allowance(db, exam, user.id, sessions),
@@ -191,7 +194,32 @@ def create_session(body: s.SessionIn, db: Session = Depends(get_db), user=Depend
     session = ExamSession(exam_id=exam.id, student_id=user.id, attempt_number=last_number + 1)
     db.add(session)
     db.flush()
-    for index, question in enumerate(exam.snapshot["questions"]):
+
+    # Determine questions for this attempt:
+    # 1. Check if student is assigned to a schedule slot with an assigned exam variant (ATA)
+    questions_to_use = None
+    assignment_slot = db.scalar(
+        select(ScheduleSlot)
+        .join(SlotAssignment, SlotAssignment.slot_id == ScheduleSlot.id)
+        .where(
+            ScheduleSlot.exam_id == exam.id,
+            SlotAssignment.student_id == user.id,
+            ScheduleSlot.exam_variant_id.isnot(None),
+        )
+    )
+    if assignment_slot and assignment_slot.exam_variant_id:
+        variant = db.get(ExamVariant, assignment_slot.exam_variant_id)
+        if variant and variant.questions:
+            questions_to_use = variant.questions
+
+    # 2. Fallback to exam snapshot questions
+    if not questions_to_use:
+        questions_to_use = (exam.snapshot or {}).get("questions", [])
+
+    if not questions_to_use:
+        fail(409, "NO_EXAM_QUESTIONS", "Đề thi chưa được phân bổ câu hỏi hoặc mã đề cho ca thi này. Vui lòng liên hệ Khảo thí.")
+
+    for index, question in enumerate(questions_to_use):
         db.add(Attempt(session_id=session.id, sequence=index + 1, question=question))
     db.commit()
     return public_session(db, session)

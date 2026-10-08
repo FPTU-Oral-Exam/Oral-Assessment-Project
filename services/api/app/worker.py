@@ -97,25 +97,53 @@ def grade_answer(db, exam, session, attempt, transcript, confidence):
             "retrieved_chunks": [],
             "model": "practice",
             "rubric_version": snapshot["rubric_version"],
-            "knowledge_version": snapshot["knowledge_version"],
+            "knowledge_version": snapshot.get("knowledge_version", "v1"),
             "reasoning_summary": "Đã hoàn thành câu luyện tập. Bài này không tính điểm chính thức.",
         }
     check_config(exam)
-    chunks = ai.retrieve(
-        db,
-        exam.course_id,
-        attempt.question["topic_id"],
-        attempt.question["text"] + "\n" + (transcript or ""),
-        snapshot["document_ids"],
-        frozen_chunks(db, exam, attempt),
-    )
+
+    # Nếu câu hỏi từ Item Bank (hoặc không có document_ids), tổng hợp evidence trực tiếp từ đáp án chuẩn
+    if snapshot.get("assembly_mode") == "ITEM_BANK_BLUEPRINT" or not snapshot.get("document_ids"):
+        q = attempt.question or {}
+        chunks = []
+        if q.get("expected_points"):
+            chunks.append({
+                "id": f"expected-{q.get('item_id', 'ans')}",
+                "heading": "Ý trả lời cốt lõi (Expected Points)",
+                "content": "\n".join(f"- {pt}" for pt in q.get("expected_points", []))
+            })
+        if q.get("key_terms"):
+            chunks.append({
+                "id": f"terms-{q.get('item_id', 'ans')}",
+                "heading": "Thuật ngữ chuyên môn bắt buộc (Key Terms)",
+                "content": ", ".join(str(t) for t in q.get("key_terms", []))
+            })
+        if not chunks:
+            chunks.append({
+                "id": f"prompt-{q.get('item_id', 'q')}",
+                "heading": "Nội dung câu hỏi",
+                "content": q.get("text", "")
+            })
+    else:
+        chunks = ai.retrieve(
+            db,
+            exam.course_id,
+            attempt.question["topic_id"],
+            attempt.question["text"] + "\n" + (transcript or ""),
+            snapshot["document_ids"],
+            frozen_chunks(db, exam, attempt),
+        )
+
     assessment = ai.grade(
         attempt.question,
         transcript,
         snapshot["criteria"],
         chunks,
         confidence if attempt.finished_at <= session.started_at + exam.time_limit else 0,
-    ) | {"rubric_version": snapshot["rubric_version"], "knowledge_version": snapshot["knowledge_version"]}
+    ) | {
+        "rubric_version": snapshot.get("rubric_version", 1),
+        "knowledge_version": snapshot.get("knowledge_version", "item-bank-v1"),
+    }
 
     if confidence is not None and confidence < 0.50:
         assessment["review_required"] = True

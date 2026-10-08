@@ -15,16 +15,14 @@ import {
   AlertCircle,
   Loader2,
   CheckCircle2,
-  Clock,
-  ExternalLink,
-  Plus,
+  HelpCircle,
+  GraduationCap,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import TextbookPanel, { Chapter, Doc } from './components/TextbookPanel';
 import OutcomesPanel, { Outcome } from './components/OutcomesPanel';
 import TopicsPanel, { Topic } from './components/TopicsPanel';
-import RagSearchPanel from './components/RagSearchPanel';
 import RubricsPanel from './components/RubricsPanel';
+import ItemBankPanel, { QuestionItemData } from './components/ItemBankPanel';
 import ExamsPanel from './components/ExamsPanel';
 import CandidateRosterPanel from './components/CandidateRosterPanel';
 
@@ -59,10 +57,9 @@ export interface ExamItem {
 export interface WorkspaceResponse {
   outcomes: Outcome[];
   topics: Topic[];
-  documents: Doc[];
-  chapters: Chapter[];
   rubrics: RubricItem[];
   exams: ExamItem[];
+  items?: QuestionItemData[];
 }
 
 interface CourseItem {
@@ -82,8 +79,8 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
   const [error, setError] = useState<string | null>(null);
 
   // Tab state
-  const [mainTab, setMainTab] = useState<'knowledge' | 'rubric' | 'exams'>('knowledge');
-  const [knowledgeSubTab, setKnowledgeSubTab] = useState<'textbook' | 'outcomes' | 'topics' | 'rag'>('textbook');
+  const [mainTab, setMainTab] = useState<'knowledge' | 'rubric' | 'item_bank' | 'exams' | 'candidates'>('knowledge');
+  const [knowledgeSubTab, setKnowledgeSubTab] = useState<'outcomes' | 'topics'>('outcomes');
 
   // Load Course and Workspace Data
   const loadData = useCallback(async (isRefresh = false) => {
@@ -101,7 +98,6 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
       if (foundCourse) {
         setCourse(foundCourse);
       } else {
-        // Fallback placeholder if not directly found in course list
         setCourse({
           id: courseId,
           code: 'COURSE',
@@ -161,8 +157,7 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
     );
   }
 
-  const textbook = workspace.documents.find((d) => d.kind === 'TEXTBOOK');
-  const isTextbookReady = textbook?.status === 'READY';
+  const itemsCount = (workspace.items || []).length;
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
@@ -220,15 +215,9 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
                   ? 'Đang chuẩn bị'
                   : 'Lưu trữ'}
               </span>
-              {isTextbookReady ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Giáo trình Ready
-                </span>
-              ) : textbook ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                  <Clock className="w-3.5 h-3.5" /> Giáo trình {textbook.status}
-                </span>
-              ) : null}
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Khung Master Blueprint Chuẩn
+              </span>
             </div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight mt-1.5">
               {course?.name}
@@ -243,12 +232,6 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
 
         {/* Quick Counters */}
         <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto pb-1 lg:pb-0">
-          <div className="px-4 py-2.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-center min-w-[80px]">
-            <p className="text-lg font-black text-slate-800 leading-none">
-              {workspace.chapters.length}
-            </p>
-            <p className="text-[11px] font-semibold text-slate-400 mt-1">Chương</p>
-          </div>
           <div className="px-4 py-2.5 bg-indigo-50/70 rounded-2xl border border-indigo-100 text-center min-w-[80px]">
             <p className="text-lg font-black text-indigo-700 leading-none">
               {workspace.outcomes.length}
@@ -260,6 +243,12 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
               {workspace.topics.length}
             </p>
             <p className="text-[11px] font-semibold text-purple-500 mt-1">Chủ đề</p>
+          </div>
+          <div className="px-4 py-2.5 bg-blue-50/70 rounded-2xl border border-blue-100 text-center min-w-[80px]">
+            <p className="text-lg font-black text-blue-700 leading-none">
+              {itemsCount}
+            </p>
+            <p className="text-[11px] font-semibold text-blue-600 mt-1">Câu hỏi Bank</p>
           </div>
           <div className="px-4 py-2.5 bg-emerald-50/70 rounded-2xl border border-emerald-100 text-center min-w-[80px]">
             <p className="text-lg font-black text-emerald-700 leading-none">
@@ -286,8 +275,8 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <BookOpen className="w-4 h-4" />
-          <span>01 · Quản trị Kiến thức</span>
+          <Target className="w-4 h-4" />
+          <span>01 · Chuẩn đầu ra & Chủ đề</span>
         </button>
 
         <button
@@ -306,6 +295,21 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
         </button>
 
         <button
+          onClick={() => setMainTab('item_bank')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
+            mainTab === 'item_bank'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <HelpCircle className="w-4 h-4" />
+          <span>03 · Ngân hàng câu hỏi (Item Bank)</span>
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
+            {itemsCount}
+          </span>
+        </button>
+
+        <button
           onClick={() => setMainTab('exams')}
           className={`flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
             mainTab === 'exams'
@@ -314,33 +318,29 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
           }`}
         >
           <ClipboardList className="w-4 h-4" />
-          <span>03 · Soạn đề thi</span>
+          <span>04 · Ma trận & Đề thi</span>
           <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
             {workspace.exams.length}
           </span>
         </button>
+
+        <button
+          onClick={() => setMainTab('candidates')}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
+            mainTab === 'candidates'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>05 · Thí sinh dự thi</span>
+        </button>
       </div>
 
-      {/* Main Tab 1: Kiến thức & Tri thức môn học */}
+      {/* Main Tab 1: LO & Topics */}
       {mainTab === 'knowledge' && (
         <div className="space-y-6">
-          {/* Subtabs for Knowledge */}
           <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl w-fit border border-slate-200/80 overflow-x-auto">
-            <button
-              onClick={() => setKnowledgeSubTab('textbook')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                knowledgeSubTab === 'textbook'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5 text-blue-500" />
-              <span>Giáo trình & Mục lục</span>
-              {isTextbookReady && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-            </button>
-
             <button
               onClick={() => setKnowledgeSubTab('outcomes')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
@@ -370,30 +370,7 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
                 {workspace.topics.length}
               </span>
             </button>
-
-            <button
-              onClick={() => setKnowledgeSubTab('rag')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                knowledgeSubTab === 'rag'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-cyan-500" />
-              <span>Tra cứu RAG</span>
-            </button>
           </div>
-
-          {/* Render Subtab Panel */}
-          {knowledgeSubTab === 'textbook' && (
-            <TextbookPanel
-              courseId={courseId}
-              documents={workspace.documents}
-              chapters={workspace.chapters}
-              editable={true}
-              onReload={() => loadData(true)}
-            />
-          )}
 
           {knowledgeSubTab === 'outcomes' && (
             <OutcomesPanel
@@ -409,17 +386,10 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
               courseId={courseId}
               topics={workspace.topics}
               outcomes={workspace.outcomes}
-              chapters={workspace.chapters}
-              documents={workspace.documents}
+              chapters={[]}
+              documents={[]}
               editable={true}
               onReload={() => loadData(true)}
-            />
-          )}
-
-          {knowledgeSubTab === 'rag' && (
-            <RagSearchPanel
-              courseId={courseId}
-              topics={workspace.topics}
             />
           )}
         </div>
@@ -434,7 +404,19 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
         />
       )}
 
-      {/* Main Tab 3: Bài thi & Giao bài */}
+      {/* Main Tab 3: Ngân hàng câu hỏi (Item Bank) */}
+      {mainTab === 'item_bank' && (
+        <ItemBankPanel
+          courseId={courseId}
+          items={workspace.items || []}
+          topics={workspace.topics}
+          outcomes={workspace.outcomes}
+          editable={true}
+          onReload={() => loadData(true)}
+        />
+      )}
+
+      {/* Main Tab 4: Đề thi & Lắp ráp theo Ma trận */}
       {mainTab === 'exams' && (
         <ExamsPanel
           courseId={courseId}
@@ -442,6 +424,13 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
           rubrics={workspace.rubrics as any}
           topics={workspace.topics.map((t) => ({ id: t.id, name: t.name }))}
           onRefresh={() => loadData(true)}
+        />
+      )}
+
+      {/* Main Tab 5: Danh sách thí sinh dự thi */}
+      {mainTab === 'candidates' && (
+        <CandidateRosterPanel
+          courseId={courseId}
         />
       )}
     </div>

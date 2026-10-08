@@ -17,6 +17,8 @@ import {
   UserCheck,
   Building,
   GraduationCap,
+  Sparkles,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -57,6 +59,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
   const [studentsByBatch, setStudentsByBatch] = useState<Record<string, BatchStudent[]>>({});
   const [loadingStudents, setLoadingStudents] = useState<string | null>(null);
+  const [generatingExamId, setGeneratingExamId] = useState<string | null>(null);
 
   // Modal: Create Exam
   const [showExamModal, setShowExamModal] = useState(false);
@@ -220,6 +223,33 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
       toast.error(err instanceof Error ? err.message : 'Tạo kỳ thi thất bại', { duration: 5000 });
     } finally {
       setCreatingExam(false);
+    }
+  };
+
+  // Handle Automated Test Assembly (ATA) Variant Generation
+  const handleGenerateVariants = async (exam: Exam) => {
+    try {
+      setGeneratingExamId(exam.id);
+      const res = await fetch(`/api/examiner/exams/${exam.id}/generate-variants`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        const msg = errData?.detail?.message || errData?.message || 'Không thể sinh mã đề';
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      toast.success(
+        `Đã sinh thành công ${data.variants_count || 'các'} mã đề song song từ Ngân hàng đề thi (ATA) cho các ca thi!`,
+        { duration: 5000 }
+      );
+      fetchBatches(exam.id);
+      fetchExams();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Sinh mã đề thất bại');
+    } finally {
+      setGeneratingExamId(null);
     }
   };
 
@@ -446,14 +476,34 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                       </div>
                     </div>
 
-                    {/* Action Button: Create Batch for THIS Exam */}
-                    <button
-                      onClick={() => openBatchModal(exam)}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition shrink-0"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Thêm ca thi / đợt thi
-                    </button>
+                    {/* Action Buttons: Generate Variants (ATA) & Create Batch */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleGenerateVariants(exam)}
+                        disabled={generatingExamId === exam.id || batches.length === 0}
+                        className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
+                        title={
+                          batches.length === 0
+                            ? 'Cần tạo ít nhất 1 ca thi trước khi sinh mã đề'
+                            : 'Sinh mã đề song song từ Ngân hàng đề thi (ATA) cho từng ca thi'
+                        }
+                      >
+                        {generatingExamId === exam.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-4 h-4" />
+                        )}
+                        Sinh mã đề song song (ATA)
+                      </button>
+
+                      <button
+                        onClick={() => openBatchModal(exam)}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Thêm ca thi / đợt thi
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -549,13 +599,18 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
                               {/* Rooms & Total Students */}
                               <div className="flex flex-wrap items-center gap-2">
-                                {batch.rooms?.map((r) => (
+                                {batch.rooms?.map((r: any) => (
                                   <span
                                     key={r.room}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold"
                                   >
                                     <Building className="w-3 h-3 text-slate-400" />
-                                    {r.room}: <strong className="text-blue-700">{r.assigned_count}</strong> SV
+                                    <span>{r.room}: <strong className="text-blue-700">{r.assigned_count}</strong> SV</span>
+                                    {r.variant_name && (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 border border-purple-200 font-bold ml-0.5">
+                                        {r.variant_name}
+                                      </span>
+                                    )}
                                   </span>
                                 ))}
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold ml-1">
