@@ -186,7 +186,7 @@ export default function CourseListClient() {
               Kỳ học & Môn học phụ trách
             </h1>
             <p className="text-slate-300 text-sm leading-relaxed">
-              Các học kỳ, môn học và ca thi được tạo và phân bổ tự động từ bộ phận <strong>Khảo thí</strong>. Giảng viên chỉ cần chọn học kỳ, môn học để vào không gian <strong>soạn đề thi (RAG)</strong> và <strong>chấm điểm thi vấn đáp</strong>.
+              Các học kỳ, môn học và ca thi được tạo và phân bổ tự động từ bộ phận <strong>Khảo thí</strong>. Giảng viên chỉ cần chọn học kỳ, môn học để vào không gian <strong>quản trị ngân hàng câu hỏi, lắp ráp đề thi</strong> và <strong>chấm điểm thi vấn đáp</strong>.
             </p>
           </div>
 

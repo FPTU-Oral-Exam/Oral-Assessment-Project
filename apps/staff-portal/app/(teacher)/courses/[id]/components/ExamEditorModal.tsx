@@ -66,10 +66,11 @@ export default function ExamEditorModal({
   const handlePublish = async () => {
     if (
       !confirm(
-        'Bạn có chắc chắn muốn AI sinh câu hỏi và CÔNG BỐ đề thi này?\n\n' +
-          'Lưu ý quan trọng theo quy định Khảo thí:\n' +
-          '• Hệ thống sẽ truy xuất tài liệu giáo trình (RAG) và dùng Qwen 2.5 sinh câu hỏi.\n' +
-          '• Đề sau khi công bố sẽ ĐÓNG BĂNG SNAPSHOT và KHÔNG THỂ CHỈNH SỬA.'
+        'Bạn có chắc chắn muốn LẮP RÁP CÂU HỎI TỪ NGÂN HÀNG (Item Bank) và CÔNG BỐ đề thi này?\n\n' +
+          'Quy định Khảo thí chuẩn mực (Steven M. Downing Framework):\n' +
+          '• Hệ thống sẽ tự động bốc câu hỏi đã thẩm định từ Ngân hàng câu hỏi theo đúng Ma trận Blueprint.\n' +
+          '• Câu hỏi có sẵn ý trả lời cốt lõi và thuật ngữ chuyên ngành; không dùng AI bịa câu hỏi.\n' +
+          '• Đề sau khi công bố sẽ ĐÓNG BĂNG SNAPSHOT và sẵn sàng bàn giao cho các ca thi.'
       )
     ) {
       return;
@@ -86,7 +87,6 @@ export default function ExamEditorModal({
       await onRefresh();
       onClose();
     } catch (err: unknown) {
-      // Kiểm tra xem đề thi đã được AI sinh xong và công bố hay chưa (phòng trường hợp Next.js proxy timeout khi sinh nhiều câu)
       try {
         const refreshed = await api<any>(`/admin/courses/${courseId}/workspace`);
         const publishedExam = refreshed.exams?.find((e: any) => e.id === exam.id && e.status === 'PUBLISHED');
@@ -100,12 +100,10 @@ export default function ExamEditorModal({
       }
 
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('KNOWLEDGE_NOT_READY')) {
-        setError('Tài liệu giáo trình chưa sẵn sàng (READY) với mô hình embedding hiện tại. Vui lòng kiểm tra Tab Giáo trình.');
-      } else if (msg.includes('NO_EVIDENCE')) {
-        setError('Một số chủ đề trong đề thi chưa tìm thấy đoạn tài liệu tương ứng trong giáo trình.');
+      if (msg.includes('INSUFFICIENT_ITEMS')) {
+        setError(msg);
       } else {
-        setError(msg || 'Lỗi khi kích hoạt AI sinh câu hỏi & công bố đề');
+        setError(msg || 'Lỗi khi lắp ráp đề thi từ Ngân hàng câu hỏi');
       }
     } finally {
       setPublishing(false);
@@ -165,14 +163,14 @@ export default function ExamEditorModal({
               <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
                 <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-emerald-900 leading-relaxed">
-                  <strong>Nguyên tắc bất biến (BR-023a):</strong> Đề thi này đã được sinh câu hỏi bằng AI RAG và đóng băng snapshot vào ngân hàng đề thi. Theo quy chế khảo thí FPTU, giảng viên không được sửa câu hỏi sau khi công bố để bảo đảm an toàn dữ liệu và tính công bằng tuyệt đối.
+                  <strong>Nguyên tắc bất biến (BR-023a):</strong> Đề thi này đã được bốc từ Ngân hàng câu hỏi theo Ma trận chuẩn và đóng băng snapshot. Theo quy chế khảo thí FPTU, đề sau khi công bố không được sửa đổi để bảo đảm tính an toàn và công bằng tuyệt đối.
                 </div>
               </div>
             ) : (
               <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
                 <HelpCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-amber-900 leading-relaxed">
-                  <strong>Đề thi ở trạng thái Bản nháp:</strong> Bạn đã thiết lập ma trận Blueprint. Hãy bấm nút <strong>"Kích hoạt AI sinh câu hỏi & Công bố"</strong> để mô hình Qwen 2.5 đọc giáo trình RAG, tạo câu hỏi vấn đáp và gợi ý thuật ngữ chuyên ngành tiếng Anh.
+                  <strong>Đề thi ở trạng thái Bản nháp:</strong> Bạn đã thiết lập ma trận Blueprint. Hãy bấm nút <strong>"Lắp ráp đề từ Ngân hàng & Công bố"</strong> để hệ thống tự động bốc câu hỏi đã thẩm định từ Item Bank.
                 </div>
               </div>
             )}
@@ -274,7 +272,7 @@ export default function ExamEditorModal({
                     <BookOpen className="w-4 h-4 text-emerald-600" />
                     Danh sách câu hỏi chính thức ({questions.length})
                   </h4>
-                  <span className="text-[10px] text-slate-400 italic">Được sinh từ Qwen 2.5 RAG</span>
+                  <span className="text-[10px] text-slate-400 font-medium">Bốc từ Ngân hàng câu hỏi thẩm định</span>
                 </div>
 
                 <div className="space-y-3">
@@ -353,15 +351,15 @@ export default function ExamEditorModal({
                   {publishing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>AI đang đọc giáo trình & sinh đề...</span>
+                      <span>Đang bốc câu hỏi từ Ngân hàng & lắp ráp đề...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-4 h-4" />
+                      <ClipboardList className="w-4 h-4" />
                       <span>
                         {!exam.blueprint || exam.blueprint.length === 0
                           ? 'Cần thiết lập Ma trận Blueprint trước'
-                          : 'Kích hoạt AI sinh câu hỏi & Công bố'}
+                          : 'Lắp ráp đề từ Ngân hàng & Công bố'}
                       </span>
                     </>
                   )}

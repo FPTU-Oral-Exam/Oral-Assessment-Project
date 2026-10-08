@@ -15,6 +15,7 @@ import {
 export default async function DashboardPage() {
   const user = await requireUser();
 
+  const isAcademy = user.roles.includes('ACADEMY');
   const isTeacher = user.roles.includes('TEACHER');
   const isExaminer = user.roles.includes('EXAMINER');
   const isAdmin = user.roles.includes('SYSTEM_ADMIN');
@@ -32,7 +33,7 @@ export default async function DashboardPage() {
             Xin chào, {user.name || user.username}!
           </h1>
           <p className="mt-2 text-blue-100 text-sm max-w-2xl leading-relaxed">
-            Chào mừng bạn đến với Cổng điều hành thi vấn đáp thông minh. Hệ thống đã đồng bộ toàn bộ pipeline STT PhoWhisper và công cụ đối chiếu Rubric tự động.
+            Chào mừng bạn đến với Cổng điều hành thi vấn đáp thông minh. Hệ thống đã đồng bộ toàn bộ pipeline STT Faster-Whisper và công cụ đối chiếu Rubric tự động.
           </p>
         </div>
 
@@ -100,10 +101,12 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Quick Links Column */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-slate-900">Thao tác nhanh cho {isTeacher ? 'Giảng viên' : isExaminer ? 'Khảo thí' : 'Quản trị viên'}</h2>
+          <h2 className="text-base font-bold text-slate-900">
+            Thao tác nhanh cho {isAcademy ? 'Ban Học thuật' : isExaminer ? 'Khảo thí' : isTeacher ? 'Giảng viên' : 'Quản trị viên'}
+          </h2>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {isTeacher && (
+            {(isAcademy || isAdmin) && (
               <>
                 <Link
                   href="/courses"
@@ -115,14 +118,18 @@ export default async function DashboardPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Quản lý Môn học</h3>
-                      <p className="text-xs text-slate-500">Xem và nạp giáo trình RAG</p>
+                      <p className="text-xs text-slate-500">LO, Rubric, Item Bank & Blueprint</p>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-blue-600 transition-all" />
                 </Link>
+              </>
+            )}
 
+            {(isTeacher && !isAcademy) && (
+              <>
                 <Link
-                  href="/rubrics"
+                  href="/grading"
                   className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 transition-all group"
                 >
                   <div className="flex items-center gap-3">
@@ -130,19 +137,35 @@ export default async function DashboardPage() {
                       <Award className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600">Khung Rubric</h3>
-                      <p className="text-xs text-slate-500">Barem tiêu chuẩn chấm thi</p>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600">Đánh giá & Chấm bài</h3>
+                      <p className="text-xs text-slate-500">Rà soát điểm AI & Audio bài thi</p>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-indigo-600 transition-all" />
                 </Link>
+
+                <Link
+                  href="/schedule"
+                  className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                      <FileCheck2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Lịch coi thi được gán</h3>
+                      <p className="text-xs text-slate-500">Xem phòng thi và ca thi giám sát</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-blue-600 transition-all" />
+                </Link>
               </>
             )}
 
-            {isExaminer && (
+            {(isExaminer || isAdmin) && (
               <>
                 <Link
-                  href="/exams"
+                  href="/semester"
                   className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-purple-400 hover:bg-purple-50/40 transition-all group"
                 >
                   <div className="flex items-center gap-3">
@@ -150,11 +173,27 @@ export default async function DashboardPage() {
                       <FileCheck2 className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-purple-600">Kỳ thi vấn đáp</h3>
-                      <p className="text-xs text-slate-500">Quản lý danh sách ca thi</p>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-purple-600">Quản lý Học kỳ & Ca thi</h3>
+                      <p className="text-xs text-slate-500">Tạo kỳ học, xếp ca thi & mã đề</p>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-purple-600 transition-all" />
+                </Link>
+
+                <Link
+                  href="/results"
+                  className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <Award className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600">Phê duyệt kết quả</h3>
+                      <p className="text-xs text-slate-500">Khóa sổ điểm & Xuất file FAP</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-emerald-600 transition-all" />
                 </Link>
               </>
             )}
@@ -171,7 +210,7 @@ export default async function DashboardPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600">Quản lý Người dùng</h3>
-                      <p className="text-xs text-slate-500">Phân quyền 4 vai trò</p>
+                      <p className="text-xs text-slate-500">Phân quyền 5 vai trò đại học</p>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-emerald-600 transition-all" />
@@ -192,7 +231,7 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
               <div className="flex items-center gap-2.5">
                 <Server className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-semibold text-slate-700">PhoWhisper Celery Worker</span>
+                <span className="text-xs font-semibold text-slate-700">Faster-Whisper Celery Worker</span>
               </div>
               <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                 ACTIVE
