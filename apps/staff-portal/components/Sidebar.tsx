@@ -42,6 +42,7 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
   TEACHER: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/schedule', label: 'Lịch coi thi được gán', icon: Calendar },
+    { href: '/proctor', label: 'Phòng coi thi & Giám sát', icon: Radio },
     { href: '/grading', label: 'Đánh giá & Chấm bài', icon: Award },
   ],
 };

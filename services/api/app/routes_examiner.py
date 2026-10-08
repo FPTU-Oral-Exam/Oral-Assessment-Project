@@ -32,7 +32,7 @@ from .models import (
     Upload,
     User,
 )
-from .security import by_id, course_access, examiner, fail, public_user, hasher
+from .security import by_id, course_access, examiner, fail, public_user, hasher, staff
 
 router = APIRouter()
 
@@ -47,7 +47,7 @@ def data(row, *fields):
 # ─────────────────────────────────────────────────────────────────
 
 @router.get("/semesters")
-def list_semesters(db: Session = Depends(get_db), user=Depends(examiner)):
+def list_semesters(db: Session = Depends(get_db), user=Depends(staff)):
     semesters = db.scalars(select(Semester).order_by(Semester.created_at.desc())).all()
     return [
         {
@@ -81,7 +81,7 @@ def create_semester(body: s.SemesterIn, db: Session = Depends(get_db), user=Depe
 
 
 @router.get("/semesters/{semester_id}")
-def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     semester = by_id(db, Semester, semester_id)
 
     # 1. Courses directly associated with this semester
@@ -240,7 +240,7 @@ def create_course_in_semester(
 
 
 @router.get("/courses")
-def list_all_courses(db: Session = Depends(get_db), user=Depends(examiner)):
+def list_all_courses(db: Session = Depends(get_db), user=Depends(staff)):
     """List all active courses with section count and teacher."""
     courses = db.scalars(
         select(Course).order_by(Course.created_at.desc())
@@ -259,7 +259,7 @@ def list_all_courses(db: Session = Depends(get_db), user=Depends(examiner)):
 
 
 @router.get("/courses/{course_id}")
-def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """Get course detail with sections count and candidate pool statistics."""
     course = by_id(db, Course, course_id)
     teacher = db.get(User, course.teacher_id) if course.teacher_id else None
@@ -382,7 +382,7 @@ def update_section(section_id: str, body: s.SectionUpdateIn, db: Session = Depen
 # ─────────────────────────────────────────────────────────────────
 
 @router.get("/exams")
-def list_all_exams(db: Session = Depends(get_db), user=Depends(examiner)):
+def list_all_exams(db: Session = Depends(get_db), user=Depends(staff)):
     """List all exams across courses with course_id and slot_count."""
     exams = db.scalars(
         select(Exam).where(Exam.deleted_at.is_(None)).order_by(Exam.created_at.desc())
@@ -400,7 +400,7 @@ def list_all_exams(db: Session = Depends(get_db), user=Depends(examiner)):
 
 
 @router.get("/courses/{course_id}/exams")
-def list_course_exams(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+def list_course_exams(course_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """List all exams for a course."""
     from .models import Exam
     exams = db.scalars(
@@ -455,7 +455,7 @@ def create_exam(
 
 
 @router.get("/exams/{exam_id}")
-def get_exam(exam_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+def get_exam(exam_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """Get exam detail with slot count."""
     from .models import Exam
     exam = by_id(db, Exam, exam_id)
@@ -627,7 +627,7 @@ def delete_enrollment(
 # ─────────────────────────────────────────────────────────────────
 
 @router.get("/exams/{exam_id}/slots")
-def list_slots(exam_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+def list_slots(exam_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     slots = db.scalars(
         select(ScheduleSlot)
         .where(ScheduleSlot.exam_id == exam_id)
@@ -717,7 +717,7 @@ def create_slots(exam_id: str, body: s.CreateSlotsIn, db: Session = Depends(get_
 # ─────────────────────────────────────────────────────────────────
 
 @router.get("/slots/{slot_id}")
-def get_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
+def get_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """Get slot details including exam_id."""
     slot = by_id(db, ScheduleSlot, slot_id)
 
@@ -1624,7 +1624,7 @@ def create_batch_and_allocate(
 def list_batches(
     exam_id: str,
     db: Session = Depends(get_db),
-    user=Depends(examiner),
+    user=Depends(staff),
 ):
     """List all batches for an exam."""
     batches = db.scalars(
@@ -1665,7 +1665,7 @@ def list_batches(
 def list_batch_students(
     batch_id: str,
     db: Session = Depends(get_db),
-    user=Depends(examiner),
+    user=Depends(staff),
 ):
     """List all students assigned to a batch."""
     batch = by_id(db, ExamBatch, batch_id)
