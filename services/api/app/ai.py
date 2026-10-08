@@ -134,7 +134,7 @@ def structured(instruction, data, schema):
                 ],
                 "format": schema.model_json_schema(),
                 "stream": False,
-                "options": {"temperature": 0.2},
+                "options": {"temperature": 0.2, "num_ctx": 4096},
             },
         )
         return schema.model_validate_json(result["message"]["content"])

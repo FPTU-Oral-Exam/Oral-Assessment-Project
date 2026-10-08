@@ -86,27 +86,43 @@ export default function ExamEditorModal({
       await onRefresh();
       onClose();
     } catch (err: unknown) {
-      // Kiểm tra xem đề thi đã được AI sinh xong và công bố hay chưa (phòng trường hợp Next.js proxy timeout khi sinh nhiều câu)
+      const msg = err instanceof Error ? err.message : String(err);
+
+      if (msg.includes('KNOWLEDGE_NOT_READY')) {
+        setError('Tài liệu giáo trình chưa sẵn sàng (READY) với mô hình embedding hiện tại. Vui lòng kiểm tra Tab Giáo trình.');
+        setPublishing(false);
+        return;
+      }
+      if (msg.includes('NO_EVIDENCE')) {
+        setError('Một số chủ đề trong đề thi chưa tìm thấy đoạn tài liệu tương ứng trong giáo trình.');
+        setPublishing(false);
+        return;
+      }
+
+      // Phòng trường hợp Next.js proxy timeout (500) trong khi Backend/Local LLM vẫn đang âm thầm sinh câu hỏi:
+      // Poll kiểm tra lại workspace mỗi 5 giây trong tối đa 90 giây
+      let isPublished = false;
       try {
-        const refreshed = await api<any>(`/admin/courses/${courseId}/workspace`);
-        const publishedExam = refreshed.exams?.find((e: any) => e.id === exam.id && e.status === 'PUBLISHED');
-        if (publishedExam) {
-          await onRefresh();
-          onClose();
-          return;
+        for (let attempt = 0; attempt < 18; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          const refreshed = await api<any>(`/admin/courses/${courseId}/workspace`);
+          const publishedExam = refreshed.exams?.find((e: any) => e.id === exam.id && e.status === 'PUBLISHED');
+          if (publishedExam) {
+            isPublished = true;
+            break;
+          }
         }
       } catch {
         // bỏ qua lỗi kiểm tra phụ
       }
 
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('KNOWLEDGE_NOT_READY')) {
-        setError('Tài liệu giáo trình chưa sẵn sàng (READY) với mô hình embedding hiện tại. Vui lòng kiểm tra Tab Giáo trình.');
-      } else if (msg.includes('NO_EVIDENCE')) {
-        setError('Một số chủ đề trong đề thi chưa tìm thấy đoạn tài liệu tương ứng trong giáo trình.');
-      } else {
-        setError(msg || 'Lỗi khi kích hoạt AI sinh câu hỏi & công bố đề');
+      if (isPublished) {
+        await onRefresh();
+        onClose();
+        return;
       }
+
+      setError(msg || 'Lỗi khi kích hoạt AI sinh câu hỏi & công bố đề');
     } finally {
       setPublishing(false);
     }

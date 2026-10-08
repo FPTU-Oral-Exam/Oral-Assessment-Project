@@ -189,9 +189,10 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
-        const code = errData?.detail?.code || errData?.code;
+        const code = errData?.detail?.code || errData?.error?.code || errData?.code;
         const rawMessage =
           errData?.detail?.message ||
+          errData?.error?.message ||
           (typeof errData?.detail === 'string' ? errData.detail : null) ||
           errData?.message;
 
@@ -282,9 +283,10 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
-        const code = errData?.detail?.code || errData?.code;
+        const code = errData?.detail?.code || errData?.error?.code || errData?.code;
         const rawMessage =
           errData?.detail?.message ||
+          errData?.error?.message ||
           (typeof errData?.detail === 'string' ? errData.detail : null) ||
           errData?.message;
 

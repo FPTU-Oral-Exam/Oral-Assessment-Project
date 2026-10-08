@@ -137,7 +137,13 @@ export default function CandidatesClient({ courseId }: { courseId: string }) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: 'Import thất bại' }));
-        throw new Error(err.detail || err.message || 'Import thất bại');
+        const errorMsg =
+          err?.error?.message ||
+          err?.detail?.message ||
+          (typeof err?.detail === 'string' ? err.detail : null) ||
+          err?.message ||
+          'Import thất bại';
+        throw new Error(errorMsg);
       }
 
       const result: ImportResult = await res.json();
