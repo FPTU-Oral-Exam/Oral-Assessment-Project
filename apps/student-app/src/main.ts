@@ -23,7 +23,7 @@ function createWindow() {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     if (permission === 'media') {
       callback(true);
-    } else if (permission === 'desktopCapture') {
+    } else if (permission === 'display-capture' || (permission as string) === 'desktopCapture') {
       callback(false);
     } else {
       callback(false);
@@ -36,7 +36,7 @@ function createWindow() {
 
   if (session.defaultSession.setDevicePermissionHandler) {
     session.defaultSession.setDevicePermissionHandler((details) => {
-      return details.deviceType === 'camera' || details.deviceType === 'audioInput';
+      return (details.deviceType as string) === 'camera' || (details.deviceType as string) === 'audioInput';
     });
   }
 
