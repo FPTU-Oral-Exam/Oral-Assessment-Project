@@ -14,7 +14,7 @@ class GradingError(ValueError):
 
 def check_config(exam):
     snapshot = exam.snapshot or {}
-    if snapshot.get("practice"):
+    if snapshot.get("practice") or snapshot.get("assembly_mode") == "ITEM_BANK_BLUEPRINT":
         return
     current = {"ai_provider": ai.settings().ai_provider, "llm_model": ai.settings().llm_model,
                "embedding_model": ai.embedding_name(), "prompt_version": ai.PROMPT_VERSION}

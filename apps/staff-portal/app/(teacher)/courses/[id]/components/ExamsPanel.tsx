@@ -93,10 +93,10 @@ export default function ExamsPanel({
             </div>
             <div>
               <h2 className="text-xl font-bold text-slate-800">
-                Soạn đề thi & Ngân hàng câu hỏi ({exams.length})
+                Đề thi & Lắp ráp theo Ma trận ({exams.length})
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Thiết kế khung ma trận đề thi (Blueprint), kích hoạt AI RAG sinh câu hỏi, duyệt thuật ngữ chuyên ngành và hoàn thiện đề thi cho khảo thí.
+                Thiết kế khung ma trận chuẩn (Master Blueprint), tự động lắp ráp câu hỏi từ Ngân hàng đề thi và chuẩn bị bài thi cho Khảo thí.
               </p>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export interface User {
   id: string;
@@ -14,7 +15,11 @@ export async function getUser(): Promise<User | null> {
   if (!userCookie) return null;
 
   try {
-    return JSON.parse(decodeURIComponent(userCookie.value));
+    const data = JSON.parse(decodeURIComponent(userCookie.value));
+    if (data && !Array.isArray(data.roles) && data.role) {
+      data.roles = [data.role];
+    }
+    return data;
   } catch {
     return null;
   }
@@ -23,17 +28,22 @@ export async function getUser(): Promise<User | null> {
 export async function requireUser(): Promise<User> {
   const user = await getUser();
   if (!user) {
-    throw new Error('Unauthorized');
+    redirect('/login');
   }
   return user;
 }
 
 export async function requireRole(roles: string[]): Promise<User> {
   const user = await requireUser();
-  const hasRole = user.roles.some(r => roles.includes(r));
+  const userRoles = Array.isArray(user.roles)
+    ? user.roles
+    : (user as any).role
+    ? [(user as any).role]
+    : [];
+  const hasRole = userRoles.some(r => roles.includes(r));
 
   if (!hasRole) {
-    throw new Error('Forbidden');
+    redirect('/unauthorized');
   }
 
   return user;

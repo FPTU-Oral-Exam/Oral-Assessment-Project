@@ -20,9 +20,12 @@ import {
   Unlock,
   Layers,
   Sparkles,
+  FileText,
+  Radio,
   ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useUser } from '@/hooks/useUser';
 
 interface Semester {
   id: string;
@@ -63,6 +66,7 @@ interface ScheduleSlotItem {
   course_name: string;
   course_code: string;
   semester_name: string;
+  exam_variant_name?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { color: string; label: string; bgBadge: string }> = {
@@ -74,6 +78,8 @@ const STATUS_CONFIG: Record<string, { color: string; label: string; bgBadge: str
 
 export default function ScheduleClient() {
   const router = useRouter();
+  const { user } = useUser();
+  const isExaminer = user?.roles?.some((r: string) => ['EXAMINER', 'SYSTEM_ADMIN'].includes(r));
 
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -150,6 +156,7 @@ export default function ScheduleClient() {
                 course_name: course?.name || 'Môn học',
                 course_code: course?.code || 'N/A',
                 semester_name: sem?.name || 'Toàn trường',
+                exam_variant_name: s.exam_variant?.name || null,
               });
             });
           } catch {
@@ -462,14 +469,24 @@ export default function ScheduleClient() {
                     <tr key={slot.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Slot & Room */}
                       <td className="py-3.5 px-4 font-medium text-slate-900">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center">
-                            #{slot.slot_number}
-                          </span>
-                          <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{slot.room}</span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center">
+                              #{slot.slot_number}
+                            </span>
+                            <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{slot.room}</span>
+                            </div>
                           </div>
+                          {slot.exam_variant_name ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                              <FileText className="w-2.5 h-2.5" />
+                              {slot.exam_variant_name}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 font-medium">Chưa sinh mã đề</span>
+                          )}
                         </div>
                       </td>
 
@@ -540,20 +557,32 @@ export default function ScheduleClient() {
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <Link
-                            href={`/results/${slot.id}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
-                            title="Xem bảng điểm & nghe audio"
+                            href="/proctor"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                            title="Vào phòng coi thi & giám sát thí sinh"
                           >
-                            <span>Xem kết quả</span>
-                            <ArrowRight className="w-3 h-3" />
+                            <span>Coi thi</span>
+                            <Radio className="w-3 h-3" />
                           </Link>
-                          <Link
-                            href={`/courses/${slot.course_id}/exams?examId=${slot.exam_id}`}
-                            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
-                            title="Quản lý ca thi của môn"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </Link>
+                          {isExaminer && (
+                            <>
+                              <Link
+                                href={`/results/${slot.id}`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+                                title="Xem bảng điểm & nghe audio"
+                              >
+                                <span>Xem kết quả</span>
+                                <ArrowRight className="w-3 h-3" />
+                              </Link>
+                              <Link
+                                href={`/courses/${slot.course_id}/exams?examId=${slot.exam_id}`}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                                title="Quản lý ca thi của môn"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </Link>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

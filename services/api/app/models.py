@@ -378,3 +378,18 @@ class ExamBatch(Entity, Base):
     status: Mapped[str] = mapped_column(String(20), default="SCHEDULED")  # SCHEDULED, IN_PROGRESS, COMPLETED
     updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
+
+class QuestionItem(Entity, Base):
+    __tablename__ = "question_items"
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    topic_id: Mapped[str] = mapped_column(ForeignKey("topics.id", ondelete="CASCADE"), index=True)
+    learning_outcome_id: Mapped[str | None] = mapped_column(ForeignKey("learning_outcomes.id", ondelete="SET NULL"), nullable=True)
+    difficulty: Mapped[str] = mapped_column(String(20), default="MEDIUM")  # EASY, MEDIUM, HARD
+    prompt: Mapped[str] = mapped_column(Text)
+    expected_points: Mapped[list] = mapped_column(JSON(none_as_null=True), default=list)
+    key_terms: Mapped[list] = mapped_column(JSON(none_as_null=True), default=list)
+    status: Mapped[str] = mapped_column(String(20), default="APPROVED")  # DRAFT, APPROVED
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    usage_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    deleted_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+

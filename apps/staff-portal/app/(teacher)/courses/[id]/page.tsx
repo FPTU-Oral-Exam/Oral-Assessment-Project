@@ -13,6 +13,7 @@
       const user = await getUser();
 
       const roles = user?.roles || [];
+      const isAcademy = roles.includes('ACADEMY');
       const isExaminer = roles.includes('EXAMINER');
       const isTeacher = roles.includes('TEACHER');
       const isAdmin = roles.includes('SYSTEM_ADMIN');
@@ -21,16 +22,16 @@
       if (sp.view === 'examiner' && (isExaminer || isAdmin)) {
         return <CourseDetailClient courseId={id} />;
       }
-      if (sp.view === 'teacher' && (isTeacher || isAdmin)) {
+      if ((sp.view === 'academy' || sp.view === 'teacher') && (isAcademy || isTeacher || isAdmin)) {
         return <CourseWorkspaceClient courseId={id} />;
       }
 
-      // Examiner-specific view
-      if ((isExaminer && !isTeacher) || (isAdmin && !isTeacher)) {
+      // Examiner-only role gets CourseDetailClient (shifts, classes, slots)
+      if (isExaminer && !isAcademy && !isAdmin) {
         return <CourseDetailClient courseId={id} />;
       }
 
-      // Default: Teacher CourseWorkspaceClient (for teachers, dual-role teachers, etc.)
+      // Default: Academy Workspace (LO, Rubric, Item Bank, Blueprint)
       return <CourseWorkspaceClient courseId={id} />;
     }
 

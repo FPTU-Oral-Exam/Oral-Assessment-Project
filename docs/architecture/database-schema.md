@@ -1,9 +1,10 @@
 # ĐẶC TẢ THIẾT KẾ CƠ SỞ DỮ LIỆU (DATABASE ARCHITECTURE & DATA DICTIONARY)
 
 > **Dự án:** AI Oral Assessment Platform (Hệ thống Thi vấn đáp Tự động bằng AI)  
-> **Chủ sở hữu:** Bình (Nguyễn Văn Gia Bình) — NCKH / Đồ án Tốt nghiệp  
-> **Hệ quản trị CSDL:** PostgreSQL 16 tích hợp Extension `pgvector`  
-> **Lưu trữ nhị phân (Object Storage):** MinIO S3 (Audio / Video bài thi và Giáo trình PDF)  
+> **Chủ sở hữu:** Nguyễn Văn Gia Bình — NCKH / Đồ án Tốt nghiệp  
+> **Khung chuẩn lý thuyết:** Khung 12 bước của Steven M. Downing (Educational Measurement)  
+> **Hệ quản trị CSDL:** PostgreSQL 16  
+> **Lưu trữ nhị phân (Object Storage):** MinIO S3 (Audio / Video bài thi và File mẫu)  
 > **Bộ nhớ đệm (In-Memory Cache):** Redis 7 (Rate limiting, Celery task queue, Pub/Sub)  
 > **ORM Framework:** SQLAlchemy 2.0 (Python 3.12+) & Migration qua Alembic  
 
@@ -11,13 +12,15 @@
 
 ## 1. TỔNG QUAN KIẾN TRÚC DỮ LIỆU & RÀNG BUỘC TOÀN CỤC
 
-Cơ sở dữ liệu của hệ thống được thiết kế theo chuẩn **3NF (Third Normal Form)**, kết hợp linh hoạt với các trường `JSONB` có cấu trúc phục vụ việc đóng băng đề thi (**Exam Snapshot Versioning**) và trường vector đa chiều phục vụ mô hình tìm kiếm ngữ nghĩa (**pgvector**).
+Cơ sở dữ liệu của hệ thống được thiết kế theo chuẩn **3NF (Third Normal Form)**, kết hợp linh hoạt với các trường `JSONB` có cấu trúc phục vụ việc đóng băng đề thi (**Exam Snapshot Versioning**) và lắp ráp đề tự động (**Automated Test Assembly - ATA**).
 
 ### 1.1. Các nguyên tắc kiến trúc dữ liệu cốt lõi (Data Architectural Invariants)
 1. **Server là Source of Truth:** Toàn bộ điểm số, phiên thi (`exam_sessions`), câu hỏi và kết quả thẩm định đều được tính toán và kiểm soát tập trung tại server.
 2. **Khóa chính chuẩn hóa (UUID v4):** 100% các bảng kế thừa lớp cơ sở `Entity` đều sử dụng khóa chính UUID v4 dạng chuỗi 36 ký tự (`String(36)`) kèm thời gian khởi tạo Unix epoch (`created_at: Float`) giúp phân tán dữ liệu và chống đoán ID.
-3. **Đóng băng tri thức (Freeze Snapshot):** Khi đề thi chuyển trạng thái `PUBLISHED`, toàn bộ cây giáo trình RAG, danh sách tiêu chí Rubric và cấu hình model AI tại thời điểm đó được copy nguyên trạng vào cột `snapshot` (JSON). Mọi thay đổi giáo trình sau đó không làm sai lệch kết quả chấm của các bài thi đã công bố.
-4. **Không tin tưởng Client (Anti-Tampering):** Máy trạm sinh viên chỉ đẩy các mảnh file âm thanh thô 4MB có băm SHA-256 lên MinIO. Bảng `uploads` lưu trữ hash và trạng thái upload; bảng `question_attempts` lưu transcript do Worker tự động bóc băng từ MinIO (Zero-STT Client).
+3. **Phân định 4 Vai trò Đại học Chuẩn mực:** Bảng `users` hỗ trợ 5 vai trò phân cấp rõ ràng: `ACADEMY` (Ban Học thuật), `EXAMINER` (Khảo thí), `TEACHER` (Giảng viên coi thi & chấm thi), `STUDENT` (Sinh viên) và `SYSTEM_ADMIN` (Quản trị hệ thống).
+4. **Zero AI Question Generation & Item Bank Centric:** 100% câu hỏi thi được quản lý trong bảng `question_items` có đầy đủ mã câu, chuẩn đầu ra (LO), mức nhận thức Bloom, điểm mấu chốt (`expected_points`) và từ khóa (`key_terms`).
+5. **Đóng băng tri thức (Freeze Snapshot v3):** Khi ca thi hoặc mã đề được kích hoạt, toàn bộ câu hỏi rút trích từ Item Bank, danh sách tiêu chí Rubric và cấu hình model AI tại thời điểm đó được copy nguyên trạng vào cột `Exam.snapshot` (JSON). Mọi thay đổi sau đó không làm sai lệch kết quả chấm của các bài thi đã công bố.
+6. **Không tin tưởng Client (Anti-Tampering):** Máy trạm sinh viên chỉ đẩy các mảnh file âm thanh thô 4MB có băm SHA-256 lên MinIO. Bảng `uploads` lưu trữ hash và trạng thái upload; bảng `question_attempts` lưu transcript do Faster-Whisper Server-Side Worker tự động bóc băng từ MinIO (Zero-STT Client).
 
 ---
 
@@ -30,136 +33,100 @@ erDiagram
     %% ==========================================
     User ||--o{ AuthSession : "sở hữu"
     User ||--o{ OAuthFlow : "xác thực"
-    User ||--o{ Course : "giảng viên phụ trách"
-    User ||--o{ CourseEnrollment : "ghi danh"
-    User ||--o{ Assignment : "được giao đề"
-    User ||--o{ ExamSession : "tham gia thi"
-    User ||--o{ ReviewJob : "yêu cầu phúc khảo"
+    User ||--o{ Course : "quản lý học thuật (Academy)"
+    User ||--o{ ScheduleSlot : "coi thi / chấm thi (Teacher)"
+    User ||--o{ ExamSession : "dự thi (Student)"
+    User ||--o{ QuestionItem : "biên soạn / thẩm định"
 
     %% ==========================================
-    %% 2. COURSE & RAG ENGINE
+    %% 2. ACADEMY: MÔN HỌC, CHUẨN ĐẦU RA & ITEM BANK
     %% ==========================================
-    Course ||--o{ CourseEnrollment : "có sinh viên"
     Course ||--o{ LearningOutcome : "định nghĩa chuẩn đầu ra"
     Course ||--o{ Topic : "chứa chủ đề"
-    Course ||--o{ Document : "chứa giáo trình/tài liệu"
-    Course ||--o{ BookSection : "phân mục sách"
-    Course ||--o{ Rubric : "khung tiêu chí"
-    Course ||--o{ Exam : "tổ chức kỳ thi"
+    Course ||--o{ Rubric : "khung tiêu chí chuẩn"
+    Course ||--o{ QuestionItem : "ngân hàng câu hỏi"
+    Course ||--o{ Exam : "ma trận đề chuẩn (Blueprint)"
 
-    Document ||--o{ Chunk : "băm đoạn embedding"
-    Document ||--o{ BookSection : "trích xuất mục lục"
-    Document ||--o{ TopicDocument : "gán vào chủ đề"
-
-    LearningOutcome ||--o{ Topic : "chuẩn đầu ra gốc"
-    LearningOutcome ||--o{ TopicOutcome : "liên kết n-n"
-    
-    Topic ||--o{ TopicOutcome : "bao phủ"
-    Topic ||--o{ TopicSection : "sử dụng"
-    Topic ||--o{ TopicDocument : "tham chiếu"
-    BookSection ||--o{ TopicSection : "nằm trong"
+    LearningOutcome ||--o{ QuestionItem : "đo lường"
+    Topic ||--o{ QuestionItem : "thuộc chủ đề"
 
     %% ==========================================
-    %% 3. ASSESSMENT & AI GRADING
+    %% 3. EXAMINER: HỌC KỲ, LỚP HỌC & CA THI
     %% ==========================================
-    Rubric ||--o{ Exam : "áp dụng thang điểm"
-    Exam ||--o{ Assignment : "phân công thí sinh"
+    Semester ||--o{ Course : "môn mở trong kỳ"
+    Semester ||--o{ ScheduleSlot : "lịch ca thi"
+    Course ||--o{ ClassSection : "phân lớp học phần"
+    ClassSection ||--o{ SectionStudent : "danh sách sinh viên lớp"
+    ScheduleSlot ||--o{ SlotStudent : "thí sinh trong ca thi"
+    ScheduleSlot ||--o{ Exam : "gán mã đề song song"
+
+    %% ==========================================
+    %% 4. STUDENT & ASSESSMENT ENGINE
+    %% ==========================================
     Exam ||--o{ ExamSession : "phiên làm bài"
-
-    ExamSession ||--o{ Attempt : "gồm các câu trả lời"
-    Attempt ||--o{ Upload : "chứa minh chứng media"
-    Attempt ||--o{ ReviewJob : "yêu cầu chấm lại"
+    ExamSession ||--o{ QuestionAttempt : "các câu trả lời"
+    QuestionAttempt ||--o{ Upload : "minh chứng audio MinIO"
+    QuestionAttempt ||--o{ ReviewJob : "yêu cầu phúc khảo"
 
     %% ==========================================
-    %% 4. ATTRIBUTES DEFINITION
+    %% 5. CORE ATTRIBUTES
     %% ==========================================
     User {
         string id PK "UUID v4"
         string username UK "Mã định danh/MSSV"
         string email "Email liên hệ"
-        string google_sub UK "Google OIDC Sub"
         string name "Họ và tên"
-        string password_hash "Argon2id Hash"
-        string role "SYSTEM_ADMIN | EXAMINER | TEACHER | STUDENT"
+        string role "SYSTEM_ADMIN | ACADEMY | EXAMINER | TEACHER | STUDENT"
         string status "ACTIVE | SUSPENDED"
-        float created_at "Epoch timestamp"
     }
 
     Course {
         string id PK "UUID v4"
-        string code UK "Mã môn (ví dụ: SWE301)"
+        string code UK "Mã môn (CSD201, PRN211...)"
         string name "Tên môn học"
-        text description "Mô tả môn"
-        string owner_id FK "users.id (Giảng viên)"
-        string status "ACTIVE | ARCHIVED"
+        string owner_id FK "users.id (Academy)"
+        string semester_id FK "semesters.id (nếu là môn mở)"
     }
 
-    Document {
+    QuestionItem {
         string id PK "UUID v4"
-        string course_id FK "courses.id"
-        string kind "TEXTBOOK | SUPPLEMENT"
-        string filename "Tên file gốc PDF"
-        text storage_key "Đường dẫn MinIO S3"
-        string status "PENDING | READY | FAILED"
-        int version "Phiên bản tài liệu"
-        string embedding_model "Model sinh vector"
-    }
-
-    Chunk {
-        string id PK "UUID v4"
-        string document_id FK "documents.id"
         string course_id FK "courses.id"
         string topic_id FK "topics.id"
-        int page "Trang trong PDF"
-        text content "Nội dung trích xuất <=2400 chars"
-        vector embedding "Vector 768 chiều (pgvector)"
+        string learning_outcome_id FK "learning_outcomes.id"
+        string item_code "Mã câu hỏi (BST_001)"
+        string cognitive_level "REMEMBER | UNDERSTAND | APPLY | ANALYZE"
+        text prompt "Nội dung câu hỏi vấn đáp"
+        int time_limit_seconds "Thời gian trả lời (s)"
+        json expected_points "Các ý trả lời mấu chốt"
+        json key_terms "Từ khóa chuyên môn bắt buộc"
+        string status "DRAFT | VERIFIED | ACTIVE | ARCHIVED"
     }
 
-    Exam {
+    ScheduleSlot {
         string id PK "UUID v4"
+        string semester_id FK "semesters.id"
         string course_id FK "courses.id"
-        string rubric_id FK "rubrics.id"
-        string name "Tên kỳ thi vấn đáp"
-        int time_limit "Thời gian làm bài (giây)"
-        json blueprint "Cấu trúc chủ đề/độ khó"
-        string status "DRAFT | PUBLISHED | ARCHIVED"
-        json snapshot "Đóng băng RAG + Rubric khi publish"
-        int max_attempts "Số lượt thi tối đa"
+        string name "Tên ca (Ca 1 - 07:30)"
+        string room "Phòng thi (BE-301)"
+        string proctor_id FK "users.id (Teacher coi thi)"
+        string exam_id FK "exams.id (Mã đề song song gán cho ca)"
+        string status "SCHEDULED | IN_PROGRESS | COMPLETED | LOCKED_FINAL"
     }
 
     ExamSession {
         string id PK "UUID v4"
         string exam_id FK "exams.id"
         string student_id FK "users.id"
-        string status "DEVICE_CHECK | IN_PROGRESS | COMPLETED"
-        int attempt_number "Lần thi (1, 2...)"
+        string status "DEVICE_CHECK | IN_PROGRESS | SUBMITTED | TEACHER_REVIEWED | LOCKED"
         float final_score "Điểm tổng kết thang 10"
-        float started_at "Bắt đầu làm bài"
-        float completed_at "Nộp bài thành công"
-        float deleted_at "Soft delete timestamp"
     }
 
-    Attempt {
+    QuestionAttempt {
         string id PK "UUID v4"
         string session_id FK "exam_sessions.id"
-        int sequence "Số thứ tự câu hỏi (1..N)"
-        json question "Nội dung câu hỏi snapshot"
-        string status "READY | ANSWERING | COMPLETED"
-        text transcript "Phiên âm tự động PhoWhisper"
-        float stt_confidence "Độ tin cậy nhận dạng âm thanh"
-        json assessment "Chi tiết điểm & nhận xét AI"
-    }
-
-    Upload {
-        string id PK "UUID v4"
-        string attempt_id FK "question_attempts.id"
-        string kind "AUDIO | VIDEO"
-        string mime_type "audio/webm | video/webm"
-        int size "Kích thước tệp (bytes)"
-        string sha256 "Mã băm SHA-256 toàn vẹn"
-        int total_chunks "Số lượng chunk 4MB"
-        string status "PENDING | COMPLETED"
-        text storage_key "MinIO S3 Object Key"
+        int sequence "Thứ tự câu (1, 2, 3)"
+        text transcript "Bản bóc băng Faster-Whisper Server"
+        json assessment "Điểm số tiêu chí Rubric & Nhận xét AI"
     }
 ```
 
@@ -167,394 +134,218 @@ erDiagram
 
 ## 3. PHÂN CỤM DỮ LIỆU THEO MIỀN NGHIỆP VỤ (DOMAIN DECOMPOSITION)
 
-Cơ sở dữ liệu gồm **23 bảng**, được chia thành 4 miền nghiệp vụ rõ rệt:
+Cơ sở dữ liệu gồm **24 bảng**, được phân chia theo 4 khối trách nhiệm rõ ràng:
 
 ```
-[HỆ THỐNG CƠ SỞ DỮ LIỆU POSTGRESQL + PGVECTOR]
- ├── MIỀN 1: TÀI KHOẢN, PHÂN QUYỀN & XÁC THỰC (Identity & Access Management)
- │     ├── users
- │     ├── auth_sessions
- │     └── oauth_flows
- ├── MIỀN 2: QUẢN LÝ ĐÀO TẠO, GIÁO TRÌNH & RAG ENGINE (Course, Syllabus & Vector DB)
- │     ├── courses
- │     ├── course_enrollments
- │     ├── learning_outcomes
- │     ├── topics
- │     ├── documents
- │     ├── document_chunks (pgvector 768D)
- │     ├── book_sections
- │     ├── topic_outcomes (bảng liên kết N-N)
- │     ├── topic_sections (bảng liên kết N-N)
- │     └── topic_documents (bảng liên kết N-N)
- ├── MIỀN 3: TỔ CHỨC THI VẤN ĐÁP & CHẤM ĐIỂM AI (Assessment, Anti-Tampering & Grading)
- │     ├── rubrics
- │     ├── exams
- │     ├── assignments
- │     ├── exam_sessions
- │     ├── question_attempts
- │     ├── uploads (MinIO evidence)
- │     ├── review_jobs (phúc khảo)
- │     └── media_cleanup
- └── MIỀN 4: GIÁM SÁT HỆ THỐNG & CẤU HÌNH ĐỘNG (Audit Trail & System Config)
-       ├── audit_logs
-       └── system_settings
+[HỆ THỐNG CƠ SỞ DỮ LIỆU POSTGRESQL 16]
+ ├── KHỐI 1: TÀI KHOẢN, PHÂN QUYỀN & XÁC THỰC (IAM)
+ │     ├── users (Role: SYSTEM_ADMIN, ACADEMY, EXAMINER, TEACHER, STUDENT)
+ │     ├── auth_sessions (Quản lý JWT & Logout)
+ │     └── oauth_flows (Google OIDC PKCE)
+ │
+ ├── KHỐI 2: BAN HỌC THUẬT - MÔN HỌC, CHUẨN ĐẦU RA & ITEM BANK (Academy Domain)
+ │     ├── courses (Master Course Catalog)
+ │     ├── learning_outcomes (Chuẩn đầu ra LO)
+ │     ├── topics (Cây chủ đề môn học)
+ │     ├── rubrics (Khung tiêu chí chấm chuẩn)
+ │     ├── question_items (Ngân hàng câu hỏi thẩm định - Item Bank)
+ │     └── topic_outcomes (Bảng liên kết N-N giữa Topic và LO)
+ │
+ ├── KHỐI 3: PHÒNG KHẢO THÍ - HỌC KỲ, CA THI & MÃ ĐỀ SONG SONG (Examiner Domain)
+ │     ├── semesters (Học kỳ: Fall_2026, Spring_2027...)
+ │     ├── class_sections (Lớp học: SE1801, SE1802...)
+ │     ├── section_students (Sinh viên theo lớp)
+ │     ├── schedule_slots (Ca thi, phòng thi, giờ thi, giảng viên coi thi)
+ │     ├── slot_students (Thí sinh được phân vào ca thi)
+ │     ├── course_enrollments (Ghi danh môn học)
+ │     └── exams (Ma trận chuẩn & Các mã đề song song sinh qua ATA)
+ │
+ └── KHỐI 4: THI VẤN ĐÁP, BẰNG CHỨNG & CHẤM ĐIỂM (Assessment & Evidence)
+       ├── exam_sessions (Phiên thi trực tiếp của sinh viên)
+       ├── question_attempts (Câu trả lời, transcript Faster-Whisper, điểm AI)
+       ├── uploads (MinIO chunked evidence 4MB + SHA-256)
+       ├── review_jobs (Hàng đợi phúc khảo / chấm chéo độc lập)
+       ├── assignments (Cấp thêm lượt thi retake cá nhân)
+       ├── audit_logs (Nhật ký kiểm toán thao tác hệ thống)
+       └── system_settings (Cấu hình LLM/Whisper/MinIO động)
 ```
 
 ---
 
 ## 4. TỪ ĐIỂN DỮ LIỆU CHI TIẾT (DATA DICTIONARY)
 
-### 4.1. Miền 1: Tài khoản, Phân quyền & Xác thực (Identity & Access Management)
+### 4.1. Khối 1: Tài khoản & Phân quyền (IAM)
 
 #### 1. Bảng `users` (Quản lý người dùng toàn hệ thống)
-*Lưu trữ thông tin định danh, tài khoản cục bộ và liên kết Google SSO cho cả 4 vai trò.*
-
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính duy nhất định danh người dùng. |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính định danh người dùng. |
 | `username` | `VARCHAR(80)` | **UNIQUE, NOT NULL** | — | Tên đăng nhập hoặc Mã số sinh viên (MSSV, ví dụ: `SE180001`). |
-| `email` | `VARCHAR(320)` | `NULLABLE` | `NULL` | Hòm thư điện tử (phục vụ thông báo kết quả thi hoặc SSO). |
-| `google_sub` | `VARCHAR(255)` | **UNIQUE, NULLABLE** | `NULL` | Mã định danh duy nhất người dùng từ Google OIDC (`sub` claim). |
-| `name` | `VARCHAR(150)` | `NOT NULL` | — | Họ và tên hiển thị của người dùng (Ví dụ: "Nguyễn Văn Gia Bình"). |
-| `password_hash`| `TEXT` | `NOT NULL` | — | Mật khẩu băm an toàn chuẩn **Argon2id** (memory=64MB, t=3, p=4). |
-| `role` | `VARCHAR(20)` | `NOT NULL` | `'STUDENT'` | 1 trong 4 vai trò chuẩn: `SYSTEM_ADMIN`, `EXAMINER`, `TEACHER`, `STUDENT`. |
-| `status` | `VARCHAR(20)` | `NOT NULL` | `'ACTIVE'` | Trạng thái tài khoản: `ACTIVE` (hoạt động), `SUSPENDED` (bị khóa). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo tài khoản (Unix epoch seconds). |
-
-#### 2. Bảng `auth_sessions` (Phiên đăng nhập & Thu hồi Token)
-*Quản lý danh sách đen và thu hồi token JWT khi người dùng đăng xuất.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của phiên đăng nhập. |
-| `user_id` | `VARCHAR(36)` | **FK -> users.id** | — | ID người dùng sở hữu phiên đăng nhập. |
-| `token_hash` | `VARCHAR(64)` | **UNIQUE, NOT NULL** | — | Mã băm SHA-256 của JWT Bearer token (không lưu raw token). |
-| `expires_at` | `DOUBLE PRECISION`| `NOT NULL` | — | Thời điểm token hết hạn. |
-| `revoked` | `BOOLEAN` | `NOT NULL` | `FALSE` | Đánh dấu `TRUE` khi người dùng bấm Đăng xuất để vô hiệu hóa token. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm cấp phát phiên. |
-
-#### 3. Bảng `oauth_flows` (Luồng đăng nhập Google OIDC PKCE)
-*Kiểm soát quá trình bắt tay OAuth2 với Google đảm bảo an toàn chống CSRF.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính phiên OAuth. |
-| `state_hash` | `VARCHAR(64)` | **UNIQUE, NULLABLE** | `NULL` | Băm SHA-256 của chuỗi state chống giả mạo CSRF. |
-| `nonce` | `VARCHAR(100)` | `NOT NULL` | — | Chuỗi ngẫu nhiên kiểm tra replay attack trong OIDC token. |
-| `verifier` | `VARCHAR(100)` | `NOT NULL` | — | Code Verifier cho chuẩn PKCE. |
-| `poll_hash` | `VARCHAR(64)` | `NULLABLE` | `NULL` | Mã định danh client polling khi dùng login SSO trên Desktop. |
-| `user_id` | `VARCHAR(36)` | **FK -> users.id** | `NULL` | User được liên kết sau khi đăng nhập thành công. |
-| `expires_at` | `DOUBLE PRECISION`| `NOT NULL` | — | Thời hạn của phiên bắt tay OAuth (thường 5-10 phút). |
-| `consumed` | `BOOLEAN` | `NOT NULL` | `FALSE` | Đánh dấu phiên đã được xử lý xong. |
-| `completed` | `BOOLEAN` | `NOT NULL` | `FALSE` | Trạng thái đăng nhập thành công. |
-| `failed` | `BOOLEAN` | `NOT NULL` | `FALSE` | Trạng thái phiên bị hủy hoặc lỗi. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo request OAuth. |
+| `email` | `VARCHAR(320)` | `NULLABLE` | `NULL` | Hòm thư điện tử liên hệ hoặc SSO Google. |
+| `google_sub` | `VARCHAR(255)` | **UNIQUE, NULLABLE** | `NULL` | Mã định danh người dùng từ Google OIDC (`sub` claim). |
+| `name` | `VARCHAR(150)` | `NOT NULL` | — | Họ và tên hiển thị đầy đủ. |
+| `password_hash`| `TEXT` | `NOT NULL` | — | Mật khẩu băm an toàn chuẩn **Argon2id**. |
+| `role` | `VARCHAR(20)` | `NOT NULL` | `'STUDENT'` | 1 trong 5 vai trò chuẩn: `SYSTEM_ADMIN`, `ACADEMY`, `EXAMINER`, `TEACHER`, `STUDENT`. |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'ACTIVE'` | Trạng thái tài khoản: `ACTIVE`, `SUSPENDED`. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo tài khoản. |
 
 ---
 
-### 4.2. Miền 2: Quản lý Đào tạo, Giáo trình & Động cơ RAG (Course, Syllabus & Vector DB)
+### 4.2. Khối 2: Ban Học thuật & Ngân hàng câu hỏi (Academy Domain)
 
-#### 4. Bảng `courses` (Danh mục môn học)
-*Môn học do Cán bộ Khảo thí (`EXAMINER`) tạo ra và phân công cho Giảng viên (`TEACHER`) phụ trách.*
-
+#### 2. Bảng `courses` (Danh mục môn học)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính duy nhất của môn học. |
-| `code` | `VARCHAR(50)` | **UNIQUE, NOT NULL** | — | Mã môn học chuẩn (Ví dụ: `SWE301`, `PRN231`). |
-| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên môn học (Ví dụ: "Software Architecture and Design"). |
-| `description`| `TEXT` | `NOT NULL` | `''` | Mô tả tóm tắt nội dung môn học và yêu cầu kỹ năng. |
-| `owner_id` | `VARCHAR(36)` | **FK -> users.id** | — | Giảng viên phụ trách môn học (Role: `TEACHER`). |
-| `status` | `VARCHAR(20)` | `NOT NULL` | `'ACTIVE'` | Trạng thái môn: `ACTIVE` (đang dạy), `ARCHIVED` (lưu trữ). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Ngày tạo môn học trên hệ thống. |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của môn học. |
+| `code` | `VARCHAR(50)` | **UNIQUE, NOT NULL** | — | Mã môn học chuẩn (Ví dụ: `CSD201`, `PRN211`). |
+| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên môn học đầy đủ. |
+| `description`| `TEXT` | `NOT NULL` | `''` | Mô tả môn học và mục tiêu đào tạo. |
+| `credits` | `INTEGER` | `NOT NULL` | `3` | Số tín chỉ của môn học. |
+| `owner_id` | `VARCHAR(36)` | **FK -> users.id** | `NULL` | Cán bộ Ban Học thuật phụ trách môn (`ACADEMY`). |
+| `semester_id`| `VARCHAR(36)` | **FK -> semesters.id**| `NULL` | Học kỳ mở môn (nếu là môn mở trong kỳ). |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'ACTIVE'` | Trạng thái môn: `ACTIVE`, `ARCHIVED`. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Ngày tạo môn học. |
 
-#### 5. Bảng `course_enrollments` (Ghi danh sinh viên vào lớp học phần)
-*Bảng liên kết N-N xác định sinh viên nào được phép học và thi môn nào.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính bản ghi ghi danh. |
-| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Mã môn học được ghi danh. |
-| `student_id`| `VARCHAR(36)` | **FK -> users.id** | — | Mã sinh viên tham gia khóa học. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Ngày sinh viên được thêm vào môn học. |
-| *Constraint* | `UNIQUE` | `(course_id, student_id)` | — | Ngăn chặn việc ghi danh trùng lặp một sinh viên vào cùng môn. |
-
-#### 6. Bảng `learning_outcomes` (Chuẩn đầu ra của môn học - LO)
-*Các tiêu chí chuẩn đầu ra kiến thức/kỹ năng cần đạt được sau khi học xong môn.*
-
+#### 3. Bảng `learning_outcomes` (Chuẩn đầu ra môn học - LO)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
 | `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính chuẩn đầu ra. |
-| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Thuộc môn học nào. |
-| `code` | `VARCHAR(50)` | `NOT NULL` | — | Mã chuẩn đầu ra (Ví dụ: `LO1`, `LO2`, `PRACTICE`). |
-| `description`| `TEXT` | `NOT NULL` | — | Mô tả chi tiết năng lực sinh viên cần thể hiện. |
-| `weight` | `DOUBLE PRECISION`| `NOT NULL` | `1.0` | Trọng số của LO trong cấu trúc điểm môn học. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo chuẩn đầu ra. |
-| *Constraint* | `UNIQUE` | `(course_id, code)` | — | Trong 1 môn học, mã LO không được trùng nhau. |
+| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học chứa chuẩn đầu ra. |
+| `code` | `VARCHAR(50)` | `NOT NULL` | — | Mã chuẩn đầu ra (Ví dụ: `LO1`, `LO2`, `LO3`). |
+| `description`| `TEXT` | `NOT NULL` | — | Mô tả chi tiết năng lực sinh viên cần đạt được. |
+| `weight` | `DOUBLE PRECISION`| `NOT NULL` | `1.0` | Trọng số trong cấu trúc đánh giá. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo LO. |
+| *Constraint* | `UNIQUE` | `(course_id, code)` | — | Trong 1 môn học, mã LO không được trùng lặp. |
 
-#### 7. Bảng `topics` (Chủ đề ôn tập & ngân hàng câu hỏi)
-*Tập hợp các chủ đề kiến thức gắn với chuẩn đầu ra để AI sinh câu hỏi vấn đáp.*
-
+#### 4. Bảng `topics` (Cây chủ đề môn học)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
 | `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của chủ đề. |
 | `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học chứa chủ đề. |
-| `learning_outcome_id` | `VARCHAR(36)` | **FK -> learning_outcomes.id** | — | Chuẩn đầu ra gốc (Legacy/Primary LO). |
-| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên chủ đề (Ví dụ: "Clean Architecture Principles"). |
-| `description`| `TEXT` | `NOT NULL` | `''` | Hướng dẫn trọng tâm ôn tập của chủ đề. |
+| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên chủ đề (Ví dụ: "Cây nhị phân tìm kiếm", "Thuật toán Đồ thị"). |
+| `description`| `TEXT` | `NOT NULL` | `''` | Mô tả nội dung kiến thức trọng tâm của chủ đề. |
 | `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo chủ đề. |
 
-#### 8. Bảng `documents` (Tài liệu giáo trình PDF lưu trên MinIO)
-*Lưu trữ metadata của sách giáo trình chính thống hoặc tài liệu bổ sung.*
-
+#### 5. Bảng `question_items` (Ngân hàng câu hỏi thẩm định - Item Bank)
+*Trung tâm lưu trữ câu hỏi thi do Ban Học thuật quản lý và thẩm định chuyên môn.*
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính định danh tài liệu. |
-| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học sử dụng tài liệu. |
-| `topic_id` | `VARCHAR(36)` | **FK -> topics.id** | `NULL` | Chủ đề liên kết trực tiếp (nếu có). |
-| `kind` | `VARCHAR(20)` | `NOT NULL` | `'SUPPLEMENT'` | Loại: `TEXTBOOK` (Giáo trình chính) hoặc `SUPPLEMENT` (Bổ sung). |
-| `page_count` | `INTEGER` | `NULLABLE` | `NULL` | Tổng số trang bóc tách được từ tệp PDF. |
-| `filename` | `VARCHAR(250)`| `NOT NULL` | — | Tên file gốc người dùng tải lên (Ví dụ: `CleanArchitecture.pdf`). |
-| `storage_key`| `TEXT` | `NOT NULL` | — | Đường dẫn object lưu trữ trên MinIO S3. |
-| `status` | `VARCHAR(20)` | `NOT NULL` | `'PENDING'` | Trạng thái: `PENDING`, `PROCESSING`, `READY`, `FAILED`. |
-| `version` | `INTEGER` | `NOT NULL` | `1` | Số phiên bản tài liệu (tăng khi cập nhật file sửa lỗi). |
-| `error` | `TEXT` | `NULLABLE` | `NULL` | Chi tiết lỗi nếu quá trình bóc tách PDF/sinh vector thất bại. |
-| `embedding_model` | `VARCHAR(150)` | `NOT NULL` | — | Tên mô hình Embedding sử dụng (Ví dụ: `nomic-embed-text`). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm upload tài liệu. |
-| *Index Đặc thù*| `PARTIAL UNIQUE` | `one_textbook_per_course` | — | Ràng buộc mỗi môn học chỉ được có duy nhất 1 giáo trình chính (`kind='TEXTBOOK'`). |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính định danh câu hỏi. |
+| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học sở hữu câu hỏi (`ON DELETE CASCADE`). |
+| `topic_id` | `VARCHAR(36)` | **FK -> topics.id** | `NULL` | Thuộc chủ đề kiến thức nào (`ON DELETE SET NULL`). |
+| `learning_outcome_id` | `VARCHAR(36)` | **FK -> learning_outcomes.id** | `NULL` | Đo lường chuẩn đầu ra nào (`ON DELETE SET NULL`). |
+| `item_code` | `VARCHAR(50)` | `NULLABLE` | `NULL` | Mã câu hỏi sư phạm (Ví dụ: `ITEM_BST_015`, `CSD_GR_008`). |
+| `cognitive_level` | `VARCHAR(30)` | `NOT NULL` | `'UNDERSTAND'` | Mức nhận thức Bloom: `REMEMBER`, `UNDERSTAND`, `APPLY`, `ANALYZE`. |
+| `prompt` | `TEXT` | `NOT NULL` | — | **Nội dung câu hỏi thi vấn đáp** mà sinh viên nghe/đọc. |
+| `time_limit_seconds` | `INTEGER` | `NOT NULL` | `180` | Thời gian tối đa sinh viên được trả lời câu hỏi (giây). |
+| `rubric_criterion_name` | `VARCHAR(200)`| `NULLABLE`| `NULL` | Tên tiêu chí Rubric tương ứng để chấm điểm câu này. |
+| `expected_points` | `JSONB` | `NULLABLE` | `[]` | Danh sách các ý trả lời cốt lõi bắt buộc phải có để đạt điểm. |
+| `key_terms` | `JSONB` | `NULLABLE` | `[]` | Mảng các thuật ngữ chuyên môn tiếng Anh/Việt bắt buộc xuất hiện. |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'VERIFIED'` | Trạng thái: `DRAFT`, `VERIFIED` (đã thẩm định), `ACTIVE`, `ARCHIVED`. |
+| `review_notes` | `TEXT` | `NULLABLE` | `NULL` | Ghi chú đánh giá của hội đồng thẩm định học thuật. |
+| `created_by` | `VARCHAR(36)` | **FK -> users.id** | `NULL` | Cán bộ Học thuật biên soạn/import câu hỏi. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo câu hỏi. |
 
-#### 9. Bảng `document_chunks` (Các đoạn văn bản đã nhúng pgvector 768 chiều)
-*Trái tim của động cơ RAG: Chứa nội dung văn bản chia nhỏ và vector nhúng phục vụ tìm kiếm ngữ nghĩa.*
-
+#### 6. Bảng `rubrics` (Khung tiêu chí đánh giá chuẩn môn)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính định danh chunk. |
-| `document_id`| `VARCHAR(36)` | **FK -> documents.id, INDEX** | — | Tài liệu PDF gốc chứa chunk này. |
-| `course_id` | `VARCHAR(36)` | **FK -> courses.id, INDEX** | — | Khóa ngoại hỗ trợ lọc nhanh theo môn học khi RAG. |
-| `topic_id` | `VARCHAR(36)` | **FK -> topics.id** | `NULL` | Chủ đề liên kết với đoạn văn bản. |
-| `learning_outcome_id` | `VARCHAR(36)` | **FK -> learning_outcomes.id** | `NULL` | Chuẩn đầu ra tương ứng. |
-| `heading` | `TEXT` | `NULLABLE` | `NULL` | Tiêu đề mục hoặc chương sách chứa chunk này. |
-| `page` | `INTEGER` | `NOT NULL` | — | Số trang trong file PDF (bắt đầu từ 1). |
-| `content` | `TEXT` | `NOT NULL` | — | Nội dung văn bản thô trích xuất từ PDF (tối đa 2400 ký tự). |
-| `embedding` | `vector(768)` (PG) / `JSON` | `NOT NULL` | — | **Tọa độ vector 768 chiều** (Extension pgvector) phục vụ Cosine Similarity. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm chunk được trích xuất. |
-
-#### 10. Bảng `book_sections` (Phân chương / Mục lục giáo trình)
-*Trích xuất từ Bookmark PDF hoặc do Giảng viên phân định để gán phạm vi trang cho từng chủ đề.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính mục sách. |
-| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học sở hữu. |
-| `document_id`| `VARCHAR(36)` | **FK -> documents.id** | — | Giáo trình PDF nguồn. |
-| `title` | `VARCHAR(300)`| `NOT NULL` | — | Tên chương/mục (Ví dụ: "Chương 3: Dependency Injection"). |
-| `level` | `INTEGER` | `NOT NULL` | `1` | Cấp độ tiêu đề (Level 1: Chương lớn, Level 2: Mục con...). |
-| `start_page` | `INTEGER` | `NOT NULL` | — | Trang bắt đầu trong file PDF. |
-| `end_page` | `INTEGER` | `NOT NULL` | — | Trang kết thúc trong file PDF. |
-| `source` | `VARCHAR(20)` | `NOT NULL` | `'MANUAL'` | Nguồn trích xuất: `BOOKMARK`, `HEADING`, `FALLBACK`, `MANUAL`. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo mục. |
-
-#### 11, 12, 13. Các bảng liên kết nhiều - nhiều (N-N Association Tables)
-*Phục vụ quan hệ linh hoạt giữa Chủ đề (Topic) với Chuẩn đầu ra, Chương sách và Tài liệu bổ sung:*
-
-* **`topic_outcomes`:** Liên kết `(topic_id, outcome_id)` — Khóa chính kết hợp cả 2 cột. `ON DELETE CASCADE`.
-* **`topic_sections`:** Liên kết `(topic_id, section_id)` — Khóa chính kết hợp cả 2 cột. `ON DELETE CASCADE`.
-* **`topic_documents`:** Liên kết `(topic_id, document_id)` — Khóa chính kết hợp cả 2 cột. `ON DELETE CASCADE`.
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của Rubric. |
+| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học áp dụng khung tiêu chí này. |
+| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên khung Rubric chuẩn (Ví dụ: "Rubric Vấn đáp CSD201 Chuẩn 2026"). |
+| `version` | `INTEGER` | `NOT NULL` | `1` | Số phiên bản của Rubric. |
+| `criteria` | `JSONB` | `NOT NULL` | — | Mảng JSON các tiêu chí đánh giá: `[{name, description, max_score, weight}]`. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm khởi tạo Rubric. |
 
 ---
 
-### 4.3. Miền 3: Tổ chức Thi vấn đáp & Chấm điểm AI (Assessment, Anti-Tampering & Grading)
+### 4.3. Khối 3: Khảo thí, Ca thi & Lắp ráp đề tự động (Examiner Domain)
 
-#### 14. Bảng `rubrics` (Khung tiêu chí đánh giá vấn đáp)
-*Khung Rubric do Giảng viên xây dựng để định hướng cho AI và Giám khảo chấm điểm.*
-
+#### 7. Bảng `semesters` (Học kỳ)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính định danh Rubric. |
-| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học áp dụng Rubric. |
-| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên Rubric (Ví dụ: "Rubric Vấn đáp Clean Architecture 2026"). |
-| `version` | `INTEGER` | `NOT NULL` | `1` | Số phiên bản cập nhật Rubric. |
-| `criteria` | `JSONB` | `NOT NULL` | — | Mảng JSON các tiêu chí: `[{name, description, max_score, weight}]`. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm khởi tạo Rubric. |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính học kỳ. |
+| `name` | `VARCHAR(100)`| `NOT NULL` | — | Tên học kỳ (Ví dụ: "Fall 2026"). |
+| `code` | `VARCHAR(50)` | **UNIQUE, NOT NULL** | — | Mã học kỳ chuẩn (Ví dụ: `FALL_2026`, `SPRING_2027`). |
+| `start_date`| `VARCHAR(20)` | `NULLABLE` | `NULL` | Ngày bắt đầu học kỳ (YYYY-MM-DD). |
+| `end_date` | `VARCHAR(20)` | `NULLABLE` | `NULL` | Ngày kết thúc học kỳ. |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'ACTIVE'` | Trạng thái: `UPCOMING`, `ACTIVE`, `COMPLETED`. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo học kỳ. |
 
-#### 15. Bảng `exams` (Kỳ thi vấn đáp & Freeze Snapshot)
-*Quản lý đề thi, thời gian làm bài và đóng băng toàn bộ tri thức phục vụ chấm công bằng.*
-
+#### 8. Bảng `schedule_slots` (Ca thi / Lịch thi theo phòng)
+*Đơn vị tổ chức thi cơ sở: Mỗi ca thi có thời gian, phòng thi, danh sách sinh viên và mã đề thi riêng.*
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của kỳ thi. |
-| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Kỳ thi thuộc môn học nào. |
-| `rubric_id` | `VARCHAR(36)` | **FK -> rubrics.id** | — | Khung Rubric dùng để chấm điểm. |
-| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên bài thi (Ví dụ: "Thi vấn đáp Cuối kỳ SWE301"). |
-| `time_limit` | `INTEGER` | `NOT NULL` | — | Tổng thời gian làm bài (tính bằng giây, ví dụ: 600s = 10 phút). |
-| `blueprint` | `JSONB` | `NULLABLE` | — | Cấu trúc đề: mảng các yêu cầu `[{topic_id, difficulty, count}]`. |
-| `status` | `VARCHAR(20)` | `NOT NULL` | `'DRAFT'` | Trạng thái: `DRAFT` (soạn thảo), `PUBLISHED` (công bố), `ARCHIVED`. |
-| `snapshot` | `JSONB` | `NULLABLE` | `NULL` | **Snapshot Đóng Băng:** Chứa toàn bộ câu hỏi, rubric, danh sách chunk IDs, prompt version, cấu hình model AI lúc công bố. |
-| `max_attempts`| `INTEGER` | `NOT NULL` | `1` | Số lượt làm bài tối đa mặc định cho sinh viên. |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính ca thi. |
+| `semester_id`| `VARCHAR(36)` | **FK -> semesters.id**| — | Thuộc học kỳ nào. |
+| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Ca thi của môn học nào. |
+| `name` | `VARCHAR(100)`| `NOT NULL` | — | Tên ca thi (Ví dụ: "Ca 1 - Sáng 15/10/2026"). |
+| `slot_date` | `VARCHAR(20)` | `NOT NULL` | — | Ngày diễn ra ca thi (YYYY-MM-DD). |
+| `start_time`| `VARCHAR(10)` | `NOT NULL` | — | Giờ bắt đầu (HH:MM, ví dụ: "07:30"). |
+| `end_time` | `VARCHAR(10)` | `NOT NULL` | — | Giờ kết thúc (HH:MM, ví dụ: "09:00"). |
+| `room` | `VARCHAR(50)` | `NOT NULL` | — | Phòng thi (Ví dụ: "BE-301", "Lab 4"). |
+| `proctor_id`| `VARCHAR(36)` | **FK -> users.id** | `NULL` | Giảng viên được phân công coi thi (`TEACHER`). |
+| `exam_id` | `VARCHAR(36)` | **FK -> exams.id** | `NULL` | **Mã đề thi song song gán riêng cho ca thi này.** |
+| `max_students`| `INTEGER` | `NOT NULL` | `30` | Sức chứa tối đa của ca thi. |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'SCHEDULED'` | Trạng thái: `SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `LOCKED_FINAL`. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo ca thi. |
+
+#### 9. Bảng `exams` (Ma trận chuẩn & Mã đề thi song song)
+| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
+| :--- | :--- | :---: | :---: | :--- |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính định danh đề thi. |
+| `course_id` | `VARCHAR(36)` | **FK -> courses.id** | — | Môn học sở hữu đề thi. |
+| `rubric_id` | `VARCHAR(36)` | **FK -> rubrics.id** | — | Khung Rubric chuẩn dùng để chấm điểm. |
+| `name` | `VARCHAR(200)`| `NOT NULL` | — | Tên đề / Tên mã đề (Ví dụ: "CSD201 Final Exam - Variant 101"). |
+| `time_limit` | `INTEGER` | `NOT NULL` | — | Tổng thời gian làm bài (tính bằng giây). |
+| `blueprint` | `JSONB` | `NULLABLE` | `NULL` | Ma trận chuẩn: quy định số câu, LO, Topic, Bloom Level, điểm số. |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'DRAFT'` | Trạng thái: `DRAFT`, `PUBLISHED`, `ARCHIVED`. |
+| `snapshot` | `JSONB` | `NULLABLE` | `NULL` | **Snapshot Đóng Băng v3:** Chứa toàn bộ câu hỏi rút từ Item Bank, barem chấm, expected points, rubric và cấu hình model AI. |
+| `max_attempts`| `INTEGER` | `NOT NULL` | `1` | Số lần làm bài tối đa mặc định cho sinh viên. |
 | `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo đề thi. |
 
-#### 16. Bảng `assignments` (Phân quyền thi & Cấp thêm lượt thi cho sinh viên)
-*Quản lý danh sách sinh viên được dự thi và cấp thêm lượt thi cá nhân (Retake).*
+---
 
+### 4.4. Khối 4: Thi vấn đáp, Bằng chứng & Chấm điểm (Assessment & Evidence)
+
+#### 10. Bảng `exam_sessions` (Phiên làm bài thi trực tiếp của Sinh viên)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của phân công. |
-| `exam_id` | `VARCHAR(36)` | **FK -> exams.id** | — | Đề thi được giao. |
-| `student_id`| `VARCHAR(36)` | **FK -> users.id** | — | Sinh viên được giao bài. |
-| `extra_attempts` | `INTEGER` | `NOT NULL` | `0` | Số lượt thi được Khảo thí cấp thêm (Ví dụ: cấp thêm 1 lượt khi bị sự cố mạng). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Ngày giao đề thi cho sinh viên. |
-| *Constraint* | `UNIQUE` | `(exam_id, student_id)` | — | Không thể phân công trùng lặp 1 sinh viên vào cùng 1 đề. |
-
-#### 17. Bảng `exam_sessions` (Phiên làm bài thi trực tiếp của Thí sinh)
-*Kiểm soát toàn bộ vòng đời làm bài của sinh viên từ lúc kiểm tra mic đến khi nộp.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính định danh phiên làm bài. |
-| `exam_id` | `VARCHAR(36)` | **FK -> exams.id** | — | Đề thi đang làm. |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính phiên thi. |
+| `exam_id` | `VARCHAR(36)` | **FK -> exams.id** | — | Mã đề thi sinh viên đang làm. |
 | `student_id`| `VARCHAR(36)` | **FK -> users.id** | — | Sinh viên đang dự thi. |
-| `status` | `VARCHAR(30)` | `NOT NULL` | `'DEVICE_CHECK'`| Vòng đời: `DEVICE_CHECK`, `IN_PROGRESS`, `SUBMITTED`, `COMPLETED`, `FAILED`. |
-| `started_at` | `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Thời điểm thực sự bấm bắt đầu làm bài. |
-| `completed_at`| `DOUBLE PRECISION`| `NULLABLE`| `NULL` | Thời điểm hoàn thành toàn bộ bài thi. |
+| `status` | `VARCHAR(30)` | `NOT NULL` | `'DEVICE_CHECK'`| Vòng đời: `DEVICE_CHECK`, `IN_PROGRESS`, `SUBMITTED`, `AI_SCORED`, `TEACHER_REVIEWED`, `LOCKED_FINAL`. |
+| `attempt_number` | `INTEGER` | `NOT NULL` | `1` | Số thứ tự lần thi của sinh viên. |
 | `final_score`| `DOUBLE PRECISION`| `NULLABLE`| `NULL` | Điểm tổng kết cuối cùng của bài thi (thang điểm 10.0). |
-| `attempt_number` | `INTEGER` | `NOT NULL` | `1` | Số thứ tự lần thi của sinh viên (Lần 1, Lần 2...). |
-| `deleted_at` | `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Thời điểm soft delete (nếu hủy phiên thi lỗi). |
+| `started_at` | `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Thời điểm thực sự bấm bắt đầu làm bài. |
+| `completed_at`| `DOUBLE PRECISION`| `NULLABLE`| `NULL` | Thời điểm nộp bài thành công. |
+| `deleted_at` | `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Thời điểm hủy phiên thi lỗi (soft delete). |
 | `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo phiên thi. |
-| *Constraint* | `UNIQUE` | `uq_exam_session_attempt` | `(exam_id, student_id, attempt_number)` | Ràng buộc duy nhất số lần thi của thí sinh trong kỳ thi. |
-| *Index Đặc thù*| `PARTIAL UNIQUE` | `one_active_exam_session` | — | **Chống gian lận:** Mỗi sinh viên chỉ được phép có DUY NHẤT 1 phiên thi đang hoạt động (`DEVICE_CHECK` hoặc `IN_PROGRESS`). |
 
-#### 18. Bảng `question_attempts` (Chi tiết trả lời từng câu hỏi trong phiên thi)
-*Lưu vết câu hỏi, văn bản phiên âm PhoWhisper từ Server và bảng chấm điểm của AI.*
-
+#### 11. Bảng `question_attempts` (Chi tiết trả lời từng câu hỏi)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của câu trả lời. |
-| `session_id` | `VARCHAR(36)` | **FK -> exam_sessions.id, INDEX** | — | Thuộc phiên làm bài nào. |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính câu trả lời. |
+| `session_id` | `VARCHAR(36)` | **FK -> exam_sessions.id** | — | Thuộc phiên làm bài nào. |
 | `sequence` | `INTEGER` | `NOT NULL` | — | Số thứ tự câu hỏi trong đề (1, 2, 3...). |
 | `question` | `JSONB` | `NOT NULL` | — | Bản sao câu hỏi trích từ Snapshot đề thi. |
 | `status` | `VARCHAR(30)` | `NOT NULL` | `'READY'` | Trạng thái: `READY`, `ANSWERING`, `SUBMITTED`, `EVALUATING`, `COMPLETED`. |
-| `started_at` | `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Thời điểm bắt đầu đọc câu hỏi. |
-| `finished_at`| `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Thời điểm bấm dừng ghi âm và nộp câu. |
-| `transcript` | `TEXT` | `NULLABLE` | `NULL` | Chuỗi văn bản do PhoWhisper STT Server phiên âm từ audio MinIO. |
-| `stt_confidence` | `DOUBLE PRECISION` | `NULLABLE` | `NULL` | Điểm tự tin của mô hình PhoWhisper (0.0 đến 1.0). |
-| `assessment` | `JSONB` | `NULLABLE` | `NULL` | Kết quả chấm AI: `{score, criteria_scores, feedback, reasoning, confidence_score, status}`. |
-| `submit_key` | `VARCHAR(100)`| `NULLABLE` | `NULL` | Khóa chống nộp lặp lại (`X-Idempotency-Key`). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo câu hỏi. |
-| *Constraint* | `UNIQUE` | `(session_id, sequence)` | — | Trong 1 phiên thi, thứ tự câu hỏi không được trùng nhau. |
+| `transcript` | `TEXT` | `NULLABLE` | `NULL` | Bản bóc băng do Faster-Whisper Server phiên âm từ audio MinIO. |
+| `stt_confidence` | `DOUBLE PRECISION` | `NULLABLE` | `NULL` | Điểm tự tin của mô hình nhận diện giọng nói (0.0 đến 1.0). |
+| `assessment` | `JSONB` | `NULLABLE` | `NULL` | Kết quả chấm AI: `{score, criteria_scores, feedback, reasoning, confidence_score}`. |
+| `started_at` | `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Bắt đầu trả lời câu hỏi. |
+| `finished_at`| `DOUBLE PRECISION`| `NULLABLE` | `NULL` | Dừng ghi âm và nộp câu. |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm khởi tạo câu hỏi. |
 
-#### 19. Bảng `uploads` (Bằng chứng âm thanh / hình ảnh lưu trữ trên MinIO)
-*Quản lý tải lên phân đoạn 4MB và mã băm SHA-256 chống can thiệp file thi.*
-
+#### 12. Bảng `uploads` (Bằng chứng âm thanh lưu trên MinIO S3)
 | Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
 | :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính quản lý upload (Upload ID). |
+| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính phiên upload. |
 | `attempt_id` | `VARCHAR(36)` | **FK -> question_attempts.id** | — | Gắn với câu trả lời nào. |
-| `kind` | `VARCHAR(10)` | `NOT NULL` | — | Định dạng media: `AUDIO` hoặc `VIDEO`. |
-| `mime_type` | `VARCHAR(100)`| `NOT NULL` | — | MIME chuẩn (Ví dụ: `audio/webm;codecs=opus`). |
+| `kind` | `VARCHAR(10)` | `NOT NULL` | — | Định dạng: `AUDIO` hoặc `VIDEO`. |
+| `mime_type` | `VARCHAR(100)`| `NOT NULL` | — | MIME chuẩn (`audio/webm;codecs=opus`). |
 | `size` | `INTEGER` | `NOT NULL` | — | Dung lượng tệp nguyên bản (bytes). |
 | `sha256` | `VARCHAR(64)` | `NOT NULL` | — | **Mã băm SHA-256 toàn vẹn:** Chứng minh tệp không bị sửa đổi. |
-| `total_chunks` | `INTEGER` | `NOT NULL` | — | Số lượng phân mảnh 4MB được chia bởi Student App. |
+| `total_chunks` | `INTEGER` | `NOT NULL` | — | Số lượng phân mảnh 4MB tải lên từ Student App. |
 | `status` | `VARCHAR(20)` | `NOT NULL` | `'PENDING'` | Trạng thái upload: `PENDING`, `UPLOADING`, `COMPLETED`, `FAILED`. |
-| `storage_key`| `TEXT` | `NULLABLE` | `NULL` | Đường dẫn Object trên MinIO S3 (Ví dụ: `attempts/{id}/audio.webm`). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm bắt đầu phiên tải lên. |
-
-#### 20. Bảng `review_jobs` (Hàng đợi phúc khảo & Chấm lại của Khảo thí / Giảng viên)
-*Ghi nhận yêu cầu xem xét lại bài thi khi có độ tự tin thấp hoặc khiếu nại điểm.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính của job phúc khảo. |
-| `attempt_id` | `VARCHAR(36)` | **FK -> question_attempts.id, INDEX** | — | Câu trả lời cần phúc khảo lại. |
-| `requested_by`| `VARCHAR(36)` | **FK -> users.id** | — | Người yêu cầu (Giảng viên hoặc Cán bộ khảo thí). |
-| `status` | `VARCHAR(20)` | `NOT NULL` | `'PENDING'` | Trạng thái: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`. |
-| `reason` | `TEXT` | `NOT NULL` | — | Lý do cần chấm lại (Ví dụ: "Học sinh nói nhỏ, STT nhận dạng sót ý"). |
-| `policy` | `JSONB` | `NOT NULL` | — | Cấu hình chấm lại: nhận dạng lại bằng Gemini STT hay giữ nguyên transcript. |
-| `original` | `JSONB` | `NOT NULL` | — | Bản sao điểm số và nhận xét ban đầu của AI trước khi phúc khảo. |
-| `result` | `JSONB` | `NULLABLE` | `NULL` | Kết quả điểm số mới sau khi hội đồng phúc khảo phê duyệt. |
-| `error` | `TEXT` | `NULLABLE` | `NULL` | Chi tiết lỗi nếu tiến trình worker gặp sự cố. |
-| `completed_at`| `DOUBLE PRECISION`| `NULLABLE`| `NULL` | Thời điểm hoàn tất phúc khảo. |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm tạo yêu cầu. |
-
-#### 21. Bảng `media_cleanup` (Tiến trình thu gom rác & xóa file nhị phân lỗi)
-*Worker chạy định kỳ để dọn dẹp các mảnh chunk tải dở dang trên MinIO nhằm tiết kiệm đĩa cứng.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính bản ghi cleanup. |
-| `upload_id` | `VARCHAR(36)` | **UNIQUE, NOT NULL** | — | ID của tệp upload bị hủy hoặc hết hạn. |
-| `storage_key`| `TEXT` | `NULLABLE` | `NULL` | Đường dẫn trên MinIO cần dọn dẹp. |
-| `retries` | `INTEGER` | `NOT NULL` | `0` | Số lần đã thử xóa nhưng gặp lỗi mạng. |
-| `next_attempt_at` | `DOUBLE PRECISION`| `NOT NULL` | `0` | Thời điểm thử lại lần tiếp theo (Exponential backoff). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm đưa vào hàng đợi dọn rác. |
-
----
-
-### 4.4. Miền 4: Giám sát Hệ thống & Cấu hình Động (Audit Trail & System Config)
-
-#### 22. Bảng `audit_logs` (Nhật ký kiểm toán an ninh & Liêm chính thi cử)
-*Bằng chứng pháp lý ghi lại mọi hành vi tác động vào hệ thống.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `id` | `VARCHAR(36)` | **PK** | UUID v4 | Khóa chính bản ghi audit. |
-| `user_id` | `VARCHAR(36)` | `NULLABLE` | `NULL` | ID người dùng thực hiện hành động (hoặc NULL nếu tác vụ hệ thống). |
-| `event` | `VARCHAR(80)` | `NOT NULL` | — | Mã sự kiện (Ví dụ: `LOGIN_SUCCESS`, `EXAM_PUBLISHED`, `AUDIO_SUBMITTED`). |
-| `details` | `JSONB` | `NOT NULL` | `'{}'` | Chi tiết payload sự kiện (IP, User-Agent, tham số thay đổi). |
-| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm chính xác sự kiện phát sinh. |
-
-#### 23. Bảng `system_settings` (Cấu hình tham số động hệ thống)
-*Lưu trữ các cài đặt runtime mà không cần khởi động lại Server API.*
-
-| Tên trường | Kiểu dữ liệu | Khóa / Ràng buộc | Giá trị mặc định | Diễn giải nghiệp vụ |
-| :--- | :--- | :---: | :---: | :--- |
-| `key` | `VARCHAR(80)` | **PK** | — | Tên khóa cấu hình (Ví dụ: `platform`, `retries_policy`). |
-| `value` | `JSONB` | `NOT NULL` | — | Giá trị cấu hình định dạng JSON linh hoạt. |
-
----
-
-## 5. CÁC QUYẾT ĐỊNH THIẾT KẾ KỸ THUẬT ĐẶC THÙ (ARCHITECTURAL DECISIONS)
-
-### 5.1. Extension `pgvector` & Tìm kiếm ngữ nghĩa 768 chiều
-* **Kiểu dữ liệu:** Sử dụng `Vector(768)` tương thích tối ưu với các mô hình Embedding tiếng Việt và quốc tế hiện đại (`nomic-embed-text`, `google-embedding-001`).
-* **Khoảng cách Cosine:** Truy vấn câu trả lời của thí sinh đối chiếu với tài liệu giáo trình sử dụng toán tử khoảng cách Cosine `<=>` trong PostgreSQL:
-  ```sql
-  SELECT content, heading, page, (1 - (embedding <=> :query_vector)) AS similarity
-  FROM document_chunks
-  WHERE course_id = :course_id
-  ORDER BY embedding <=> :query_vector ASC
-  LIMIT 5;
-  ```
-
-### 5.2. Nguyên lý Đóng băng Đề thi (Exam Snapshot Versioning)
-* Cột `exams.snapshot` lưu trữ toàn văn:
-  ```json
-  {
-    "practice": false,
-    "questions": [...],
-    "criteria": [...],
-    "rubric_version": 1,
-    "knowledge_version": "v1",
-    "ai_provider": "local",
-    "embedding_model": "nomic-embed-text",
-    "llm_model": "qwen3:8b",
-    "prompt_version": "v1",
-    "document_ids": ["doc-uuid-1"],
-    "topic_chunk_ids": {"topic-1": ["chunk-uuid-1", "chunk-uuid-2"]}
-  }
-  ```
-* **Lợi ích kiến trúc:** Đảm bảo dù Giảng viên có cập nhật tài liệu môn học hay chỉnh sửa Rubric ở kỳ sau thì các bài thi cũ vẫn được chấm và phúc khảo lại dựa trên đúng Snapshot tri thức tại thời điểm công bố đề.
-
-### 5.3. Ràng buộc Chống gian lận (Anti-Tampering Constraints)
-1. **Chống thi đồng thời (Single Session Active):**
-   * Partial unique index `one_active_exam_session` trên bảng `exam_sessions` chỉ cho phép tồn tại tối đa một phiên có trạng thái `DEVICE_CHECK` hoặc `IN_PROGRESS`. Sinh viên không thể mở 2 máy hoặc 2 tab để thi song song.
-2. **Khóa thứ tự câu hỏi (Sequential Attempt):**
-   * Ràng buộc duy nhất `UniqueConstraint("session_id", "sequence")` trong `question_attempts` đảm bảo thí sinh phải hoàn thành tuần tự từng câu hỏi, không thể nhảy cóc hoặc gửi đè kết quả.
-3. **Mã băm toàn vẹn (Integrity Hash Check):**
-   * Mỗi tệp âm thanh tải lên đều kèm chuỗi `sha256` tính toán ngay trên RAM của Student App. Worker khi tải file từ MinIO về phiên âm sẽ băm lại SHA-256 để đối chiếu; nếu có sự sai lệch dù chỉ 1 bit, bài thi lập tức bị đánh dấu `TAMPERED_FLAG`.
-
----
-
-## 6. LỊCH SỬ THAY ĐỔI & BẢO TRÌ TÀI LIỆU
-
-| Phiên bản | Ngày cập nhật | Người thực hiện | Nội dung cập nhật |
-| :---: | :---: | :---: | :--- |
-| **v1.0** | 02/10/2026 | Bình & AI Mentor | Biên soạn bản Đặc tả Cơ sở dữ liệu chuẩn hóa toàn diện (23 bảng, Sơ đồ ERD Mermaid, Từ điển dữ liệu 3NF và kiến trúc pgvector). |
+| `storage_key`| `TEXT` | `NULLABLE` | `NULL` | Đường dẫn Object trên MinIO S3 (`attempts/{id}/audio.webm`). |
+| `created_at` | `DOUBLE PRECISION`| `NOT NULL` | `time.time()` | Thời điểm bắt đầu tải lên. |
