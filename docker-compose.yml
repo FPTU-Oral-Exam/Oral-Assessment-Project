@@ -2,8 +2,6 @@ name: oral-assessment
 x-api: &api
   build:
     context: ./services/api
-    cache_from:
-      - oral-api:latest
   env_file: .env
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -94,8 +92,6 @@ services:
     build:
       context: .
       dockerfile: apps/staff-portal/Dockerfile
-      cache_from:
-        - staff-portal:latest
     environment:
       API_INTERNAL_URL: http://api:8000
     ports:
