@@ -290,7 +290,7 @@ class ScheduleSlot(Entity, Base):
     exam_id: Mapped[str] = mapped_column(ForeignKey("exams.id"))
     batch_id: Mapped[str | None] = mapped_column(ForeignKey("exam_batches.id", ondelete="CASCADE"), nullable=True)
     slot_number: Mapped[int] = mapped_column(Integer)
-    date: Mapped[str] = mapped_column(String(20))
+    date: Mapped[float] = mapped_column(Float)
     start_time: Mapped[str] = mapped_column(String(10))  # "08:00"
     end_time: Mapped[str] = mapped_column(String(10))    # "10:00"
     room: Mapped[str] = mapped_column(String(50))        # "A301"

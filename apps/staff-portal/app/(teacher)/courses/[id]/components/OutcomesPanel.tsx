@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Target, Plus, Edit2, Trash2, X, AlertCircle } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 
 export interface Outcome {
   id: string;
@@ -56,7 +56,7 @@ export default function OutcomesPanel({
   const handleDelete = async (loId: string) => {
     if (!confirm('Bạn có chắc chắn muốn xóa Chuẩn đầu ra (LO) này?')) return;
     try {
-      await api(`/admin/outcomes/${loId}`, { method: 'DELETE' });
+      await teacherService.deleteOutcome(loId);
       await onReload();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Xóa LO thất bại');
@@ -76,15 +76,9 @@ export default function OutcomesPanel({
       };
 
       if (editingLO) {
-        await api(`/admin/outcomes/${editingLO.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.updateOutcome(editingLO.id, payload);
       } else {
-        await api(`/admin/courses/${courseId}/outcomes`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.createOutcome(courseId, payload);
       }
 
       setModalOpen(false);

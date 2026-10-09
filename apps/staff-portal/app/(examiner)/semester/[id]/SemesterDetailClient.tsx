@@ -23,8 +23,9 @@ import {
   Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { examinerService } from '@/services';
 import type {
-  CourseBasic as CourseItem,
   SemesterDetail as SemesterData,
   MasterCourse,
 } from '@oralai/shared';
@@ -74,13 +75,7 @@ export default function SemesterDetailClient({ semesterId }: { semesterId: strin
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/examiner/semesters/${semesterId}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        throw new Error(`Lỗi tải dữ liệu học kỳ (${res.status})`);
-      }
-      const data = await res.json();
+      const data = await examinerService.getSemesterDetail(semesterId);
       setSemester(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải thông tin học kỳ');
@@ -92,15 +87,10 @@ export default function SemesterDetailClient({ semesterId }: { semesterId: strin
   const fetchMasterCourses = useCallback(async () => {
     try {
       setLoadingMasterCourses(true);
-      const res = await fetch('/api/examiner/master-courses', {
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMasterCourses(data);
-        if (data.length > 0 && !selectedMasterCourseId) {
-          setSelectedMasterCourseId(data[0].id);
-        }
+      const data = await examinerService.getMasterCourses();
+      setMasterCourses(data);
+      if (data.length > 0 && !selectedMasterCourseId) {
+        setSelectedMasterCourseId(data[0].id);
       }
     } catch {
       // Ignored - fallback silently
@@ -123,11 +113,7 @@ export default function SemesterDetailClient({ semesterId }: { semesterId: strin
     if (!semester) return;
     try {
       setActionLoading(true);
-      const res = await fetch(`/api/examiner/semesters/${semester.id}/activate`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Kích hoạt học kỳ thất bại');
+      await examinerService.activateSemester(semester.id);
       toast.success('Đã kích hoạt học kỳ thành công');
       fetchSemesterDetail();
     } catch (err) {
@@ -141,11 +127,7 @@ export default function SemesterDetailClient({ semesterId }: { semesterId: strin
     if (!semester) return;
     try {
       setActionLoading(true);
-      const res = await fetch(`/api/examiner/semesters/${semester.id}/complete`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Đánh dấu hoàn thành thất bại');
+      await examinerService.completeSemester(semester.id);
       toast.success('Đã đánh dấu hoàn thành học kỳ');
       fetchSemesterDetail();
     } catch (err) {
@@ -181,17 +163,7 @@ export default function SemesterDetailClient({ semesterId }: { semesterId: strin
         };
       }
 
-      const res = await fetch(`/api/examiner/semesters/${semester.id}/courses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Thêm môn học thất bại' }));
-        throw new Error(err.message || err.detail || 'Thêm môn học thất bại');
-      }
+      await examinerService.addCourseToSemester(semester.id, payload as any);
 
       toast.success('Đã thêm môn học vào học kỳ');
       setIsAddCourseModalOpen(false);

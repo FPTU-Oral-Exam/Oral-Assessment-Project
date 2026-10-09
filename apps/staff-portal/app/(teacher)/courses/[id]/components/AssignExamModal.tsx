@@ -13,7 +13,7 @@ import {
   RefreshCw,
   GraduationCap,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService, examinerService } from '@/services';
 
 interface Candidate {
   id: string;
@@ -51,10 +51,18 @@ export default function AssignExamModal({
       try {
         setLoading(true);
         setError(null);
-        const data = await api<Candidate[]>(`/admin/courses/${courseId}/students?detail=true`);
-        setCandidates(data || []);
+        const data = await examinerService.getCandidates(courseId);
+        // Map from examiner service format to local Candidate type
+        const candidateList: Candidate[] = (data.candidates || []).map((c: any) => ({
+          id: c.id,
+          username: c.roll_number || c.username || '',
+          name: c.full_name || c.name || '',
+          status: c.eligibility_status === 'ELIGIBLE' ? 'ACTIVE' : 'INACTIVE',
+          section_code: c.batch_name || c.room || 'Mặc định',
+        }));
+        setCandidates(candidateList);
         // By default, select all active candidates
-        const allIds = new Set((data || []).filter((c) => c.status === 'ACTIVE').map((c) => c.id));
+        const allIds = new Set(candidateList.filter((c) => c.status === 'ACTIVE').map((c) => c.id));
         setSelectedIds(allIds);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Không thể tải danh sách thí sinh');
@@ -99,11 +107,8 @@ export default function AssignExamModal({
     try {
       setSubmitting(true);
       setError(null);
-      await api(`/admin/exams/${examId}/assign`, {
-        method: 'POST',
-        body: JSON.stringify({
-          student_ids: Array.from(selectedIds),
-        }),
+      await teacherService.assignExamToSlot(examId, '', {
+        student_ids: Array.from(selectedIds),
       });
 
       setSuccessMessage(`Đã giao đề thành công cho ${selectedIds.size} thí sinh!`);

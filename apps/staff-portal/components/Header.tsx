@@ -2,13 +2,14 @@
 
 import { useUser } from '@/hooks/useUser';
 import { LogOut, User as UserIcon, Shield } from 'lucide-react';
+import { authService } from '@/services';
 
 export default function Header() {
   const { user } = useUser();
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await authService.logout();
     } catch {
       // Ignore network errors on logout
     }

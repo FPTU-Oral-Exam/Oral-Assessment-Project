@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, User, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+import { authService } from '@/services';
+import { ApiError } from '@oralai/shared';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,27 +20,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const url = `${API_BASE_URL}/api/auth/login`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-        credentials: 'include',
-      });
-
-      let data: any = {};
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error(`Lỗi kết nối máy chủ (Mã ${res.status}: ${res.statusText || 'Internal Server Error'}).`);
-      }
-
-      if (!res.ok) {
-        if (res.status === 429) {
-          throw new Error('Quá nhiều lần đăng nhập thất bại. Vui lòng đợi 1 phút và thử lại.');
-        }
-        throw new Error(data.error?.message || data.detail?.message || data.detail || 'Tên đăng nhập hoặc mật khẩu không đúng.');
-      }
+      const data = await authService.login({ username, password });
 
       // Store complete user profile in cookie for middleware & layout
       const userData = {
@@ -48,7 +28,6 @@ export default function LoginPage() {
         name: data.user.name || data.user.username,
         username: data.user.username,
         role: data.user.role,
-        roles: data.user.roles || [data.user.role],
       };
       document.cookie = `user=${encodeURIComponent(JSON.stringify(userData))}; path=/; max-age=86400; SameSite=Lax`;
 
@@ -57,7 +36,15 @@ export default function LoginPage() {
       const from = params.get('from') || '/dashboard';
       window.location.href = from;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Có lỗi xảy ra trong quá trình đăng nhập');
+      if (err instanceof ApiError) {
+        if (err.status === 429) {
+          setError('Quá nhiều lần đăng nhập thất bại. Vui lòng đợi 1 phút và thử lại.');
+        } else {
+          setError(err.message || 'Tên đăng nhập hoặc mật khẩu không đúng.');
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'Có lỗi xảy ra trong quá trình đăng nhập');
+      }
     } finally {
       setLoading(false);
     }

@@ -13,17 +13,8 @@ import { toast } from 'sonner';
 
 import ExamsTab from './exams/ExamListClient';
 import CandidatesTab from './candidates/CandidatesClient';
-
-interface CourseDetail {
-  id: string;
-  name: string;
-  code: string;
-  description: string;
-  status: string;
-  semester_id: string;
-  teacher?: { id: string; name: string } | null;
-  section_count: number;
-}
+import { examinerService } from '@/services';
+import type { CourseDetail } from '@/services/examiner.service';
 
 type TabType = 'candidates' | 'exams';
 
@@ -38,11 +29,7 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/examiner/courses/${courseId}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`Lỗi server: ${res.status}`);
-      const data = await res.json();
+      const data = await examinerService.getCourseDetail(courseId);
       setCourse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải thông tin môn học');

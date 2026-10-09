@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { X, UserCheck, Loader2, AlertCircle, EyeOff } from 'lucide-react';
+import { examinerService } from '@/services';
+import { teacherService } from '@/services';
 
 interface TeacherUser {
   id: string;
@@ -16,7 +18,6 @@ interface RequestReEvalModalProps {
   attemptId: string;
   sequence: number;
   questionText: string;
-  apiBaseUrl?: string;
   onSuccess: () => void;
 }
 
@@ -26,7 +27,6 @@ export function RequestReEvalModal({
   attemptId,
   sequence,
   questionText,
-  apiBaseUrl = '',
   onSuccess,
 }: RequestReEvalModalProps) {
   const [teachers, setTeachers] = useState<TeacherUser[]>([]);
@@ -44,18 +44,13 @@ export function RequestReEvalModal({
     async function loadTeachers() {
       try {
         setLoadingTeachers(true);
-        // Call examiner teachers endpoint or admin users endpoint
-        const res = await fetch(`${apiBaseUrl}/api/examiner/teachers`, {
-          credentials: 'include',
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setTeachers(Array.isArray(data) ? data : []);
-          if (Array.isArray(data) && data.length > 0) {
-            setSelectedTeacherId(data[0].id);
-          }
+        const data = await examinerService.getTeachers();
+        const teacherList = Array.isArray(data) ? data : [];
+        setTeachers(teacherList);
+        if (teacherList.length > 0) {
+          setSelectedTeacherId(teacherList[0].id);
         }
-      } catch (err) {
+      } catch {
         // Non-critical, fallback will handle empty
       } finally {
         setLoadingTeachers(false);
@@ -63,7 +58,7 @@ export function RequestReEvalModal({
     }
 
     loadTeachers();
-  }, [isOpen, apiBaseUrl]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -82,22 +77,12 @@ export function RequestReEvalModal({
       setSubmitting(true);
       setError(null);
 
-      const res = await fetch(`${apiBaseUrl}/api/admin/attempts/${attemptId}/request-re-eval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          teacher_id_2: selectedTeacherId,
-          reason,
-          reason_detail: reasonDetail.trim(),
-          blind_marking: blindMarking,
-        }),
+      await teacherService.requestReEvaluation(attemptId, {
+        teacher_id_2: selectedTeacherId,
+        reason,
+        reason_detail: reasonDetail.trim(),
+        blind_marking: blindMarking,
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Lỗi khi gửi yêu cầu (${res.status})`);
-      }
 
       onSuccess();
       onClose();

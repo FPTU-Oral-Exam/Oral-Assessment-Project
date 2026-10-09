@@ -25,6 +25,7 @@ import { EditTranscriptModal } from './components/EditTranscriptModal';
 import { ScoreOverrideModal } from './components/ScoreOverrideModal';
 import { RequestReEvalModal } from './components/RequestReEvalModal';
 import { ReEvaluationsList } from './components/ReEvaluationsList';
+import { teacherService } from '@/services';
 
 type ResultStatus = 'PENDING' | 'REVIEW_REQUIRED' | 'APPROVED' | 'REJECTED';
 
@@ -85,8 +86,6 @@ interface SessionDetail {
   status: string;
   attempts: AttemptDetail[];
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 const STATUS_CONFIG: Record<ResultStatus, { label: string; bgColor: string; textColor: string }> = {
   PENDING: {
@@ -152,23 +151,16 @@ export default function GradingPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/api/admin/results`, {
-        credentials: 'include',
-      });
+      const response = await teacherService.getResults();
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch results: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const rawList = Array.isArray(data) ? data : data.results || data.data || [];
+      const rawList = Array.isArray(response.results) ? response.results : [];
 
       const resultsList: GradingResult[] = rawList.map((row: any) => ({
-        id: row.id,
-        session_id: row.id,
+        id: row.attempt_id,
+        session_id: row.attempt_id,
         student_name: row.student_name || 'Chưa có tên',
         student_id: row.student_id || '',
-        exam_name: row.exam_name || 'Bài thi vấn đáp',
+        exam_name: row.course_name || row.exam_name || 'Bài thi vấn đáp',
         exam_id: row.exam_id,
         ai_score: row.final_score !== undefined && row.final_score !== null ? row.final_score : row.ai_score ?? null,
         status: (
@@ -196,12 +188,41 @@ export default function GradingPage() {
   const handleOpenDetail = async (sessionId: string | number) => {
     try {
       setDetailLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/admin/results/${sessionId}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Không thể tải chi tiết bài thi');
-      const data = await res.json();
-      setSelectedSession(data);
+      const data = await teacherService.getResultDetail(String(sessionId));
+      // Map ResultDetail to SessionDetail format for the UI
+      const sessionDetail: SessionDetail = {
+        id: data.attempt_id,
+        exam_name: data.exam_name || data.course_name || 'Bài thi vấn đáp',
+        student_name: data.student_name,
+        final_score: data.final_score ?? data.ai_score ?? null,
+        status: data.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
+        attempts: [{
+          id: data.attempt_id,
+          sequence: 1,
+          question: { text: data.question_text || 'Câu hỏi vấn đáp' },
+          transcript: data.transcript,
+          stt_confidence: data.stt_confidence,
+          status: data.status,
+          assessment: {
+            score: data.ai_score,
+            reasoning_summary: data.ai_feedback,
+            criteria: data.criteria_scores?.map((c) => ({
+              name: c.name,
+              score: c.score,
+              max_score: 10,
+              weight: 0,
+            })),
+          },
+          evidence: data.audio_url ? [{
+            id: data.attempt_id,
+            kind: 'AUDIO',
+            status: 'COMPLETED',
+            sha256: undefined,
+            size: undefined,
+          }] : [],
+        }],
+      };
+      setSelectedSession(sessionDetail);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Lỗi khi tải chi tiết');
     } finally {
@@ -213,16 +234,8 @@ export default function GradingPage() {
     if (!selectedSession) return;
     try {
       setApproving(true);
-      const res = await fetch(`${API_BASE_URL}/api/admin/results/${selectedSession.id}/approve`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Lỗi phê duyệt (${res.status})`);
-      }
-      const updated = await res.json();
-      setSelectedSession((prev) => (prev ? { ...prev, status: 'COMPLETED', final_score: updated.final_score } : null));
+      await teacherService.approveResult(selectedSession.id);
+      setSelectedSession((prev) => (prev ? { ...prev, status: 'COMPLETED' } : null));
       setToastMessage('Đã duyệt điểm chính thức thành công và cập nhật vào hệ thống.');
       setTimeout(() => setToastMessage(null), 4000);
       await fetchResults();
@@ -315,7 +328,7 @@ export default function GradingPage() {
 
       {/* TAB CONTENT 2: ReEvaluations */}
       {activeTab === 'RE_EVALUATION' && (
-        <ReEvaluationsList apiBaseUrl={API_BASE_URL} />
+        <ReEvaluationsList />
       )}
 
       {/* TAB CONTENT 1: Grading Results */}
@@ -574,7 +587,6 @@ export default function GradingPage() {
                             evidenceId={audioEvidence.id}
                             sha256={audioEvidence.sha256}
                             size={audioEvidence.size}
-                            apiBaseUrl={API_BASE_URL}
                           />
                         </div>
                       )}
@@ -729,7 +741,6 @@ export default function GradingPage() {
           questionText={editTranscriptTarget.questionText}
           initialTranscript={editTranscriptTarget.transcript}
           sttConfidence={editTranscriptTarget.confidence}
-          apiBaseUrl={API_BASE_URL}
           onSuccess={(updated) => {
             handleAttemptUpdated(updated);
             setToastMessage('Đã cập nhật transcript và AI đã chấm lại câu hỏi thành công.');
@@ -748,7 +759,6 @@ export default function GradingPage() {
           questionText={scoreOverrideTarget.questionText}
           currentScore={scoreOverrideTarget.currentScore}
           initialCriteria={scoreOverrideTarget.criteria}
-          apiBaseUrl={API_BASE_URL}
           onSuccess={(updated) => {
             handleAttemptUpdated(updated);
             setToastMessage('Đã can thiệp và lưu điểm thủ công thành công.');
@@ -765,7 +775,6 @@ export default function GradingPage() {
           attemptId={requestReEvalTarget.attemptId}
           sequence={requestReEvalTarget.sequence}
           questionText={requestReEvalTarget.questionText}
-          apiBaseUrl={API_BASE_URL}
           onSuccess={() => {
             setToastMessage('Đã gửi yêu cầu thẩm định chấm chéo độc lập thành công.');
             setTimeout(() => setToastMessage(null), 4000);

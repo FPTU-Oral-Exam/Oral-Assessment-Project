@@ -1,9 +1,0 @@
-# Tài nguyên STT offline bắt buộc
-
-[README / danh mục tài liệu](../../../../README.md#hướng-dẫn-theo-nhu-cầu)
-
-Chạy `python scripts/build_desktop_stt.py` từ gốc repository trên đúng OS/architecture đích trước khi đóng gói. Script tạo helper native trong `oral-stt/` và model PhoWhisper-small INT8 theo revision cố định trong `model/`, kèm thông tin bản quyền. Hai thư mục sinh ra được Git bỏ qua; build bộ cài sẽ dừng nếu thiếu helper hoặc model.
-
-Đây là model nhận dạng giọng nói, luôn đi kèm bộ cài đầy đủ.
-
-Xem [hướng dẫn đóng gói desktop cũ (lưu trữ)](../../../../docs/archive/legacy-mvp/desktop-build.md). Phân hệ mới của sinh viên là Thin-Client không còn đóng gói model STT này (xem `apps/student-app/`).

@@ -15,7 +15,7 @@ import {
   Loader2,
   HelpCircle,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 import { Outcome } from './OutcomesPanel';
 
 export interface Chapter {
@@ -35,11 +35,11 @@ export interface Doc {
 export interface Topic {
   id: string;
   name: string;
-  description: string;
-  learning_outcome_id: string;
-  learning_outcome_ids: string[];
-  chapter_ids: string[];
-  document_ids: string[];
+  description?: string;
+  outcome_ids: string[];
+  chapter_ids?: string[];
+  document_ids?: string[];
+  course_id?: string;
 }
 
 interface TopicsPanelProps {
@@ -97,7 +97,7 @@ export default function TopicsPanel({
     setEditingTopic(t);
     setName(t.name);
     setDescription(t.description || '');
-    setSelectedLOs(t.learning_outcome_ids?.length ? t.learning_outcome_ids : [t.learning_outcome_id]);
+    setSelectedLOs(t.outcome_ids?.length ? t.outcome_ids : []);
     setSelectedChapters(t.chapter_ids || []);
     setSelectedDocs(t.document_ids || []);
     setFormError(null);
@@ -140,21 +140,14 @@ export default function TopicsPanel({
       const payload = {
         name: name.trim(),
         description: description.trim(),
-        learning_outcome_ids: selectedLOs,
+        outcome_ids: selectedLOs,
         chapter_ids: selectedChapters,
-        document_ids: selectedDocs,
       };
 
       if (editingTopic) {
-        await api(`/admin/topics/${editingTopic.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.updateTopic(editingTopic.id, payload);
       } else {
-        await api(`/admin/courses/${courseId}/topics`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.createTopic(courseId, payload);
       }
 
       await onReload();
@@ -172,7 +165,7 @@ export default function TopicsPanel({
   const handleDelete = async (topicId: string, topicName: string) => {
     if (!confirm(`Bạn có chắc chắn muốn xóa chủ đề "${topicName}"?`)) return;
     try {
-      await api(`/admin/topics/${topicId}`, { method: 'DELETE' });
+      await teacherService.deleteTopic(topicId);
       await onReload();
     } catch (err: unknown) {
       alert((err as Error).message || 'Không thể xóa chủ đề này.');
@@ -253,7 +246,7 @@ export default function TopicsPanel({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {topics.map((t) => {
             const mappedLOs = outcomes.filter((l) =>
-              (t.learning_outcome_ids || [t.learning_outcome_id]).includes(l.id)
+              (t.outcome_ids || []).includes(l.id)
             );
             const mappedChapters = sortedChapters.filter((c) =>
               (t.chapter_ids || []).includes(c.id)
