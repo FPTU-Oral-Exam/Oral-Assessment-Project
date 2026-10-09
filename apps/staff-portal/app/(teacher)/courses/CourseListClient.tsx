@@ -23,7 +23,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 
 export interface ExamBatchInfo {
   batch_id: string;
@@ -67,8 +67,6 @@ export interface SemesterGroup {
   courses: AssignedCourse[];
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
-
 export default function CourseListClient() {
   const { user } = useUser();
   const [semesters, setSemesters] = useState<SemesterGroup[]>([]);
@@ -83,7 +81,7 @@ export default function CourseListClient() {
       setLoading(true);
       setError(null);
 
-      const data = await api<SemesterGroup[]>('/admin/teacher-semesters');
+      const data = await teacherService.getTeacherSemesters();
       setSemesters(Array.isArray(data) ? data : []);
 
       // If only 1 semester exists, auto-select it for convenient immediate view

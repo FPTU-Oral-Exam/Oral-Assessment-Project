@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Award, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { teacherService } from '@/services';
 
 interface CriterionItem {
   name: string;
@@ -19,7 +20,6 @@ interface ScoreOverrideModalProps {
   questionText: string;
   currentScore: number | null;
   initialCriteria?: CriterionItem[];
-  apiBaseUrl?: string;
   onSuccess: (updatedAttempt: any) => void;
 }
 
@@ -31,7 +31,6 @@ export function ScoreOverrideModal({
   questionText,
   currentScore,
   initialCriteria = [],
-  apiBaseUrl = '',
   onSuccess,
 }: ScoreOverrideModalProps) {
   const [score, setScore] = useState<number>(currentScore !== null ? currentScore : 5);
@@ -87,7 +86,7 @@ export function ScoreOverrideModal({
       setSubmitting(true);
       setError(null);
 
-      const payload = {
+      await teacherService.overrideScore(attemptId, {
         score: parseFloat(score.toString()),
         reason: reason.trim(),
         criteria: criteria.map((c) => ({
@@ -95,22 +94,9 @@ export function ScoreOverrideModal({
           score: parseFloat(c.score.toString()),
           feedback: c.feedback || undefined,
         })),
-      };
-
-      const res = await fetch(`${apiBaseUrl}/api/admin/attempts/${attemptId}/override`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Lỗi khi can thiệp điểm (${res.status})`);
-      }
-
-      const updated = await res.json();
-      onSuccess(updated);
+      onSuccess({ id: attemptId });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lỗi khi gửi can thiệp điểm');

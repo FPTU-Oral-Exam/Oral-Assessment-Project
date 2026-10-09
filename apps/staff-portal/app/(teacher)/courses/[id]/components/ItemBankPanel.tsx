@@ -25,7 +25,7 @@ import {
   UploadCloud,
   FileUp,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 import { Outcome } from './OutcomesPanel';
 import { Topic } from './TopicsPanel';
 
@@ -136,16 +136,13 @@ export default function ItemBankPanel({
         .map((s) => s.trim())
         .filter(Boolean);
 
-      await api(`/admin/courses/${courseId}/items`, {
-        method: 'POST',
-        body: JSON.stringify({
-          topic_id: formTopicId,
-          difficulty: formDifficulty,
-          prompt: formPrompt.trim(),
-          expected_points: expectedList,
-          key_terms: termsList,
-          status: 'APPROVED',
-        }),
+      await teacherService.createItem(courseId, {
+        topic_id: formTopicId,
+        difficulty: formDifficulty as 'EASY' | 'MEDIUM' | 'HARD',
+        prompt: formPrompt.trim(),
+        expected_points: expectedList,
+        key_terms: termsList,
+        status: 'APPROVED',
       });
 
       // Reset form
@@ -166,7 +163,7 @@ export default function ItemBankPanel({
       return;
     }
     try {
-      await api(`/admin/items/${itemId}`, { method: 'DELETE' });
+      await teacherService.deleteItem(itemId);
       await onReload();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Không thể xóa câu hỏi');
@@ -235,10 +232,7 @@ export default function ItemBankPanel({
 
     try {
       setSubmitting(true);
-      await api(`/admin/courses/${courseId}/items/import`, {
-        method: 'POST',
-        body: JSON.stringify({ items: sampleItems }),
-      });
+      await teacherService.importItems(courseId, { items: sampleItems });
       await onReload();
       setIsImportModalOpen(false);
       alert('Đã nạp thành công 4 câu hỏi mẫu chuẩn vào Ngân hàng!');

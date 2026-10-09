@@ -18,9 +18,9 @@ import {
   HelpCircle,
   GraduationCap,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 import OutcomesPanel, { Outcome } from './components/OutcomesPanel';
-import TopicsPanel, { Topic } from './components/TopicsPanel';
+import TopicsPanel from './components/TopicsPanel';
 import RubricsPanel from './components/RubricsPanel';
 import ItemBankPanel, { QuestionItemData } from './components/ItemBankPanel';
 import ExamsPanel from './components/ExamsPanel';
@@ -56,7 +56,7 @@ export interface ExamItem {
 
 export interface WorkspaceResponse {
   outcomes: Outcome[];
-  topics: Topic[];
+  topics: any[];
   rubrics: RubricItem[];
   exams: ExamItem[];
   items?: QuestionItemData[];
@@ -90,8 +90,8 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
 
     try {
       const [allCourses, wsData] = await Promise.all([
-        api<CourseItem[]>('/admin/courses'),
-        api<WorkspaceResponse>(`/admin/courses/${courseId}/workspace`),
+        teacherService.getCourses(),
+        teacherService.getCourseWorkspace(courseId),
       ]);
 
       const foundCourse = allCourses.find((c) => c.id === courseId);
@@ -106,7 +106,13 @@ export default function CourseWorkspaceClient({ courseId }: { courseId: string }
         });
       }
 
-      setWorkspace(wsData);
+      setWorkspace({
+        outcomes: wsData.learning_outcomes,
+        topics: wsData.topics,
+        rubrics: wsData.rubrics as any,
+        exams: wsData.exams as any,
+        items: wsData.documents as any,
+      });
     } catch (err: unknown) {
       console.error('Error loading course workspace:', err);
       setError((err as Error).message || 'Không thể tải dữ liệu không gian môn học.');

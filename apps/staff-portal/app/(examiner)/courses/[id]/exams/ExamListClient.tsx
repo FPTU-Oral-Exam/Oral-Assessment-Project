@@ -22,7 +22,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { examinerService, adminService } from '@/services';
 import type { Exam, ExamBatch, BatchStudent } from '@oralai/shared';
+import type { UserRecord } from '@/services/admin.service';
+import type { CreateBatchRequest } from '@/services/examiner.service';
+import { parseApiError } from '@/lib/api-helpers';
 
 interface Teacher {
   id: string;
@@ -88,11 +92,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
   const fetchBatches = useCallback(async (examId: string) => {
     setLoadingBatches((prev) => ({ ...prev, [examId]: true }));
     try {
-      const res = await fetch(`/api/examiner/exams/${examId}/batches`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`Lỗi server: ${res.status}`);
-      const data = await res.json();
+      const data = await examinerService.getBatches(examId);
       setBatchesByExam((prev) => ({
         ...prev,
         [examId]: Array.isArray(data) ? data : [],
@@ -109,11 +109,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/examiner/courses/${courseId}/exams`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`Lỗi server: ${res.status}`);
-      const data = await res.json();
+      const data = await examinerService.getExamsByCourse(courseId);
       const examList = Array.isArray(data) ? data : [];
       setExams(examList);
 
@@ -132,14 +128,12 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
   // Fetch teachers list (strictly filter role=TEACHER)
   const fetchTeachers = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/users?role=TEACHER', {
-        credentials: 'include',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const teacherList = (Array.isArray(data) ? data : []).filter(
-        (u) => u.role === 'TEACHER' || u.roles?.includes('TEACHER')
-      );
+      const data = await adminService.getUsers({ role: 'TEACHER' });
+      const teacherList = data.map((u: UserRecord) => ({
+        id: u.id,
+        name: u.name,
+        username: u.username,
+      }));
       setTeachers(teacherList);
     } catch {
       // Optional teachers list
@@ -162,14 +156,26 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     if (!studentsByBatch[batchId]) {
       setLoadingStudents(batchId);
       try {
-        const res = await fetch(`/api/examiner/batches/${batchId}/students`, {
-          credentials: 'include',
-        });
-        if (!res.ok) throw new Error('Không thể tải danh sách thí sinh');
-        const data = await res.json();
+        const data = await examinerService.getBatchStudents(batchId);
+        // Flatten students from all rooms
+        const allStudents: BatchStudent[] = [];
+        if (data.rooms) {
+          data.rooms.forEach((room: any) => {
+            if (room.students) {
+              room.students.forEach((st: any) => {
+                allStudents.push({
+                  roll_number: st.roll_number,
+                  full_name: st.full_name,
+                  room: room.room,
+                  eligibility_status: 'ELIGIBLE',
+                });
+              });
+            }
+          });
+        }
         setStudentsByBatch((prev) => ({
           ...prev,
-          [batchId]: Array.isArray(data) ? data : [],
+          [batchId]: allStudents,
         }));
       } catch {
         toast.error('Không thể tải danh sách thí sinh trong ca thi');
@@ -184,33 +190,12 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     e.preventDefault();
     setCreatingExam(true);
     try {
-      const res = await fetch(`/api/examiner/courses/${courseId}/exams`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(examForm),
+      await examinerService.createExam(courseId, {
+        name: examForm.name,
+        description: examForm.description,
+        time_limit: examForm.time_limit,
+        question_count: examForm.question_count,
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        const code = errData?.detail?.code || errData?.error?.code || errData?.code;
-        const rawMessage =
-          errData?.detail?.message ||
-          errData?.error?.message ||
-          (typeof errData?.detail === 'string' ? errData.detail : null) ||
-          errData?.message;
-
-        let errorMsg = 'Tạo kỳ thi thất bại';
-        if (code === 'EXAM_NAME_EXISTS') {
-          errorMsg = `Tên kỳ thi "${examForm.name.trim()}" đã tồn tại trong môn học này! Vui lòng đặt tên khác.`;
-        } else if (code === 'EXAM_EXISTS') {
-          errorMsg = 'Môn học này đã có kỳ thi!';
-        } else if (rawMessage) {
-          errorMsg = `${rawMessage}${code ? ` (${code})` : ''}`;
-        } else {
-          errorMsg = `Lỗi máy chủ (${res.status})`;
-        }
-        throw new Error(errorMsg);
-      }
       toast.success('Đã tạo kỳ thi thành công');
       setShowExamModal(false);
       setExamForm({
@@ -221,7 +206,11 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
       });
       fetchExams();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Tạo kỳ thi thất bại', { duration: 5000 });
+      const msg = parseApiError(err, {
+        EXAM_NAME_EXISTS: `Tên kỳ thi "${examForm.name.trim()}" đã tồn tại trong môn học này! Vui lòng đặt tên khác.`,
+        EXAM_EXISTS: 'Môn học này đã có kỳ thi!',
+      });
+      toast.error(msg, { duration: 5000 });
     } finally {
       setCreatingExam(false);
     }
@@ -231,16 +220,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
   const handleGenerateVariants = async (exam: Exam) => {
     try {
       setGeneratingExamId(exam.id);
-      const res = await fetch(`/api/examiner/exams/${exam.id}/generate-variants`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        const msg = errData?.detail?.message || errData?.message || 'Không thể sinh mã đề';
-        throw new Error(msg);
-      }
-      const data = await res.json();
+      const data = await examinerService.generateVariants(exam.id);
       toast.success(
         `Đã sinh thành công ${data.variants_count || 'các'} mã đề song song từ Ngân hàng đề thi (ATA) cho các ca thi!`,
         { duration: 5000 }
@@ -296,49 +276,17 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
       const dateObj = new Date(batchForm.date);
       const dateTs = Math.floor(dateObj.getTime() / 1000);
 
-      const res = await fetch(`/api/examiner/exams/${batchModalExam.id}/batches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: batchForm.name,
-          date: dateTs,
-          start_time: batchForm.start_time,
-          end_time: batchForm.end_time,
-          rooms: roomList,
-          max_students_per_room: batchForm.max_students_per_room,
-          assigned_teacher_id: batchForm.assigned_teacher_id,
-        }),
-      });
+      const batchData: CreateBatchRequest = {
+        name: batchForm.name,
+        date: dateTs,
+        start_time: batchForm.start_time,
+        end_time: batchForm.end_time,
+        rooms: roomList,
+        max_students_per_room: batchForm.max_students_per_room,
+        assigned_teacher_id: batchForm.assigned_teacher_id,
+      };
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        const code = errData?.detail?.code || errData?.error?.code || errData?.code;
-        const rawMessage =
-          errData?.detail?.message ||
-          errData?.error?.message ||
-          (typeof errData?.detail === 'string' ? errData.detail : null) ||
-          errData?.message;
-
-        let errorMsg = 'Tạo ca thi thất bại';
-        if (code === 'INVALID_TEACHER') {
-          errorMsg = 'Giảng viên phụ trách không hợp lệ: Tài khoản được chọn không có vai trò Giảng viên (TEACHER)!';
-        } else if (code === 'NO_CANDIDATES') {
-          errorMsg = 'Không còn thí sinh đủ điều kiện nào chưa được phân bổ ca thi!';
-        } else if (code === 'NO_ROOMS') {
-          errorMsg = 'Danh sách phòng thi không được để trống!';
-        } else if (code === 'EXAM_NOT_FOUND') {
-          errorMsg = 'Không tìm thấy thông tin kỳ thi tương ứng!';
-        } else if (rawMessage) {
-          errorMsg = `${rawMessage}${code ? ` (${code})` : ''}`;
-        } else {
-          errorMsg = `Lỗi máy chủ (${res.status})`;
-        }
-
-        throw new Error(errorMsg);
-      }
-
-      const result = await res.json();
+      const result = await examinerService.createBatch(batchModalExam.id, batchData);
       toast.success(
         `Đã tạo "${result.name}" và tự động phân bổ ${result.total_assigned} thí sinh vào ${result.rooms?.length || roomList.length} phòng!`
       );
@@ -347,7 +295,13 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
       setBatchModalExam(null);
       fetchBatches(currentExamId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Tạo ca thi thất bại', { duration: 6000 });
+      const msg = parseApiError(err, {
+        INVALID_TEACHER: 'Giảng viên phụ trách không hợp lệ: Tài khoản được chọn không có vai trò Giảng viên (TEACHER)!',
+        NO_CANDIDATES: 'Không còn thí sinh đủ điều kiện nào chưa được phân bổ ca thi!',
+        NO_ROOMS: 'Danh sách phòng thi không được để trống!',
+        EXAM_NOT_FOUND: 'Không tìm thấy thông tin kỳ thi tương ứng!',
+      });
+      toast.error(msg, { duration: 6000 });
     } finally {
       setCreatingBatch(false);
     }

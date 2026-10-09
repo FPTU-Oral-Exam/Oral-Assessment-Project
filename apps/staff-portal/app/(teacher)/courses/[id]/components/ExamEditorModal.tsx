@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   Languages,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 import AssignExamModal from './AssignExamModal';
 
 export interface ExamItem {
@@ -80,15 +80,13 @@ export default function ExamEditorModal({
       setPublishing(true);
       setError(null);
 
-      await api(`/admin/exams/${exam.id}/publish`, {
-        method: 'POST',
-      });
+      await teacherService.publishExam(exam.id);
 
       await onRefresh();
       onClose();
     } catch (err: unknown) {
       try {
-        const refreshed = await api<any>(`/admin/courses/${courseId}/workspace`);
+        const refreshed = await teacherService.getCourseWorkspace(courseId);
         const publishedExam = refreshed.exams?.find((e: any) => e.id === exam.id && e.status === 'PUBLISHED');
         if (publishedExam) {
           await onRefresh();

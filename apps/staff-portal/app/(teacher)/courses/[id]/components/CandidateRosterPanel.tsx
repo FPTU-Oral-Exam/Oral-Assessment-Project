@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Users, Search, RefreshCw, AlertCircle, ShieldCheck, GraduationCap } from 'lucide-react';
-import { api } from '@/lib/api';
+import { examinerService } from '@/services';
 
 interface Candidate {
   id: string;
@@ -27,8 +27,16 @@ export default function CandidateRosterPanel({ courseId }: CandidateRosterPanelP
     try {
       setLoading(true);
       setError(null);
-      const data = await api<Candidate[]>(`/admin/courses/${courseId}/students?detail=true`);
-      setCandidates(data || []);
+      const data = await examinerService.getCandidates(courseId);
+      // Map from examiner service format to local Candidate type
+      const candidateList: Candidate[] = (data.candidates || []).map((c: any) => ({
+        id: c.id,
+        username: c.roll_number || c.username || '',
+        name: c.full_name || c.name || '',
+        status: c.eligibility_status || 'UNKNOWN',
+        section_code: c.batch_name || 'Mặc định',
+      }));
+      setCandidates(candidateList);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách thí sinh');
     } finally {

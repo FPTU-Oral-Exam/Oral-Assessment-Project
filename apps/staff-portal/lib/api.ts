@@ -1,45 +1,51 @@
-import { ApiClient } from '@oralai/shared';
+/**
+ * Legacy API wrapper - Tương thích ngược với mã cũ
+ *
+ * Lưu ý: Các component mới nên sử dụng:
+ * - Services: import { examinerService, teacherService, adminService, authService } from '@/services';
+ * - Core Client: import { apiClient } from '@/lib/api-client';
+ *
+ * File này được giữ lại để Strangler Fig Migration không làm hỏng UI cũ.
+ * @deprecated Sử dụng services trong thư mục @/services thay thế.
+ */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+import { apiClient as newApiClient, ApiError } from './api-client';
 
-export const apiClient = new ApiClient({
-  baseUrl: API_BASE_URL || '/api',
-});
+// Re-export ApiError cho mã cũ
+export { ApiError };
 
+// Re-export apiClient mới
+export { apiClient } from './api-client';
+
+/**
+ * @deprecated Sử dụng examinerService, teacherService, adminService, authService
+ */
 export async function api<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  // If API_BASE_URL is not set, route through Next.js proxy /api to preserve Same-Origin cookies
   const path = cleanEndpoint.startsWith('/api') ? cleanEndpoint : `/api${cleanEndpoint}`;
-  const url = API_BASE_URL ? `${API_BASE_URL}${cleanEndpoint}` : path;
 
-  const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData;
+  try {
+    if (options?.method === 'POST' || options?.method === 'PUT' || options?.method === 'PATCH') {
+      const body = options.body instanceof FormData
+        ? options.body
+        : (options.body ? JSON.parse(options.body as string) : undefined);
 
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-      ...options?.headers,
-    },
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    if (res.status === 401 && typeof window !== 'undefined') {
-      window.location.href = `/login?from=${encodeURIComponent(window.location.pathname)}`;
+      if (options.method === 'POST') {
+        return await newApiClient.post<T>(path, body);
+      } else if (options.method === 'PUT') {
+        return await newApiClient.put<T>(path, body);
+      } else {
+        return await newApiClient.patch<T>(path, body);
+      }
+    } else if (options?.method === 'DELETE') {
+      return await newApiClient.delete<T>(path);
+    } else {
+      return await newApiClient.get<T>(path);
     }
-    let errMsg = `API call failed: ${res.statusText}`;
-    try {
-      const errJson = await res.json();
-      errMsg =
-        errJson.error?.message ||
-        errJson.detail?.message ||
-        errJson.message ||
-        (typeof errJson.detail === 'string' ? errJson.detail : null) ||
-        (errJson.detail ? JSON.stringify(errJson.detail) : null) ||
-        errMsg;
-    } catch {
-      // ignore
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new Error(error.message);
     }
-    throw new Error(errMsg);
+    throw error;
   }
-  return res.json();
 }

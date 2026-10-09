@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Sparkles, Loader2, AlertCircle, FileEdit, CheckCircle2 } from 'lucide-react';
+import { teacherService } from '@/services';
 
 interface EditTranscriptModalProps {
   isOpen: boolean;
@@ -11,7 +12,6 @@ interface EditTranscriptModalProps {
   questionText: string;
   initialTranscript: string;
   sttConfidence?: number | null;
-  apiBaseUrl?: string;
   onSuccess: (updatedAttempt: any) => void;
 }
 
@@ -23,7 +23,6 @@ export function EditTranscriptModal({
   questionText,
   initialTranscript,
   sttConfidence,
-  apiBaseUrl = '',
   onSuccess,
 }: EditTranscriptModalProps) {
   const [transcript, setTranscript] = useState(initialTranscript || '');
@@ -48,23 +47,12 @@ export function EditTranscriptModal({
       setSubmitting(true);
       setError(null);
 
-      const res = await fetch(`${apiBaseUrl}/api/admin/attempts/${attemptId}/regrade-transcript`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          corrected_transcript: transcript.trim(),
-          reason: reason.trim(),
-        }),
+      await teacherService.regradeTranscript(attemptId, {
+        corrected_transcript: transcript.trim(),
+        reason: reason.trim(),
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Lỗi khi chấm lại (${res.status})`);
-      }
-
-      const updated = await res.json();
-      onSuccess(updated);
+      onSuccess({ id: attemptId });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lỗi khi gửi yêu cầu chấm lại');

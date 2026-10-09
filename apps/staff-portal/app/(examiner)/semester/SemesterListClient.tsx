@@ -18,16 +18,16 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface Semester {
+import { examinerService, adminService } from '@/services';
+import type { Semester, SemesterDetail } from '@oralai/shared';
+import type { CreateSemesterRequest, CourseDetail } from '@/services/examiner.service';
+import type { UserRecord } from '@/services/admin.service';
+import { ApiError } from '@oralai/shared';
+
+interface Teacher {
   id: string;
   name: string;
-  year: number;
-  term: 'SPRING' | 'SUMMER' | 'FALL';
-  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED';
-  start_date: number;
-  end_date: number;
-  course_count: number;
-  created_at?: number;
+  username: string;
 }
 
 interface SemesterIn {
@@ -36,22 +36,6 @@ interface SemesterIn {
   term: 'SPRING' | 'SUMMER' | 'FALL';
   start_date: number;
   end_date: number;
-}
-
-interface SemesterCourse {
-  id: string;
-  name: string;
-  code: string;
-  description?: string;
-  status: string;
-  semester_id: string;
-  teacher?: { id: string; name: string } | null;
-}
-
-interface Teacher {
-  id: string;
-  name: string;
-  username: string;
 }
 
 interface CourseFormData {
@@ -79,7 +63,7 @@ export default function SemesterListClient() {
 
   // Course expansion & creation state
   const [expandedSemesterId, setExpandedSemesterId] = useState<string | null>(null);
-  const [semesterCourses, setSemesterCourses] = useState<Record<string, SemesterCourse[]>>({});
+  const [semesterCourses, setSemesterCourses] = useState<Record<string, CourseDetail[]>>({});
   const [loadingCourses, setLoadingCourses] = useState<Record<string, boolean>>({});
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [activeSemesterForCourse, setActiveSemesterForCourse] = useState<Semester | null>(null);
@@ -97,9 +81,7 @@ export default function SemesterListClient() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/examiner/semesters', { credentials: 'include' });
-      if (!res.ok) throw new Error(`Lỗi server: ${res.status}`);
-      const data = await res.json();
+      const data = await examinerService.getSemesters();
       setSemesters(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách học kỳ');
@@ -110,16 +92,13 @@ export default function SemesterListClient() {
 
   const fetchTeachers = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/users', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        const teacherUsers = Array.isArray(data)
-          ? data.filter((u: { role?: string; roles?: string[] }) =>
-              u.role === 'TEACHER' || u.roles?.includes('TEACHER')
-            )
-          : [];
-        setTeachers(teacherUsers);
-      }
+      const data = await adminService.getUsers({ role: 'TEACHER' });
+      const teacherUsers = data.map((u: UserRecord) => ({
+        id: u.id,
+        name: u.name,
+        username: u.username,
+      }));
+      setTeachers(teacherUsers);
     } catch {
       // Fallback silently if teacher listing is unavailable
     }
@@ -133,11 +112,10 @@ export default function SemesterListClient() {
   const fetchSemesterCourses = async (semesterId: string) => {
     try {
       setLoadingCourses((prev) => ({ ...prev, [semesterId]: true }));
-      const res = await fetch(`/api/examiner/semesters/${semesterId}/courses`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setSemesterCourses((prev) => ({ ...prev, [semesterId]: data }));
-      }
+      const semesterDetail = await examinerService.getSemesterDetail(semesterId);
+      // Extract courses from semester detail
+      const courses = (semesterDetail as any).courses || [];
+      setSemesterCourses((prev) => ({ ...prev, [semesterId]: courses }));
     } catch {
       toast.error('Không thể tải môn học của học kỳ');
     } finally {
@@ -158,17 +136,7 @@ export default function SemesterListClient() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch('/api/examiner/semesters', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Lỗi không xác định' }));
-        throw new Error(err.message || err.detail || 'Tạo học kỳ thất bại');
-      }
-      const data = await res.json().catch(() => ({}));
+      const data = await examinerService.createSemester(formData as CreateSemesterRequest);
       setIsModalOpen(false);
       setFormData({ name: '', year: new Date().getFullYear(), term: 'SPRING', start_date: 0, end_date: 0 });
       toast.success('Tạo học kỳ thành công');
@@ -194,22 +162,11 @@ export default function SemesterListClient() {
         name: courseFormData.name.trim(),
         description: courseFormData.description.trim(),
         credits: courseFormData.credits,
-        teacher_id: courseFormData.teacher_id || null,
       };
 
-      const res = await fetch(`/api/examiner/semesters/${activeSemesterForCourse.id}/courses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
+      await examinerService.addCourseToSemester(activeSemesterForCourse.id, payload);
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Tạo môn học thất bại' }));
-        throw new Error(err.message || err.detail || 'Tạo môn học thất bại');
-      }
-
-      toast.success(`Đã thêm môn học ${courseFormData.code}`);
+      toast.success(`�ã thêm môn học ${courseFormData.code}`);
       setShowAddCourseModal(false);
       setCourseFormData({ code: '', name: '', description: '', credits: 3, teacher_id: '' });
       fetchSemesterCourses(activeSemesterForCourse.id);
@@ -223,11 +180,7 @@ export default function SemesterListClient() {
 
   const handleActivate = async (id: string) => {
     try {
-      const res = await fetch(`/api/examiner/semesters/${id}/activate`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Kích hoạt thất bại');
+      await examinerService.activateSemester(id);
       toast.success('Đã kích hoạt học kỳ');
       fetchSemesters();
     } catch (err) {
@@ -237,11 +190,7 @@ export default function SemesterListClient() {
 
   const handleComplete = async (id: string) => {
     try {
-      const res = await fetch(`/api/examiner/semesters/${id}/complete`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Hoàn thành thất bại');
+      await examinerService.completeSemester(id);
       toast.success('Đã đánh dấu hoàn thành');
       fetchSemesters();
     } catch (err) {
