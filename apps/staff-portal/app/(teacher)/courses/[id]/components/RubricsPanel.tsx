@@ -12,7 +12,7 @@ import {
   HelpCircle,
   FileCheck2,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 
 export interface RubricCriterion {
   name: string;
@@ -182,15 +182,9 @@ export default function RubricsPanel({ courseId, rubrics, onRefresh }: RubricsPa
       };
 
       if (editingRubric) {
-        await api(`/admin/rubrics/${editingRubric.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.updateRubric(editingRubric.id, payload);
       } else {
-        await api(`/admin/courses/${courseId}/rubrics`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.createRubric(courseId, payload);
       }
 
       setIsModalOpen(false);
@@ -208,9 +202,7 @@ export default function RubricsPanel({ courseId, rubrics, onRefresh }: RubricsPa
     }
 
     try {
-      await api(`/admin/rubrics/${rubricId}`, {
-        method: 'DELETE',
-      });
+      await teacherService.deleteRubric(rubricId);
       await onRefresh();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

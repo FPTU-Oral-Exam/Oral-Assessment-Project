@@ -16,11 +16,9 @@ import {
   UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type {
-  CandidateStats,
-  CourseCandidate as Candidate,
-  ImportResult,
-} from '@oralai/shared';
+
+import { examinerService } from '@/services';
+import type { CandidateStats, CourseCandidate as Candidate, ImportResult } from '@oralai/shared';
 
 export default function CandidatesClient({ courseId }: { courseId: string }) {
   const [stats, setStats] = useState<CandidateStats | null>(null);
@@ -40,36 +38,27 @@ export default function CandidatesClient({ courseId }: { courseId: string }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
-  // Fetch stats
-  const fetchStats = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/examiner/courses/${courseId}/detail`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`Lỗi server: ${res.status}`);
-      const data = await res.json();
-      setStats(data.stats);
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
-    }
-  }, [courseId]);
-
   // Fetch candidates
   const fetchCandidates = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const params = new URLSearchParams();
-      if (eligibilityFilter) params.set('eligibility_status', eligibilityFilter);
-      if (allocationFilter) params.set('allocation_status', allocationFilter);
-      if (search) params.set('search', search);
-
-      const res = await fetch(`/api/examiner/courses/${courseId}/candidates?${params}`, {
-        credentials: 'include',
+      const result = await examinerService.getCandidates(courseId, {
+        eligibility_status: eligibilityFilter as 'ELIGIBLE' | 'DISQUALIFIED' | undefined,
+        allocation_status: allocationFilter as 'UNASSIGNED' | 'ASSIGNED' | undefined,
+        search: search || undefined,
       });
-      if (!res.ok) throw new Error(`Lỗi server: ${res.status}`);
-      const data = await res.json();
-      setCandidates(Array.isArray(data) ? data : []);
+      // Extract candidates from response
+      const candidateList = result.candidates || [];
+      setCandidates(candidateList);
+      // Update stats from response
+      setStats({
+        total: result.total,
+        eligible: result.eligible_count,
+        disqualified: result.disqualified_count,
+        assigned: result.assigned_count,
+        unassigned: result.unassigned_count,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách thí sinh');
       toast.error('Không thể tải danh sách thí sinh');
@@ -77,10 +66,6 @@ export default function CandidatesClient({ courseId }: { courseId: string }) {
       setLoading(false);
     }
   }, [courseId, eligibilityFilter, allocationFilter, search]);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
 
   useEffect(() => {
     fetchCandidates();
@@ -126,30 +111,23 @@ export default function CandidatesClient({ courseId }: { courseId: string }) {
     setImportResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      const res = await fetch(`/api/examiner/courses/${courseId}/candidates/import`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
+      // Convert file to base64 for API
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Remove data URL prefix if present
+          const base64 = result.includes(',') ? result.split(',')[1] : result;
+          resolve(base64);
+        };
+        reader.onerror = reject;
       });
+      reader.readAsDataURL(selectedFile);
+      const base64Data = await base64Promise;
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Import thất bại' }));
-        const errorMsg =
-          err?.error?.message ||
-          err?.detail?.message ||
-          (typeof err?.detail === 'string' ? err.detail : null) ||
-          err?.message ||
-          'Import thất bại';
-        throw new Error(errorMsg);
-      }
-
-      const result: ImportResult = await res.json();
+      const result = await examinerService.importCandidates(courseId, base64Data);
       setImportResult(result);
       toast.success(`Đã import ${result.imported} thí sinh`);
-      fetchStats();
       fetchCandidates();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Import thất bại');

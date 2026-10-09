@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   CheckCircle,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 import { RubricItem } from './RubricsPanel';
 import ExamBlueprintModal from './ExamBlueprintModal';
 import ExamEditorModal, { ExamItem } from './ExamEditorModal';
@@ -72,9 +72,7 @@ export default function ExamsPanel({
       return;
     }
     try {
-      await api(`/admin/exams/${examId}`, {
-        method: 'DELETE',
-      });
+      await teacherService.deleteExam(examId);
       await onRefresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

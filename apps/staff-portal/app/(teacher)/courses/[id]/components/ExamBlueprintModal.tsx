@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   HelpCircle,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { teacherService } from '@/services';
 import { RubricItem } from './RubricsPanel';
 import { ExamItem } from './ExamEditorModal';
 
@@ -183,16 +183,10 @@ export default function ExamBlueprintModal({
 
       if (targetExam?.id) {
         // Cập nhật đề thi đã tạo bởi Khảo thí
-        await api(`/admin/exams/${targetExam.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.updateExam(targetExam.id, payload);
       } else {
         // Tạo mới đề thi
-        await api('/admin/exams', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+        await teacherService.createExam(payload);
       }
 
       await onSuccess();

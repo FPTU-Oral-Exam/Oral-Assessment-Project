@@ -7,10 +7,9 @@ interface AudioPlayerProps {
   evidenceId: string;
   sha256?: string;
   size?: number;
-  apiBaseUrl?: string;
 }
 
-export function AudioPlayer({ evidenceId, sha256, size, apiBaseUrl = '' }: AudioPlayerProps) {
+export function AudioPlayer({ evidenceId, sha256, size }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -22,7 +21,7 @@ export function AudioPlayer({ evidenceId, sha256, size, apiBaseUrl = '' }: Audio
   const [error, setError] = useState<string | null>(null);
   const [audioSrc, setAudioSrc] = useState<string>('');
 
-  const streamUrl = `${apiBaseUrl}/api/evidence/${evidenceId}/content`;
+  const streamUrl = `/api/evidence/${evidenceId}/content`;
 
   // Fetch audio with credentials to create local blob URL (bypasses any cross-origin audio cookie limits)
   useEffect(() => {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Loader2, EyeOff, CheckCircle, Clock, Award, AlertCircle } from 'lucide-react';
+import { teacherService } from '@/services';
 
 interface ReEvalItem {
   id: string;
@@ -21,11 +22,7 @@ interface ReEvalItem {
   completed_at?: number | null;
 }
 
-interface ReEvaluationsListProps {
-  apiBaseUrl?: string;
-}
-
-export function ReEvaluationsList({ apiBaseUrl = '' }: ReEvaluationsListProps) {
+export function ReEvaluationsList() {
   const [items, setItems] = useState<ReEvalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -36,13 +33,7 @@ export function ReEvaluationsList({ apiBaseUrl = '' }: ReEvaluationsListProps) {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`${apiBaseUrl}/api/admin/re-evaluations`, {
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        throw new Error(`Lỗi tải danh sách thẩm định: ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await teacherService.getReEvaluations();
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải danh sách thẩm định');
@@ -68,18 +59,7 @@ export function ReEvaluationsList({ apiBaseUrl = '' }: ReEvaluationsListProps) {
 
     try {
       setSubmittingId(id);
-      const res = await fetch(`${apiBaseUrl}/api/admin/re-evaluations/${id}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ score_2: parseFloat(scoreVal.toString()) }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Lỗi khi lưu điểm (${res.status})`);
-      }
-
+      await teacherService.submitReEvaluationScore(id, parseFloat(scoreVal.toString()));
       await fetchReEvaluations();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Lỗi khi gửi điểm');
