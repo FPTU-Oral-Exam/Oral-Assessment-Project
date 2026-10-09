@@ -1,6 +1,9 @@
 name: oral-assessment
 x-api: &api
-  build: ./services/api
+  build:
+    context: ./services/api
+    cache_from:
+      - oral-api:latest
   env_file: .env
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -77,10 +80,10 @@ services:
           -c,
           "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
         ]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
   worker:
     <<: *api
     command: [python, -m, app.worker]
@@ -91,6 +94,8 @@ services:
     build:
       context: .
       dockerfile: apps/staff-portal/Dockerfile
+      cache_from:
+        - staff-portal:latest
     environment:
       API_INTERNAL_URL: http://api:8000
     ports:
@@ -106,9 +111,9 @@ services:
           -e,
           "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 volumes:
   postgres_data:
