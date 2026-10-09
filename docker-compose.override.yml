@@ -3,6 +3,9 @@
 
 services:
   web:
+    build:
+      context: .
+      dockerfile: apps/staff-portal/Dockerfile
     environment:
       - NODE_ENV=development
       - API_INTERNAL_URL=http://api:8000
@@ -14,6 +17,8 @@ services:
       - "127.0.0.1:3000:3000"
 
   api:
+    build:
+      context: ./services/api
     environment:
       - DEBUG=true
     volumes:
@@ -22,10 +27,14 @@ services:
       - "8000:8000"
 
   migrate:
+    build:
+      context: ./services/api
     volumes:
       - ./services/api:/app
 
   worker:
+    build:
+      context: ./services/api
     volumes:
       - ./services/api:/app
 
