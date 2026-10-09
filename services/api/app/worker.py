@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from sqlalchemy import select
 
-from . import ai, runtime_settings, speech, storage
+from . import ai, runtime_settings, speech, storage, fluency, pronunciation_wer, metrics
 from .db import SessionLocal
 from .documents import process_document
 from .grading import check_config, failure, review_question
@@ -85,7 +85,16 @@ def build_stt_prompt(question_dict: dict | None, exam_title: str | None = None) 
     return full_prompt[:250] if full_prompt else None
 
 
-def grade_answer(db, exam, session, attempt, transcript, confidence):
+def grade_answer(db, exam, session, attempt, transcript, confidence, segments=None):
+    """
+    Grade an attempt using enhanced metrics pipeline.
+
+    This function has been enhanced with:
+    - Fluency analysis (speech rate, pauses, filled pauses)
+    - Pronunciation WER (for Part 2 Read Aloud)
+    - Lexical diversity analysis
+    - Evidence-based LLM grading prompt
+    """
     snapshot = exam.snapshot
     if snapshot.get("practice"):
         return {
@@ -101,6 +110,49 @@ def grade_answer(db, exam, session, attempt, transcript, confidence):
             "reasoning_summary": "Đã hoàn thành câu luyện tập. Bài này không tính điểm chính thức.",
         }
     check_config(exam)
+
+    # ============================================================
+    # ENHANCED METRICS ANALYSIS
+    # ============================================================
+
+    # Calculate duration from segments or use attempt timing
+    duration_seconds = None
+    if segments:
+        if isinstance(segments, list) and segments:
+            def get_end(w):
+                if isinstance(w, dict):
+                    return w.get('end', 0)
+                return getattr(w, 'end', 0)
+            last_end = max(get_end(w) for w in segments)
+            duration_seconds = last_end
+
+    # Analyze fluency metrics
+    fluency_result = None
+    if segments:
+        try:
+            fluency_result = fluency.analyze_fluency(segments, duration_seconds)
+        except Exception as e:
+            log.warning("fluency_analysis_failed attempt=%s error=%s", attempt.id, str(e))
+
+    # Analyze pronunciation (Part 2 - Read Aloud)
+    pronunciation_result = None
+    reference_text = attempt.question.get('text') if isinstance(attempt.question, dict) else None
+    expected_points = attempt.question.get('expected_points', []) if isinstance(attempt.question, dict) else []
+
+    # If this is Part 2 (has reference text), calculate WER
+    if reference_text and transcript:
+        try:
+            pronunciation_result = pronunciation_wer.grade_reading_aloud(
+                reference_text=reference_text,
+                hypothesis_text=transcript,
+                avg_logprob=confidence
+            )
+        except Exception as e:
+            log.warning("pronunciation_wer_failed attempt=%s error=%s", attempt.id, str(e))
+
+    # ============================================================
+    # EVIDENCE RETRIEVAL
+    # ============================================================
 
     # Nếu câu hỏi từ Item Bank (hoặc không có document_ids), tổng hợp evidence trực tiếp từ đáp án chuẩn
     if snapshot.get("assembly_mode") == "ITEM_BANK_BLUEPRINT" or not snapshot.get("document_ids"):
@@ -134,6 +186,46 @@ def grade_answer(db, exam, session, attempt, transcript, confidence):
             frozen_chunks(db, exam, attempt),
         )
 
+    # ============================================================
+    # ENHANCED LLM GRADING
+    # ============================================================
+
+    # Build enhanced prompt with metrics if available
+    enhanced_metrics = None
+    if fluency_result:
+        try:
+            grading_metrics = metrics.aggregate_grading_metrics(
+                fluency_result=fluency_result,
+                pronunciation_result=pronunciation_result,
+                transcript=transcript or ""
+            )
+
+            # Get transcript with pauses
+            transcript_with_pauses = fluency_result.get('transcript_with_pauses', transcript or '')
+
+            # Build calibrated prompt
+            prompt_data = metrics.build_calibrated_prompt(
+                transcript=transcript or "",
+                transcript_with_pauses=transcript_with_pauses,
+                question=attempt.question or {},
+                metrics=grading_metrics,
+                context_chunks=chunks[:3] if chunks else None
+            )
+
+            enhanced_metrics = {
+                "fluency": fluency_result,
+                "pronunciation": pronunciation_result,
+                "lexical": grading_metrics.overall_metrics.get('lexical'),
+                "metrics_summary": prompt_data.get('metrics_summary', ''),
+                "llm_prompt": prompt_data.get('prompt', '')
+            }
+        except Exception as e:
+            log.warning("enhanced_prompt_failed attempt=%s error=%s", attempt.id, str(e))
+
+    # ============================================================
+    # STANDARD LLM GRADING
+    # ============================================================
+
     assessment = ai.grade(
         attempt.question,
         transcript,
@@ -145,6 +237,51 @@ def grade_answer(db, exam, session, attempt, transcript, confidence):
         "knowledge_version": snapshot.get("knowledge_version", "item-bank-v1"),
     }
 
+    # ============================================================
+    # MERGE ENHANCED METRICS
+    # ============================================================
+
+    if enhanced_metrics:
+        # Add enhanced metrics to assessment
+        assessment["enhanced_metrics"] = {
+            "fluency": {
+                "score": enhanced_metrics["fluency"].get('fluency_score'),
+                "speech_rate_wps": enhanced_metrics["fluency"].get('speech_rate_wps'),
+                "speech_rate_status": enhanced_metrics["fluency"].get('speech_rate_status'),
+                "pause_count": enhanced_metrics["fluency"].get('pause_count'),
+                "pause_ratio": enhanced_metrics["fluency"].get('pause_ratio_per_word'),
+                "filled_pause_count": enhanced_metrics["fluency"].get('filled_pause_count'),
+                "transcript_with_pauses": enhanced_metrics["fluency"].get('transcript_with_pauses')
+            },
+            "pronunciation": pronunciation_result if pronunciation_result else None,
+            "lexical": enhanced_metrics["lexical"]
+        }
+
+        # Override score calculation if we have enhanced metrics
+        # This gives us a more accurate score based on actual speech metrics
+        if pronunciation_result and pronunciation_result.get('is_valid', True):
+            # For Part 2: Weight pronunciation heavily
+            pronunciation_score = pronunciation_result.get('score', 0) / 10  # Convert to 0-10
+            fluency_score = enhanced_metrics["fluency"].get('fluency_score', 0) / 10  # Convert to 0-10
+
+            # Weighted average: 50% pronunciation (WER), 30% fluency, 20% content
+            auto_score = (pronunciation_score * 0.50 + fluency_score * 0.30 + (assessment.get('score', 5)) * 0.20)
+
+            # Only use auto score if it's reasonable
+            if 0 <= auto_score <= 10:
+                # Blend with LLM score (50/50)
+                llm_score = assessment.get('score', 5)
+                assessment['score'] = round((auto_score + llm_score) / 2, 2)
+
+        elif fluency_result:
+            # For non-Part 2: Weight fluency heavily
+            fluency_score = enhanced_metrics["fluency"].get('fluency_score', 0) / 10
+
+            # Blend: 30% auto (fluency), 70% LLM
+            llm_score = assessment.get('score', 5)
+            assessment['score'] = round((fluency_score * 0.30 + llm_score * 0.70), 2)
+
+    # Check confidence threshold
     if confidence is not None and confidence < 0.50:
         assessment["review_required"] = True
         flags = assessment.setdefault("audit_flags", [])
@@ -164,7 +301,7 @@ def process_review(db, job):
             question = review_question(exam, target, attempt)
             reviewed = SimpleNamespace(question=question, finished_at=attempt.finished_at)
             assessment = grade_answer(db, target, session, reviewed,
-                                      job.original["transcript"], job.original["stt_confidence"] or 0)
+                                      job.original["transcript"], job.original["stt_confidence"] or 0, segments=None)
             assessment = assessment | {"grading_exam_id": target.id, "source_exam_id": exam.id,
                                        "review_required": True}
             # A change of grading version always requires human review.
@@ -201,11 +338,12 @@ def process_transcription_review(db, job, exam, session, attempt):
         path.write_bytes(original)
         prompt = build_stt_prompt(attempt.question, exam.name if exam else None)
         try:
-            transcript = speech.transcribe_file(path, job.policy, prompt=prompt)
+            transcript = speech.transcribe_file(path, job.policy, prompt=prompt, include_word_timestamps=True)
         except TypeError:
-            transcript = speech.transcribe_file(path, job.policy)
+            transcript = speech.transcribe_file(path, job.policy, include_word_timestamps=True)
+    segments = transcript.get("segments")
     assessment = grade_answer(
-        db, exam, session, attempt, transcript["transcript"], transcript["stt_confidence"]
+        db, exam, session, attempt, transcript["transcript"], transcript["stt_confidence"], segments
     )
     job.result = transcript | {"assessment": assessment}
     # The submitted transcript and idempotency payload remain immutable.
@@ -214,9 +352,14 @@ def process_transcription_review(db, job, exam, session, attempt):
 
 
 def transcribe_attempt_if_needed(db, attempt):
-    """If attempt needs server-side STT, fetch audio from MinIO and transcribe with Whisper Large-v3."""
+    """
+    If attempt needs server-side STT, fetch audio from MinIO and transcribe with Whisper Large-v3.
+
+    Returns:
+        tuple: (transcript, confidence, segments) where segments includes word timestamps
+    """
     if attempt.transcript and attempt.transcript != "AWAITING_STT":
-        return attempt.transcript, attempt.stt_confidence or 0.0
+        return attempt.transcript, attempt.stt_confidence or 0.0, None
 
     upload = db.scalar(
         select(Upload)
@@ -228,7 +371,7 @@ def transcribe_attempt_if_needed(db, attempt):
         log.warning("no_audio_upload_found attempt=%s", attempt.id)
         attempt.transcript = "[No audio uploaded]"
         attempt.stt_confidence = 0.0
-        return attempt.transcript, attempt.stt_confidence
+        return attempt.transcript, attempt.stt_confidence, None
 
     with tempfile.TemporaryDirectory(prefix="oral-stt-") as folder:
         path = Path(folder) / "answer.webm"
@@ -241,15 +384,19 @@ def transcribe_attempt_if_needed(db, attempt):
             exam = db.get(Exam, session.exam_id) if session else None
             prompt = build_stt_prompt(attempt.question, exam.name if exam else None)
             try:
-                result = speech.transcribe_file(path, prompt=prompt)
+                # Request word timestamps for fluency analysis
+                result = speech.transcribe_file(path, prompt=prompt, include_word_timestamps=True)
             except TypeError:
-                result = speech.transcribe_file(path)
+                result = speech.transcribe_file(path, include_word_timestamps=True)
             attempt.transcript = result["transcript"]
             attempt.stt_confidence = result["stt_confidence"]
+            # Get segments for metrics (if available)
+            segments = result.get("segments")
         except ValueError as exc:
             if "Không phát hiện giọng nói" in str(exc):
                 attempt.transcript = "[No speech detected]"
                 attempt.stt_confidence = 0.0
+                segments = None
             else:
                 raise
 
@@ -265,7 +412,7 @@ def transcribe_attempt_if_needed(db, attempt):
         )
     )
     db.flush()
-    return attempt.transcript, attempt.stt_confidence
+    return attempt.transcript, attempt.stt_confidence, segments
 
 
 @runtime_settings.snapshot()
@@ -332,9 +479,9 @@ def tick():
         exam = db.get(Exam, session.exam_id)
         snapshot = exam.snapshot
         try:
-            transcript, stt_confidence = transcribe_attempt_if_needed(db, attempt)
+            transcript, stt_confidence, segments = transcribe_attempt_if_needed(db, attempt)
             attempt.assessment = grade_answer(
-                db, exam, session, attempt, transcript, stt_confidence
+                db, exam, session, attempt, transcript, stt_confidence, segments
             )
         except Exception as exc:
             code, message = failure(exc)

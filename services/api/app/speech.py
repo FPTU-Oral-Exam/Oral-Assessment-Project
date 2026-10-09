@@ -115,7 +115,7 @@ def model(name):
     return WhisperModel(name, device=device, compute_type=compute_type, download_root=download_root)
 
 
-def whisper(path, language, prompt=None):
+def whisper(path, language, prompt=None, include_word_timestamps=False):
     with _lock:
         segments, info = model(settings().stt_model).transcribe(
             str(path),
@@ -129,12 +129,28 @@ def whisper(path, language, prompt=None):
         )
         segments = list(segments)
     confidence = sum(math.exp(min(0, s.avg_logprob)) for s in segments) / len(segments) if segments else 0
-    return {
+
+    result = {
         "transcript": " ".join(s.text.strip() for s in segments).strip(),
         "stt_confidence": round(confidence, 4),
         "language": info.language,
         "model": settings().stt_model,
     }
+
+    # Include word-level timestamps for fluency analysis
+    if include_word_timestamps:
+        word_segments = []
+        for seg in segments:
+            for w in getattr(seg, 'words', []):
+                word_segments.append({
+                    "word": w.word.strip(),
+                    "start": w.start,
+                    "end": w.end,
+                    "avg_logprob": w.avg_logprob if hasattr(w, 'avg_logprob') else None
+                })
+        result["segments"] = word_segments
+
+    return result
 
 
 def google_transcribe(path, language):
@@ -253,7 +269,7 @@ def gemini_transcribe(path, language, model_name=None):
     }
 
 
-def transcribe_file(path, speech_policy=None, prompt=None):
+def transcribe_file(path, speech_policy=None, prompt=None, include_word_timestamps=False):
     cfg = settings()
     config = speech_policy or SpeechPolicy(provider=cfg.stt_provider, language=cfg.stt_language).model_dump()
     if config["provider"] not in {"google", "gemini", "local_server"}:
@@ -266,7 +282,7 @@ def transcribe_file(path, speech_policy=None, prompt=None):
         elif config["provider"] == "gemini":
             result = gemini_transcribe(clean, config["language"], config.get("model"))
         else:
-            result = whisper(clean, config["language"], prompt) if prompt is not None else whisper(clean, config["language"])
+            result = whisper(clean, config["language"], prompt, include_word_timestamps) if prompt is not None else whisper(clean, config["language"], include_word_timestamps=include_word_timestamps)
     if not result["transcript"].strip():
         raise ValueError("Không phát hiện giọng nói")
     if len(result["transcript"]) > 30000 or not 0 <= result["stt_confidence"] <= 1:

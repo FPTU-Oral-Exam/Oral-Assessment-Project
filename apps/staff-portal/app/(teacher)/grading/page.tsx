@@ -25,6 +25,7 @@ import { EditTranscriptModal } from './components/EditTranscriptModal';
 import { ScoreOverrideModal } from './components/ScoreOverrideModal';
 import { RequestReEvalModal } from './components/RequestReEvalModal';
 import { ReEvaluationsList } from './components/ReEvaluationsList';
+import { EnhancedMetricsPanel } from './components/EnhancedMetricsPanel';
 import { teacherService } from '@/services';
 
 type ResultStatus = 'PENDING' | 'REVIEW_REQUIRED' | 'APPROVED' | 'REJECTED';
@@ -68,6 +69,44 @@ interface AttemptDetail {
       weight: number;
       feedback?: string;
     }>;
+    enhanced_metrics?: {
+      fluency: {
+        score: number;
+        speech_rate_wps: number;
+        speech_rate_status: string;
+        pause_count: number;
+        pause_ratio: number;
+        filled_pause_count: number;
+        transcript_with_pauses?: string;
+      } | null;
+      pronunciation: {
+        score: number;
+        wer: number;
+        is_valid: boolean;
+        grade: string;
+        grade_description: string;
+        errors: {
+          total: number;
+          substitutions: number;
+          deletions: number;
+          insertions: number;
+          details?: {
+            substitutions?: Array<{reference: string; hypothesis: string}>;
+            deletions?: string[];
+            insertions?: string[];
+          };
+        };
+        feedback: string;
+      } | null;
+      lexical: {
+        total_words: number;
+        unique_words: number;
+        ttr: number;
+        ttr_score: number;
+        vocabulary_level: string;
+        vocabulary_description: string;
+      } | null;
+    } | null;
   };
   evidence?: Array<{
     id: string;
@@ -634,6 +673,16 @@ export default function GradingPage() {
                               </div>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Enhanced Metrics Panel (NEW v2) */}
+                      {att.assessment?.enhanced_metrics && (
+                        <div className="pt-2 border-t border-slate-200/80">
+                          <EnhancedMetricsPanel
+                            metrics={att.assessment.enhanced_metrics}
+                            overallScore={att.assessment?.score ?? undefined}
+                          />
                         </div>
                       )}
 

@@ -22,17 +22,15 @@ WORKDIR /app
 # Runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libgomp1 \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 10001 oral
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
 COPY --from=builder /root/.local /root/.local
 COPY --from=builder /app /app
 
 # Setup app directory
-RUN mkdir -p /data && chown oral:oral /data
+RUN mkdir -p /data
 
-USER oral
 ENV PATH=/root/.local/bin:$PATH
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -41,4 +39,4 @@ ENV DATA_DIR=/data
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

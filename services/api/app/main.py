@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
-from . import google_login, routes_admin, routes_exam, routes_examiner, runtime_settings, schemas, speech, storage, stt
+from . import google_login, routes_admin, routes_exam, routes_examiner, routes_demo_grading, runtime_settings, schemas, speech, storage, stt
 from .config import settings
 from .db import get_db
 from .models import Audit, AuthSession, User
@@ -211,6 +211,7 @@ app.include_router(routes_exam.router, tags=["Exams and evidence"])
 app.include_router(routes_examiner.router, prefix="/examiner", tags=["Examiner Portal"])
 app.include_router(stt.router, tags=["Speech to text"])
 app.include_router(speech.router, tags=["Speech configuration"])
+app.include_router(routes_demo_grading.router, prefix="/demo", tags=["Demo Grading"])
 
 app.include_router(runtime_settings.router, tags=["Platform settings"])
 app.include_router(google_login.router, tags=["Google sign in"])
