@@ -47,16 +47,26 @@ export function ExamListPage({ onStartExam, onViewResults, onLogout }: ExamListP
       setStartingExamId(exam.id);
       let sessionId = exam.session_id;
 
-      // Finished / in review exams go to results review page
       const isFinished = ['SUBMITTED', 'REVIEW_REQUIRED', 'COMPLETED'].includes(exam.status);
-      if (isFinished && sessionId) {
-        onViewResults(sessionId, exam);
+
+      // Nếu bài đã nộp hoặc hoàn thành, bấm nút là muốn THI LẠI (Tạo attempt mới)
+      if (isFinished) {
+        const session = await api.createSession(exam.id, true);
+        if (session && session.id) {
+          onStartExam(session.id);
+        }
         return;
       }
 
-      // If no session created yet, or newly assigned, create the exam session
+      // Nếu đang làm dở (DEVICE_CHECK hoặc IN_PROGRESS), tiếp tục bài thi
+      if (sessionId && ['DEVICE_CHECK', 'IN_PROGRESS'].includes(exam.status)) {
+        onStartExam(sessionId);
+        return;
+      }
+
+      // Nếu chưa có session (ASSIGNED), tạo session đầu tiên
       if (!sessionId || exam.status === 'ASSIGNED') {
-        const session = await api.createSession(exam.id);
+        const session = await api.createSession(exam.id, false);
         sessionId = session.id;
       }
 

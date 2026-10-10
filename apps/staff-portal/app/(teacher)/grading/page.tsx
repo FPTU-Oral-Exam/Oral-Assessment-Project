@@ -30,21 +30,34 @@ import { teacherService } from '@/services';
 
 type ResultStatus = 'PENDING' | 'REVIEW_REQUIRED' | 'APPROVED' | 'REJECTED';
 
+interface GradingProgress {
+  total_questions: number;
+  completed_questions: number;
+  current_sequence: number;
+  current_stage: string;
+  stage_label: string;
+  percent: number;
+}
+
 interface GradingResult {
   id: string | number;
   student_name: string;
   student_id: string;
   exam_name: string;
   exam_id: string | number;
+  attempt_number?: number;
   ai_score: number | null;
   status: ResultStatus;
   session_id: string | number;
   created_at: string;
+  progress?: GradingProgress | null;
 }
 
 interface AttemptDetail {
   id: string;
   sequence: number;
+  stage?: string;
+  stage_label?: string;
   question: {
     text: string;
     topic_id?: string;
@@ -66,8 +79,10 @@ interface AttemptDetail {
       name: string;
       score: number;
       max_score: number;
-      weight: number;
+      weight?: number;
+      description?: string;
       feedback?: string;
+      comment?: string;
     }>;
     enhanced_metrics?: {
       fluency: {
@@ -123,7 +138,59 @@ interface SessionDetail {
   student_name: string;
   final_score: number | null;
   status: string;
+  progress?: GradingProgress | null;
   attempts: AttemptDetail[];
+}
+
+function PipelineProgressStepper({ stage, stageLabel }: { stage?: string; stageLabel?: string }) {
+  const steps = [
+    { key: 'SUBMITTED', label: '1. Nhận âm thanh', isDone: ['TRANSCRIBING', 'ANALYZING', 'GRADING', 'GRADED'].includes(stage || '') },
+    { key: 'TRANSCRIBING', label: '2. Whisper STT', isDone: ['ANALYZING', 'GRADING', 'GRADED'].includes(stage || ''), isCurrent: stage === 'TRANSCRIBING' },
+    { key: 'ANALYZING', label: '3. Phân tích âm học', isDone: ['GRADING', 'GRADED'].includes(stage || ''), isCurrent: stage === 'ANALYZING' },
+    { key: 'GRADING', label: '4. AI Chấm Rubric', isDone: stage === 'GRADED', isCurrent: stage === 'GRADING' },
+  ];
+
+  return (
+    <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-xl border border-blue-200/80 space-y-2.5">
+      <div className="flex items-center justify-between text-xs font-bold text-blue-900">
+        <span className="flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+          <span>Tiến độ Worker AI: <strong className="text-blue-700">{stageLabel || 'Đang xử lý...'}</strong></span>
+        </span>
+        <span className="text-[10px] font-semibold bg-white border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full shadow-2xs">
+          Thời gian thực
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+        {steps.map((step) => {
+          return (
+            <div
+              key={step.key}
+              className={`p-2 rounded-lg border transition-all flex items-center gap-2 ${
+                step.isDone
+                  ? 'bg-white border-emerald-300 text-emerald-800 font-medium'
+                  : step.isCurrent
+                  ? 'bg-white border-blue-500 text-blue-800 font-bold shadow-xs ring-2 ring-blue-100 animate-pulse'
+                  : 'bg-slate-50/80 border-slate-200 text-slate-400'
+              }`}
+            >
+              <div className="shrink-0">
+                {step.isDone ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                ) : step.isCurrent ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-slate-300 inline-block" />
+                )}
+              </div>
+              <span className="leading-tight text-[11px] truncate">{step.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 const STATUS_CONFIG: Record<ResultStatus, { label: string; bgColor: string; textColor: string }> = {
@@ -192,29 +259,38 @@ export default function GradingPage() {
       setError(null);
       const response = await teacherService.getResults();
 
-      const rawList = Array.isArray(response.results) ? response.results : [];
+      const rawList = Array.isArray(response)
+        ? response
+        : Array.isArray((response as any)?.results)
+        ? (response as any).results
+        : [];
 
-      const resultsList: GradingResult[] = rawList.map((row: any) => ({
-        id: row.attempt_id,
-        session_id: row.attempt_id,
-        student_name: row.student_name || 'Chưa có tên',
-        student_id: row.student_id || '',
-        exam_name: row.course_name || row.exam_name || 'Bài thi vấn đáp',
-        exam_id: row.exam_id,
-        ai_score: row.final_score !== undefined && row.final_score !== null ? row.final_score : row.ai_score ?? null,
-        status: (
-          row.status === 'COMPLETED'
-            ? 'APPROVED'
-            : row.status === 'REVIEW_REQUIRED'
-            ? 'REVIEW_REQUIRED'
-            : row.status === 'IN_PROGRESS' || row.status === 'SUBMITTED'
-            ? 'PENDING'
-            : row.status
-        ) as ResultStatus,
-        created_at: typeof row.created_at === 'number'
-          ? new Date(row.created_at * 1000).toLocaleString('vi-VN')
-          : (row.created_at || 'Mới nộp'),
-      }));
+      const resultsList: GradingResult[] = rawList.map((row: any) => {
+        const idVal = String(row.id || row.attempt_id || row.session_id || '');
+        return {
+          id: idVal,
+          session_id: idVal,
+          attempt_number: row.attempt_number ?? 1,
+          student_name: row.student_name || 'Chưa có tên',
+          student_id: row.student_id || '',
+          exam_name: row.exam_name || row.course_name || 'Bài thi vấn đáp',
+          exam_id: row.exam_id,
+          ai_score: row.final_score !== undefined && row.final_score !== null ? row.final_score : row.ai_score ?? null,
+          status: (
+            row.status === 'COMPLETED'
+              ? 'APPROVED'
+              : row.status === 'REVIEW_REQUIRED'
+              ? 'REVIEW_REQUIRED'
+              : row.status === 'IN_PROGRESS' || row.status === 'SUBMITTED'
+              ? 'PENDING'
+              : row.status
+          ) as ResultStatus,
+          created_at: typeof row.created_at === 'number'
+            ? new Date(row.created_at * 1000).toLocaleString('vi-VN')
+            : (row.created_at || 'Mới nộp'),
+          progress: row.progress || null,
+        };
+      });
 
       setResults(resultsList);
     } catch (err) {
@@ -227,40 +303,114 @@ export default function GradingPage() {
   const handleOpenDetail = async (sessionId: string | number) => {
     try {
       setDetailLoading(true);
-      const data = await teacherService.getResultDetail(String(sessionId));
-      // Map ResultDetail to SessionDetail format for the UI
-      const sessionDetail: SessionDetail = {
-        id: data.attempt_id,
-        exam_name: data.exam_name || data.course_name || 'Bài thi vấn đáp',
-        student_name: data.student_name,
-        final_score: data.final_score ?? data.ai_score ?? null,
-        status: data.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
-        attempts: [{
-          id: data.attempt_id,
+      const data: any = await teacherService.getResultDetail(String(sessionId));
+
+      // Build attempts list from API response
+      let mappedAttempts: AttemptDetail[] = [];
+
+      if (Array.isArray(data.attempts) && data.attempts.length > 0) {
+        mappedAttempts = data.attempts.map((att: any, idx: number) => {
+          // Build rubric mapping
+          const rubricMap = new Map<string, any>();
+          if (Array.isArray(att.assessment?.rubric_criteria)) {
+            att.assessment.rubric_criteria.forEach((rc: any) => {
+              if (rc.name) rubricMap.set(rc.name.toLowerCase().trim(), rc);
+            });
+          }
+
+          const rawCriteria = att.assessment?.criteria || att.criteria_scores || [];
+          const criteria = Array.isArray(rawCriteria)
+            ? rawCriteria.map((c: any) => {
+                const normName = (c.name || '').toLowerCase().trim();
+                const rubricDef = rubricMap.get(normName);
+                return {
+                  name: c.name || 'Tiêu chí',
+                  score: typeof c.score === 'number' ? c.score : 0,
+                  max_score: rubricDef?.max_score ?? c.max_score ?? 10,
+                  weight: rubricDef?.weight ?? c.weight ?? 0,
+                  description: rubricDef?.description || c.description || '',
+                  feedback: c.comment || c.feedback || '',
+                  comment: c.comment || c.feedback || '',
+                };
+              })
+            : [];
+
+          return {
+            id: String(att.id || att.attempt_id || `${data.id || sessionId}_${idx + 1}`),
+            sequence: att.sequence ?? (idx + 1),
+            stage: att.stage || att.status,
+            stage_label: att.stage_label,
+            question: {
+              text: att.question?.text || att.question_text || `Câu hỏi ${att.sequence ?? (idx + 1)}`,
+              topic_id: att.question?.topic_id,
+              topic_title: att.question?.topic_title,
+            },
+            transcript: att.transcript || null,
+            stt_confidence: att.stt_confidence ?? null,
+            status: att.status || data.status || 'COMPLETED',
+            assessment: {
+              score: att.assessment?.score ?? att.score ?? null,
+              review_required: att.assessment?.review_required,
+              reasoning_summary: att.assessment?.reasoning_summary || att.reasoning_summary || att.ai_feedback,
+              transcript_edited: att.assessment?.transcript_edited,
+              edit_reason: att.assessment?.edit_reason,
+              manual_override: att.assessment?.manual_override,
+              override_reason: att.assessment?.override_reason,
+              override_by: att.assessment?.override_by,
+              criteria,
+              enhanced_metrics: att.assessment?.enhanced_metrics ?? null,
+            },
+            evidence: Array.isArray(att.evidence) && att.evidence.length > 0
+              ? att.evidence
+              : (att.audio_url ? [{
+                  id: String(att.id || att.attempt_id || data.id),
+                  kind: 'AUDIO',
+                  status: 'COMPLETED',
+                }] : []),
+          };
+        });
+      } else {
+        // Fallback for flat ResultDetail
+        mappedAttempts = [{
+          id: String(data.id || data.attempt_id || sessionId),
           sequence: 1,
+          stage: data.stage || data.status,
+          stage_label: data.stage_label,
           question: { text: data.question_text || 'Câu hỏi vấn đáp' },
-          transcript: data.transcript,
-          stt_confidence: data.stt_confidence,
-          status: data.status,
+          transcript: data.transcript || null,
+          stt_confidence: data.stt_confidence ?? null,
+          status: data.status || 'COMPLETED',
           assessment: {
-            score: data.ai_score,
-            reasoning_summary: data.ai_feedback,
-            criteria: data.criteria_scores?.map((c) => ({
-              name: c.name,
-              score: c.score,
-              max_score: 10,
-              weight: 0,
-            })),
+            score: data.ai_score ?? data.final_score ?? null,
+            reasoning_summary: data.ai_feedback || data.reasoning_summary,
+            criteria: Array.isArray(data.criteria_scores)
+              ? data.criteria_scores.map((c: any) => ({
+                  name: c.name,
+                  score: c.score,
+                  max_score: 10,
+                  weight: 0,
+                  feedback: c.feedback || c.comment || '',
+                }))
+              : [],
           },
           evidence: data.audio_url ? [{
-            id: data.attempt_id,
+            id: String(data.attempt_id || data.id || sessionId),
             kind: 'AUDIO',
             status: 'COMPLETED',
-            sha256: undefined,
-            size: undefined,
           }] : [],
-        }],
+        }];
+      }
+
+      const sessionDetail: SessionDetail = {
+        id: String(data.id || data.attempt_id || sessionId),
+        exam_name: data.exam_name || data.course_name || 'Bài thi vấn đáp',
+        student_name: data.student_name || 'Chưa có tên',
+        final_score: data.final_score ?? data.ai_score ?? null,
+        status: data.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
+        progress: data.progress || null,
+        attempts: mappedAttempts,
       };
+
       setSelectedSession(sessionDetail);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Lỗi khi tải chi tiết');
@@ -310,6 +460,29 @@ export default function GradingPage() {
   useEffect(() => {
     fetchResults();
   }, []);
+
+  // Live Auto-Refresh polling when an exam is being processed by Celery/Worker
+  useEffect(() => {
+    const hasActiveJob = results.some((r) => r.status === 'PENDING' || !!r.progress);
+    const sessionActive = selectedSession && selectedSession.status !== 'COMPLETED';
+    if (!hasActiveJob && !sessionActive) {
+      return;
+    }
+
+    const timer = setInterval(async () => {
+      await fetchResults();
+      if (selectedSession && selectedSession.status !== 'COMPLETED') {
+        try {
+          const freshData: any = await teacherService.getResultDetail(String(selectedSession.id));
+          if (freshData) {
+            handleOpenDetail(selectedSession.id);
+          }
+        } catch {}
+      }
+    }, 2500);
+
+    return () => clearInterval(timer);
+  }, [results, selectedSession]);
 
   const filteredResults = results.filter((result) => {
     const query = searchQuery.toLowerCase();
@@ -479,7 +652,14 @@ export default function GradingPage() {
                             </div>
                           </td>
                           <td className="px-5 py-4">
-                            <p className="text-sm font-medium text-slate-800">{result.exam_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-slate-800">{result.exam_name}</p>
+                              {result.attempt_number ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200/80 text-indigo-700 text-[11px] font-bold shrink-0">
+                                  Lần {result.attempt_number}
+                                </span>
+                              ) : null}
+                            </div>
                             <p className="text-xs text-slate-400 mt-0.5">{result.created_at}</p>
                           </td>
                           <td className="px-5 py-4 text-center">
@@ -494,12 +674,27 @@ export default function GradingPage() {
                             </span>
                           </td>
                           <td className="px-5 py-4 text-center">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border ${statusConfig.bgColor} ${statusConfig.textColor}`}
-                            >
-                              {result.status === 'REVIEW_REQUIRED' && <AlertTriangle className="w-3.5 h-3.5 text-orange-600" />}
-                              {statusConfig.label}
-                            </span>
+                            {result.progress ? (
+                              <div className="inline-flex flex-col items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs animate-pulse">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+                                  <span>{result.progress.stage_label}</span>
+                                </span>
+                                <div className="w-28 bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200/60">
+                                  <div
+                                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-500"
+                                    style={{ width: `${result.progress.percent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border ${statusConfig.bgColor} ${statusConfig.textColor}`}
+                              >
+                                {result.status === 'REVIEW_REQUIRED' && <AlertTriangle className="w-3.5 h-3.5 text-orange-600" />}
+                                {statusConfig.label}
+                              </span>
+                            )}
                           </td>
                           <td className="px-5 py-4 text-right">
                             <button
@@ -615,6 +810,14 @@ export default function GradingPage() {
                         </div>
                       </div>
 
+                      {/* Processing Stepper if not yet graded */}
+                      {(!att.assessment || att.status !== 'GRADED') && (
+                        <PipelineProgressStepper
+                          stage={att.stage || att.status}
+                          stageLabel={att.stage_label || 'Worker đang xử lý...'}
+                        />
+                      )}
+
                       {/* Audio Player Evidence */}
                       {audioEvidence && (
                         <div className="space-y-1.5">
@@ -656,19 +859,42 @@ export default function GradingPage() {
 
                       {/* Criteria Assessment Breakdown */}
                       {att.assessment?.criteria && att.assessment.criteria.length > 0 && (
-                        <div className="pt-2 border-t border-slate-200/80 space-y-2">
-                          <span className="text-[11px] font-bold text-slate-500 uppercase">
-                            Đánh giá tiêu chí Rubric:
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="pt-2 border-t border-slate-200/80 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                              Đánh giá theo Tiêu chí Rubric:
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {att.assessment.criteria.length} tiêu chí
+                            </span>
+                          </div>
+                          <div className="space-y-2.5">
                             {att.assessment.criteria.map((c, cIdx) => (
-                              <div key={cIdx} className="p-2.5 bg-white rounded-xl border border-slate-200 text-xs">
-                                <div className="flex justify-between font-semibold">
-                                  <span className="text-slate-700">{c.name}</span>
-                                  <span className="text-blue-600 font-bold">{c.score}/{c.max_score} đ</span>
+                              <div key={cIdx} className="p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-2xs space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-slate-800 text-[13px]">{c.name}</span>
+                                      {c.weight !== undefined && c.weight > 0 && (
+                                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium border border-slate-200/60">
+                                          Trọng số: {c.weight <= 1 ? Math.round(c.weight * 100) : c.weight}%
+                                        </span>
+                                      )}
+                                    </div>
+                                    {c.description && (
+                                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{c.description}</p>
+                                    )}
+                                  </div>
+                                  <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs shrink-0 border border-blue-100">
+                                    {c.score} / {c.max_score} đ
+                                  </span>
                                 </div>
-                                {c.feedback && (
-                                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">{c.feedback}</p>
+                                {(c.feedback || c.comment) && (
+                                  <div className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-100 text-[11px] text-slate-700 leading-relaxed">
+                                    <span className="font-semibold text-slate-900">Nhận xét AI: </span>
+                                    {c.feedback || c.comment}
+                                  </div>
                                 )}
                               </div>
                             ))}

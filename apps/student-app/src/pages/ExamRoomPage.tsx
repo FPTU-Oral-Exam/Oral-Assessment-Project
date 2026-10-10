@@ -242,7 +242,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                 Tất cả các bản ghi âm đã được tải lên máy chủ MinIO và đang được AI xử lý.
               </p>
               <button style={styles.finishExamBtn} onClick={handleFinish}>
-                Nộp bài &amp; Xem kết quả
+                Hoàn thành &amp; Nộp bài
               </button>
             </div>
           ) : (
