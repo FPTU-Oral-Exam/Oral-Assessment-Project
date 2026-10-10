@@ -1,15 +1,18 @@
 # BÁO CÁO CƠ SỞ KHOA HỌC & CHỨNG MINH SỐ LIỆU CHO HỆ THỐNG ĐÁNH GIÁ THI VẤN ĐÁP AI (ORALAI)
-> **Tài liệu phục vụ:** Báo cáo Thầy/Cô Hướng dẫn & Hội đồng Bảo vệ Đồ án Tốt nghiệp (Capstone Project)  
-> **Dự án:** OralAI — Nền tảng Thi Vấn đáp Tự động Bằng Trí tuệ Nhân tạo  
-> **Phiên bản:** 1.0 (Master Scientific & Empirical Defense Report)  
+
+> **Tài liệu phục vụ:** Báo cáo Thầy/Cô Hướng dẫn & Hội đồng Bảo vệ Đồ án Tốt nghiệp (Capstone Project)
+> **Dự án:** OralAI — Nền tảng Thi Vấn đáp Tự động Bằng Trí tuệ Nhân tạo
+> **Phiên bản:** 1.0 (Master Scientific & Empirical Defense Report)
 > **Ngày lập:** 09/10/2026
 
 ---
 
 ## 📌 TÓM TẮT DÀNH CHO THẦY HƯỚNG DẪN (EXECUTIVE SUMMARY)
+
 Hệ thống **OralAI** được xây dựng nhằm giải quyết bài toán cốt lõi: **"Làm sao để một hệ thống AI có thể chấm điểm thi vấn đáp Tiếng Anh & Chuyên ngành một cách khách quan, giải thích được (Explainable), bám sát chuẩn khảo thí quốc tế nhưng vẫn khả thi 100% với ngân sách 0 VNĐ trên hạ tầng của sinh viên?"**
 
 Thay vì phụ thuộc hoàn toàn vào một mô hình Hộp đen (Black-box LLM) dẫn đến hiện tượng ảo giác điểm số (Hallucination) hoặc tiêu tốn chi phí API nhận dạng giọng nói khổng lồ, nhóm đề xuất **Kiến trúc Chấm điểm Hybrid 2 Tầng (Hybrid Two-Tier Scoring Architecture)**:
+
 1. **Tầng 1 (Đặc trưng Âm học & Độ trôi chảy - 0đ):** Dựa trên các công thức toán học và phân tích âm học thực nghiệm từ các nghiên cứu của **ETS, Springer và Elsevier** (Tốc độ nói, Tỷ lệ dừng Silero VAD, Word Error Rate Levenshtein qua `jiwer`).
 2. **Tầng 2 (Lập luận Ngữ nghĩa & Vấn đáp Socratic):** Dựa trên nghiên cứu của **Georgia Tech (2025)** và **Taylor & Francis (2026)** để tổ chức đề thi 5 phần, kết hợp bài toán **AI-Critique** và **Vấn đáp Socratic đa lượt** triệt tiêu nguy cơ học thuộc lòng.
 
@@ -62,6 +65,7 @@ Dưới đây là 7 công trình khoa học quốc tế chuẩn (Scopus Q1, ACL,
 Một trong những điểm bảo vệ quan trọng nhất với Thầy/Cô và Hội đồng là: **"Tại sao hệ thống lại chọn các con số này mà không phải số khác?"**. Dưới đây là bằng chứng số liệu trích xuất trực tiếp từ các nghiên cứu:
 
 ### 1. Con số Tốc độ nói: Chuẩn $2.0 - 2.4$ từ/giây (Words Per Second - WPS)
+
 - **Nguồn chứng minh:** Công trình của **Singla et al. (2023, Springer - IJAIED, trang 132–136)**.
 - **Phương pháp thực nghiệm:** Nghiên cứu đã huấn luyện mô hình Gradient Boosting trên tập dữ liệu khổng lồ gồm **47,000 bài thi nói tiếng Anh**, sau đó sử dụng kỹ thuật giải thích mô hình **PDP (Partial Dependence Plots)** và **SHAP values** để quan sát hành vi cho điểm của giám khảo.
 - **Số liệu chứng minh:**
@@ -70,6 +74,7 @@ Một trong những điểm bảo vệ quan trọng nhất với Thầy/Cô và 
   3. **Trần bão hòa (Ceiling Saturation):** Khi tốc độ vượt quá **$> 2.4 - 2.8\text{ wps}$**, đường cong PDP đi ngang hoàn toàn ($\text{SHAP slope} \approx 0$). Tức là nói nhanh hơn không đồng nghĩa với giỏi hơn, giúp ngăn chặn hiện tượng thí sinh học vẹt cố tình "bắn liên thanh" để lấy điểm.
 
 ### 2. Con số Khoảng dừng: Ngưỡng $250\text{ms}$ và Trần dừng $\le 0.27$ lần dừng/từ
+
 - **Nguồn chứng minh:** Nghiên cứu của **Trouvain, Möbius, & de Jong (2026, John Benjamins, trang 162–165)** và **de Jong (2016)**.
 - **Phương pháp thực nghiệm:** Phân tích thực nghiệm trên người học ngôn ngữ thứ hai (L2 learners) qua máy đo âm học Praat và VAD.
 - **Số liệu chứng minh:**
@@ -77,14 +82,20 @@ Một trong những điểm bảo vệ quan trọng nhất với Thầy/Cô và 
   2. **Tỷ lệ dừng chuẩn ($\le 0.27$ lần/từ):** Người nói bản xứ và thí sinh đạt CEFR B2 có tỷ lệ ngắt nghỉ trung bình từ $0.15 - 0.25$ lần/từ (nghĩa là trung bình cứ 4–5 từ mới có 1 lần ngắt nghỉ tự nhiên theo ngữ đoạn). Khi tỷ lệ này vượt quá **$0.27 - 0.35$ lần/từ**, bài nói bị đứt vụn và người nghe cảm nhận rõ rệt sự thiếu lưu loát.
 
 ### 3. Công thức Chấm Phát âm Part 2: Giới hạn WER tối đa ở $1.0$ (Bounded WER)
+
 - **Nguồn chứng minh:** Công trình của **McGuire & Larson-Hall (2025, Elsevier - RMAL, Article 100197, Section 3.2)**.
 - **Phương pháp thực nghiệm:** So sánh độ tương quan giữa điểm số do chuyên gia ngữ âm chấm thủ công với điểm Word Error Rate tự động của Whisper ASR trên các bài đọc nhắc lại (Elicited Imitation).
 - **Số liệu chứng minh:**
   - Khoảng cách chỉnh sửa cấp độ từ Levenshtein thông thường:
-    $$\text{Raw WER} = \frac{\text{Substitutions} + \text{Deletions} + \text{Insertions}}{N}$$
+    $$
+    \text{Raw WER} = \frac{\text{Substitutions} + \text{Deletions} + \text{Insertions}}{N}
+    $$
   - Khi thí sinh nói linh tinh hoặc chèn quá nhiều từ thừa, $\text{Raw WER}$ có thể vượt quá $1.0$ ($100\%$), dẫn đến điểm số bị âm nếu trừ tuyến tính.
   - McGuire & Larson-Hall chứng minh rằng việc áp dụng **Cắt trần (Capped/Bounded WER ở mức 1.0)**:
-    $$\text{WER}_{\text{bounded}} = \min(1.0, \text{Raw WER}) \implies \text{Score} = (1.0 - \text{WER}_{\text{bounded}}) \times 10.0$$
+    $$
+    \text{WER}_{\text{bounded}} = \min(1.0, \text{Raw WER}) \implies \text{Score} = (1.0 - \text{WER}_{\text{bounded}}) \times 10.0
+    $$
+
     đem lại hệ số tương quan Pearson **$r = 0.81 - 0.88$** so với giám khảo con người, chứng minh độ tin cậy tuyệt đối của thuật toán này.
 
 ---
@@ -94,11 +105,13 @@ Một trong những điểm bảo vệ quan trọng nhất với Thầy/Cô và 
 Tại sao đồ án của nhóm không sao chép nguyên xi bài báo mà có sự **đột phá kỹ thuật phù hợp với thực tế đồ án Capstone**?
 
 ### 1. Tại sao loại bỏ Forced-Alignment âm vị (Phoneme Duration Alignment)?
+
 - *Trong bài báo:* Một số nghiên cứu ngôn ngữ học sử dụng mô hình Hidden Markov Model (HMM) hoặc CTC Forced-Alignment để đo từng mili-giây thời lượng của âm ma sát vô thanh `/s/` nhằm bắt lỗi nuốt âm.
 - *Thực tế đồ án sinh viên:* Mô hình này cực kỳ nặng, đòi hỏi từ điển âm vị CMUDict chuẩn, chạy rất chậm (mất 10–15 giây cho 1 câu nói) và dễ sập server khi nhiều sinh viên nộp bài cùng lúc.
 - *Giải pháp thay thế thông minh của OralAI:* Tận dụng cơ chế **Acoustic Token Probability (`avg_logprob`)** của Faster-Whisper kết hợp với `jiwer`. Khi sinh viên phát âm sai hoặc nuốt âm `/s/`, Whisper tự động nhận diện sai từ hoặc hạ điểm tin cậy âm học. Cách này chạy chỉ mất **$0.05$ giây**, độ chính xác tương đương và hoàn toàn miễn phí.
 
 ### 2. Tại sao tổ chức Đề thi 5 Phần kết hợp AI-Critique và Socratic Viva Voce?
+
 - **Nguy cơ lớn nhất của thi vấn đáp hiện nay:** Sinh viên dùng ChatGPT viết sẵn bài văn mẫu, học thuộc lòng như cháo chảy (Rote Memorization) rồi đọc lại để lừa AI chấm điểm trôi chảy.
 - **Giải pháp của OralAI dựa trên 2 công trình quốc tế:**
   1. **Part 4 (Theo Halliday et al., 2026):** Đưa ra giải pháp/mã nguồn do AI sinh có cài **1 lỗi kiến trúc ngầm**. Sinh viên không thể học thuộc trước, bắt buộc phải dùng tư duy phản biện để tìm ra lỗi sai.
@@ -111,16 +124,21 @@ Tại sao đồ án của nhóm không sao chép nguyên xi bài báo mà có s�
 Để giúp bạn và nhóm tự tin bảo vệ trước Thầy Hướng dẫn ngày mai, dưới đây là bộ câu hỏi và câu trả lời mẫu:
 
 #### ❓ Câu hỏi 1: "Hệ thống của các em chấm Pronunciation và Fluency bằng LLM à? LLM có nghe được âm thanh đâu mà chấm?"
+
 > **Trả lời:** "Dạ thưa Thầy/Cô, hệ thống của tụi em **hoàn toàn không dùng LLM để chấm Fluency hay Pronunciation âm học**. Tụi em tách thành kiến trúc Hybrid 2 tầng:
+>
 > - **Fluency** được tính toán $100\%$ bằng công thức toán học thực nghiệm dựa trên nghiên cứu của ETS và Springer (Singla 2023, Trouvain 2026): đo trực tiếp số từ trên thời lượng (Words Per Second) và dùng Silero VAD quét khoảng lặng im $\ge 250\text{ms}$.
 > - **Pronunciation** ở Part 2 được tính bằng thuật toán Levenshtein Word Error Rate (`jiwer`) đối chiếu với câu nhắc gốc theo bài báo của McGuire (Elsevier 2025) kết hợp với chỉ số tin cậy âm học `avg_logprob` của Faster-Whisper.
 > - LLM chỉ được dùng ở Tầng 2 để đánh giá năng lực lập luận ngữ nghĩa (Part 3, 4, 5) và sinh câu hỏi phản biện Socratic."
 
 #### ❓ Câu hỏi 2: "Tại sao nhóm chọn ngưỡng tốc độ $2.0 - 2.4$ từ/giây? Căn cứ vào đâu mà phạt khi dưới $1.35$ từ/giây?"
+
 > **Trả lời:** "Dạ số liệu này nhóm kế thừa trực tiếp từ bài báo khoa học của tác giả Singla và cộng sự xuất bản trên tạp chí Q1 *International Journal of AI in Education (Springer, 2023)*. Họ đã chạy mô hình giải thích XAI (Partial Dependence Plots và SHAP) trên mẫu thực nghiệm **47,000 bài thi nói** và chứng minh đồ thị điểm số đạt điểm tối ưu ở dải $2.0 - 2.4$ wps, đồng thời sụt giảm nghiêm trọng khi dưới $1.35$ wps do độ trễ tìm kiếm từ vựng của người nói."
 
 #### ❓ Câu hỏi 3: "Dự án làm sao đảm bảo kinh phí khi chạy thật cho cả trường thi?"
+
 > **Trả lời:** "Dạ đây là điểm tâm đắc nhất của nhóm: Toàn bộ pipeline được thiết kế theo triết lý **Zero-Budget (0 VNĐ)**:
+>
 > 1. Speech-to-Text dùng Faster-Whisper lượng tử hóa INT8 chạy trực tiếp trong Celery Worker container, không tốn 1 xu tiền API Google/Azure.
 > 2. Tính toán Fluency và WER Part 2 chạy bằng code Python thuần mất chưa tới $0.05$ giây trên CPU thường.
 > 3. Kiểm tra độ bám đề dùng PostgreSQL `pgvector` có sẵn trong Database project.
