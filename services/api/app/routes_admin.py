@@ -1097,6 +1097,7 @@ def publish(key: str, db: Session = Depends(get_db), user=Depends(editor)):
         "ai_provider": settings().ai_provider,
         "llm_model": settings().llm_model,
         "prompt_version": ai.PROMPT_VERSION,
+        "knowledge_version": "item-bank-v1",
         "published_at": time.time(),
     }
     exam.status = "PUBLISHED"
@@ -1123,6 +1124,63 @@ def assign(key: str, body: s.AssignIn, db: Session = Depends(get_db), user=Depen
     return {"ok": True}
 
 
+STAGE_LABELS = {
+    "READY": "Chưa làm",
+    "SUBMITTED": "Đang xếp hàng chờ Worker...",
+    "TRANSCRIBING": "Đang phiên âm Whisper STT...",
+    "ANALYZING": "Đang phân tích độ trôi chảy & âm học...",
+    "GRADING": "AI đang chấm điểm theo Rubric...",
+    "GRADED": "Đã chấm xong câu hỏi",
+}
+
+STAGE_WEIGHTS = {
+    "READY": 0,
+    "SUBMITTED": 10,
+    "TRANSCRIBING": 35,
+    "ANALYZING": 60,
+    "GRADING": 85,
+    "GRADED": 100,
+}
+
+
+def calculate_session_progress(db: Session, session: ExamSession):
+    if session.status in {"COMPLETED", "APPROVED"}:
+        return None
+    attempts = db.scalars(
+        select(Attempt).where(Attempt.session_id == session.id).order_by(Attempt.sequence)
+    ).all()
+    if not attempts:
+        return None
+
+    total = len(attempts)
+    completed = sum(1 for a in attempts if a.assessment is not None or a.status == "GRADED")
+    active_attempt = next((a for a in attempts if a.assessment is None), None)
+
+    if active_attempt:
+        current_stage = active_attempt.status or "SUBMITTED"
+        current_seq = active_attempt.sequence
+    else:
+        current_stage = "GRADED"
+        current_seq = total
+
+    stage_label = STAGE_LABELS.get(current_stage, "Đang xử lý AI...")
+
+    total_points = sum(
+        100 if a.assessment is not None or a.status == "GRADED" else STAGE_WEIGHTS.get(a.status, 10)
+        for a in attempts
+    )
+    percent = min(99, max(5, int(total_points / total))) if session.status == "SUBMITTED" else 0
+
+    return {
+        "total_questions": total,
+        "completed_questions": completed,
+        "current_sequence": current_seq,
+        "current_stage": current_stage,
+        "stage_label": stage_label,
+        "percent": percent,
+    }
+
+
 @router.get("/results")
 def results(db: Session = Depends(get_db), user=Depends(staff)):
     query = (
@@ -1145,12 +1203,17 @@ def results(db: Session = Depends(get_db), user=Depends(staff)):
                 Course.code == "ORAL-PRACTICE",
             )
         )
-    return [
-        history_row(session)
-        | {"exam_name": exam.name, "student_name": student.name,
-           "student_id": student.id, "exam_id": exam.id, **allowance(db, exam, student.id)}
-        for session, exam, student in db.execute(query.order_by(ExamSession.created_at.desc()))
-    ]
+    session_rows = []
+    for session, exam, student in db.execute(query.order_by(ExamSession.created_at.desc())):
+        row = (
+            history_row(session)
+            | {"exam_name": exam.name, "student_name": student.name,
+               "student_id": student.id, "exam_id": exam.id, **allowance(db, exam, student.id)}
+        )
+        if session.status == "SUBMITTED":
+            row["progress"] = calculate_session_progress(db, session)
+        session_rows.append(row)
+    return session_rows
 
 
 @router.get("/results/{key}")
@@ -1161,7 +1224,9 @@ def review(key: str, db: Session = Depends(get_db), user=Depends(staff)):
     exam = by_id(db, Exam, session.exam_id)
     course_access(db, exam.course_id, user)
     attempts = db.scalars(select(Attempt).where(Attempt.session_id == key).order_by(Attempt.sequence)).all()
+    session_progress = calculate_session_progress(db, session) if session.status == "SUBMITTED" else None
     return history_row(session) | {
+        "progress": session_progress,
         "exam_id": exam.id, "student_id": session.student_id,
         **allowance(db, exam, session.student_id),
         "history": [history_row(row) for row in sessions_for(db, exam.id, session.student_id)],
@@ -1171,6 +1236,8 @@ def review(key: str, db: Session = Depends(get_db), user=Depends(staff)):
         "attempts": [
             data(a, "sequence", "question", "transcript", "stt_confidence", "assessment", "status")
             | {
+                "stage": a.status,
+                "stage_label": STAGE_LABELS.get(a.status, a.status),
                 "assessment": assessment_view(a.assessment, exam),
                 "grading_targets": grading_targets(db, exam, a),
                 "evidence": [

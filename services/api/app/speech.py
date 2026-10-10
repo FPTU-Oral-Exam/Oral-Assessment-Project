@@ -141,7 +141,8 @@ def whisper(path, language, prompt=None, include_word_timestamps=False):
     if include_word_timestamps:
         word_segments = []
         for seg in segments:
-            for w in getattr(seg, 'words', []):
+            words = getattr(seg, 'words', None) or []
+            for w in words:
                 word_segments.append({
                     "word": w.word.strip(),
                     "start": w.start,

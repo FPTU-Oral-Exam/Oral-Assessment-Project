@@ -8,23 +8,33 @@ interface ExamCardProps {
 }
 
 export function ExamCard({ exam, onSelectExam, isLoading }: ExamCardProps) {
-  const statusConfig: Record<SessionStatus, { label: string; color: string; action: string }> = {
-    ASSIGNED: { label: 'Sẵn sàng thi', color: '#2563eb', action: 'Bắt đầu làm bài' },
-    DEVICE_CHECK: { label: 'Kiểm tra thiết bị', color: '#ca8a04', action: 'Tiếp tục' },
-    IN_PROGRESS: { label: 'Đang làm dở', color: '#eab308', action: 'Tiếp tục làm bài' },
-    UPLOADING: { label: 'Đang nộp bài', color: '#6366f1', action: 'Đang nộp...' },
-    SUBMITTED: { label: 'Đã nộp bài', color: '#059669', action: 'Xem lại' },
-    REVIEW_REQUIRED: { label: 'Chờ chấm điểm', color: '#ea580c', action: 'Xem lại' },
-    COMPLETED: { label: 'Hoàn thành', color: '#16a34a', action: 'Xem kết quả' },
-  };
+  const isFinished = ['SUBMITTED', 'REVIEW_REQUIRED', 'COMPLETED'].includes(exam.status);
+  const isInProgress = ['DEVICE_CHECK', 'IN_PROGRESS'].includes(exam.status);
 
-  const config = statusConfig[exam.status] || {
-    label: exam.status || 'Chưa thi',
-    color: '#2563eb',
-    action: 'Bắt đầu làm bài',
-  };
+  let label = 'Sẵn sàng thi';
+  let badgeColor = '#2563eb';
+  let actionText = 'Bắt đầu làm bài';
+  let buttonColor = '#2563eb';
+
+  if (isInProgress) {
+    label = 'Đang làm dở';
+    badgeColor = '#d97706';
+    actionText = '▶ Tiếp tục làm bài';
+    buttonColor = '#d97706';
+  } else if (exam.status === 'UPLOADING') {
+    label = 'Đang nộp bài';
+    badgeColor = '#6366f1';
+    actionText = 'Đang nộp bài...';
+    buttonColor = '#6366f1';
+  } else if (isFinished) {
+    label = `Đã nộp (Lần ${exam.attempt_count || 1})`;
+    badgeColor = '#059669';
+    actionText = '🔄 Làm lại bài thi';
+    buttonColor = '#059669';
+  }
 
   const handleClick = () => {
+    if (isLoading) return;
     onSelectExam(exam);
   };
 
@@ -32,27 +42,29 @@ export function ExamCard({ exam, onSelectExam, isLoading }: ExamCardProps) {
     <div style={styles.card}>
       <div style={styles.header}>
         <h3 style={styles.name}>{exam.name}</h3>
-        <span style={{ ...styles.badge, background: config.color }}>
-          {config.label}
+        <span style={{ ...styles.badge, background: badgeColor }}>
+          {label}
         </span>
       </div>
 
       <div style={styles.details}>
         <p>Số câu hỏi: {exam.question_count}</p>
         <p>Thời gian: {Math.floor(exam.time_limit / 60)} phút</p>
+        {exam.attempt_count > 0 && <p>Số lần đã thi: <strong>{exam.attempt_count}</strong></p>}
         {exam.practice && <span style={styles.practice}>Luyện tập</span>}
       </div>
 
       <button
         onClick={handleClick}
-        disabled={isLoading}
+        disabled={isLoading || exam.status === 'UPLOADING'}
         style={{
           ...styles.button,
+          background: buttonColor,
           opacity: isLoading ? 0.6 : 1,
           cursor: isLoading ? 'not-allowed' : 'pointer',
         }}
       >
-        {isLoading ? 'Đang khởi tạo...' : config.action}
+        {isLoading ? 'Đang khởi tạo lượt thi...' : actionText}
       </button>
     </div>
   );

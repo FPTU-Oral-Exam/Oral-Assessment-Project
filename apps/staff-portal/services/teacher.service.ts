@@ -96,26 +96,89 @@ export interface ExamBlueprintRequest {
   max_attempts?: number;
 }
 
-export interface ResultDetail {
-  attempt_id: string;
-  exam_id?: string;
-  exam_name?: string;
-  course_name?: string;
+export interface RubricCriterionDetail {
+  name: string;
+  score: number;
+  max_score?: number;
+  weight?: number;
+  description?: string;
+  feedback?: string;
+  comment?: string;
+}
+
+export interface RubricDefinitionItem {
+  name: string;
+  description?: string;
+  max_score: number;
+  weight: number;
+}
+
+export interface AttemptEvidenceItem {
+  id: string;
+  kind: string;
+  status: string;
+  sha256?: string;
+  size?: number;
+}
+
+export interface AttemptItemDetail {
+  id: string;
+  sequence: number;
+  question: {
+    text: string;
+    topic_id?: string;
+    [key: string]: any;
+  };
+  transcript: string | null;
+  stt_confidence: number | null;
+  status: string;
+  assessment?: {
+    score: number | null;
+    reasoning_summary?: string;
+    criteria?: RubricCriterionDetail[];
+    rubric_criteria?: RubricDefinitionItem[];
+    enhanced_metrics?: any;
+    transcript_edited?: boolean;
+    edit_reason?: string;
+    manual_override?: boolean;
+    override_reason?: string;
+    override_by?: string;
+  };
+  evidence?: AttemptEvidenceItem[];
+  grading_targets?: any[];
+  reviews?: any[];
+}
+
+export interface GradingSessionDetail {
+  id: string;
+  attempt_number: number;
+  exam_id: string;
+  student_id: string;
+  exam_name: string;
   student_name: string;
-  student_id?: string;
+  final_score: number | null;
+  status: string;
+  created_at: number;
+  started_at?: number | null;
+  completed_at?: number | null;
+  attempts: AttemptItemDetail[];
+  history?: any[];
+  [key: string]: any;
+}
+
+export interface ResultDetail extends Partial<GradingSessionDetail> {
+  attempt_id?: string;
   question_text?: string;
   audio_url?: string;
-  transcript: string;
-  stt_confidence: number;
-  ai_score: number;
-  ai_feedback: string;
-  status: string;
-  criteria_scores: {
+  transcript?: string;
+  stt_confidence?: number;
+  ai_score?: number;
+  ai_feedback?: string;
+  criteria_scores?: {
     name: string;
     score: number;
   }[];
   teacher_score?: number;
-  final_score?: number;
 }
 
 export interface ScoreOverrideRequest {
@@ -430,33 +493,16 @@ export const teacherService = {
   /**
    * Lấy danh sách bài thi cần rà soát/chấm điểm
    */
-  getResults: (params?: { course_id?: string; status?: string }): Promise<{
-    results: {
-      attempt_id: string;
-      student_name: string;
-      course_name: string;
-      ai_score: number;
-      status: string;
-      created_at: number;
-    }[];
-  }> => {
-    return apiClient.get<{
-      results: {
-        attempt_id: string;
-        student_name: string;
-        course_name: string;
-        ai_score: number;
-        status: string;
-        created_at: number;
-      }[];
-    }>('/admin/results', params);
+  getResults: async (params?: { course_id?: string; status?: string }): Promise<any[]> => {
+    const res = await apiClient.get<any>('/admin/results', params);
+    return Array.isArray(res) ? res : (Array.isArray(res?.results) ? res.results : []);
   },
 
   /**
-   * Lấy chi tiết bài thi (audio, transcript, điểm AI)
+   * Lấy chi tiết bài thi (audio, transcript, điểm AI, toàn bộ attempts và tiêu chí rubric)
    */
-  getResultDetail: (attemptId: string): Promise<ResultDetail> => {
-    return apiClient.get<ResultDetail>(`/admin/results/${attemptId}`);
+  getResultDetail: (sessionId: string): Promise<GradingSessionDetail> => {
+    return apiClient.get<GradingSessionDetail>(`/admin/results/${sessionId}`);
   },
 
   /**

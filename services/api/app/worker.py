@@ -226,6 +226,13 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
     # STANDARD LLM GRADING
     # ============================================================
 
+    if db is not None:
+        attempt.status = "GRADING"
+        try:
+            db.commit()
+        except Exception:
+            pass
+
     assessment = ai.grade(
         attempt.question,
         transcript,
@@ -468,7 +475,10 @@ def tick():
             return True
         attempt = db.scalar(
             select(Attempt)
-            .where(Attempt.status == "SUBMITTED", Attempt.assessment.is_(None))
+            .where(
+                Attempt.status.in_(["SUBMITTED", "TRANSCRIBING", "ANALYZING", "GRADING"]),
+                Attempt.assessment.is_(None),
+            )
             .order_by(Attempt.created_at)
             .with_for_update(skip_locked=True)
             .limit(1)
@@ -479,7 +489,22 @@ def tick():
         exam = db.get(Exam, session.exam_id)
         snapshot = exam.snapshot
         try:
+            if db is not None:
+                attempt.status = "TRANSCRIBING"
+                try:
+                    db.commit()
+                except Exception:
+                    pass
+
             transcript, stt_confidence, segments = transcribe_attempt_if_needed(db, attempt)
+
+            if db is not None:
+                attempt.status = "ANALYZING"
+                try:
+                    db.commit()
+                except Exception:
+                    pass
+
             attempt.assessment = grade_answer(
                 db, exam, session, attempt, transcript, stt_confidence, segments
             )
@@ -493,10 +518,10 @@ def tick():
                 "error_code": code,
                 "criteria": [],
                 "retrieved_chunks": [],
-                "model": snapshot["llm_model"],
-                "rubric_version": snapshot["rubric_version"],
-                "knowledge_version": snapshot["knowledge_version"],
-                "prompt_version": snapshot["prompt_version"],
+                "model": snapshot.get("llm_model", "qwen3:8b"),
+                "rubric_version": snapshot.get("rubric_version", 1),
+                "knowledge_version": snapshot.get("knowledge_version", "item-bank-v1"),
+                "prompt_version": snapshot.get("prompt_version", 1),
                 "reasoning_summary": message,
                 "error": type(exc).__name__,
             }

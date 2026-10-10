@@ -61,8 +61,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // Skip RBAC for login page, unauthorized page, and static assets
-  if (path === '/login' || path === '/unauthorized' || path.startsWith('/_next') || path.startsWith('/api')) {
+  // Skip RBAC for login page, unauthorized page, demo page, and static assets
+  if (path === '/login' || path === '/unauthorized' || path.startsWith('/demo') || path.startsWith('/_next') || path.startsWith('/api')) {
     return NextResponse.next();
   }
 
@@ -82,6 +82,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|unauthorized).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|unauthorized|demo).*)',
   ],
 };
