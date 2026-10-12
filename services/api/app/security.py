@@ -24,7 +24,7 @@ def fail(status: int, code: str, message: str):
 def verify_password(password: str, hashed: str):
     try:
         return hasher.verify(hashed, password)
-    except VerificationError:
+    except Exception:
         return False
 
 

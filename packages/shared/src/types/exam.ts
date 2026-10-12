@@ -124,6 +124,14 @@ export interface QuestionAttempt {
   id: string;
   sequence: number;
   text?: string;
+  type?: string;
+  instruction?: string | null;
+  prompt_audio?: string | null;
+  prompt_image?: string | null;
+  prep_time?: number;
+  speak_time?: number;
+  silence_timeout?: number;
+  model_audio?: string | null;
   status: AttemptStatus;
   transcript?: string | null;
   stt_confidence?: number | null;

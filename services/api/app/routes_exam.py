@@ -90,6 +90,14 @@ def public_session(db, session):
                 "id": first.id,
                 "sequence": first.sequence,
                 "text": first.question["text"],
+                "type": first.question.get("type", "OPEN_RESPONSE"),
+                "instruction": first.question.get("instruction"),
+                "prompt_audio": first.question.get("prompt_audio"),
+                "prompt_image": first.question.get("prompt_image"),
+                "prep_time": first.question.get("prep_time", 0),
+                "speak_time": first.question.get("speak_time", 40),
+                "silence_timeout": first.question.get("silence_timeout", 3),
+                "model_audio": first.question.get("model_audio"),
                 "status": first.status,
             }
             if first and session.status == "IN_PROGRESS"
@@ -475,7 +483,11 @@ def complete(key: str, db: Session = Depends(get_db), user=Depends(current_user)
     if len(content) != row.size or hashlib.sha256(content).hexdigest() != row.sha256:
         fail(422, "CHECKSUM_MISMATCH", "Checksum toàn file không khớp")
     if not (content.startswith(b"\x1aE\xdf\xa3") or content.startswith(b"OggS") or content[4:8] == b"ftyp"):
-        fail(422, "INVALID_MEDIA", "Container media không hợp lệ")
+        ebml_pos = content[:65536].find(b"\x1aE\xdf\xa3")
+        if ebml_pos > 0:
+            content = content[ebml_pos:]
+        else:
+            fail(422, "INVALID_MEDIA", "Container media không hợp lệ")
     row.storage_key = f"evidence/{row.id}"
     storage.put(row.storage_key, content, row.mime_type)
     row.status = "COMPLETED"

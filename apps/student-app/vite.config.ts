@@ -19,10 +19,9 @@ export default defineConfig(({ mode }) => {
                 vite: {
                   build: {
                     outDir: 'dist-electron',
+                    minify: false,
                     rollupOptions: {
-                      output: {
-                        format: 'cjs',
-                      },
+                      external: ['electron'],
                     },
                   },
                 },
@@ -32,10 +31,9 @@ export default defineConfig(({ mode }) => {
                 vite: {
                   build: {
                     outDir: 'dist-electron',
+                    minify: false,
                     rollupOptions: {
-                      output: {
-                        format: 'cjs',
-                      },
+                      external: ['electron'],
                     },
                   },
                 },
@@ -45,17 +43,17 @@ export default defineConfig(({ mode }) => {
           ]
         : []),
     ],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, 'src'),
+      },
     },
-  },
-  build: {
-    outDir: 'dist',
-    emptyOutDir: true,
-  },
-  server: {
-    port: 5173,
-  },
-};
+    build: {
+      outDir: 'dist',
+      emptyOutDir: true,
+    },
+    server: {
+      port: 5173,
+    },
+  };
 });
