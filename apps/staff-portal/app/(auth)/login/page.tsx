@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,6 +22,7 @@ export default function LoginPage() {
 
     try {
       const data = await authService.login({ username, password });
+      setRedirecting(true);
 
       // Store complete user profile in cookie for middleware & layout
       const userData = {
@@ -28,14 +30,17 @@ export default function LoginPage() {
         name: data.user.name || data.user.username,
         username: data.user.username,
         role: data.user.role,
+        roles: [data.user.role],
       };
       document.cookie = `user=${encodeURIComponent(JSON.stringify(userData))}; path=/; max-age=86400; SameSite=Lax`;
 
       // Redirect to target or dashboard
       const params = new URLSearchParams(window.location.search);
       const from = params.get('from') || '/dashboard';
-      window.location.href = from;
+      window.location.replace(from);
     } catch (err) {
+      setLoading(false);
+      setRedirecting(false);
       if (err instanceof ApiError) {
         if (err.status === 429) {
           setError('Quá nhiều lần đăng nhập thất bại. Vui lòng đợi 1 phút và thử lại.');
@@ -45,8 +50,6 @@ export default function LoginPage() {
       } else {
         setError(err instanceof Error ? err.message : 'Có lỗi xảy ra trong quá trình đăng nhập');
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -123,7 +126,12 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium py-3.5 px-4 rounded-xl shadow-lg shadow-blue-500/25 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
-              {loading ? (
+              {redirecting ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Đang chuyển hướng vào hệ thống...</span>
+                </>
+              ) : loading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   <span>Đang xác thực...</span>

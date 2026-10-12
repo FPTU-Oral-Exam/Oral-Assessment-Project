@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 
 const rolePermissions: Record<string, RegExp[]> = {
   SYSTEM_ADMIN: [
+    /^\/dashboard/,
     /^\/users/,
     /^\/settings/,
     /^\/audit/,
@@ -16,12 +17,14 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/proctor/,
   ],
   ACADEMY: [
+    /^\/dashboard/,
     /^\/courses/,
     /^\/rubrics/,
     /^\/item-bank/,
     /^\/schedule/,
   ],
   EXAMINER: [
+    /^\/dashboard/,
     /^\/semester/,
     /^\/courses/,
     /^\/exams/,
@@ -31,6 +34,7 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/proctor/,
   ],
   TEACHER: [
+    /^\/dashboard/,
     /^\/schedule/,
     /^\/grading/,
     /^\/proctor/,
@@ -38,6 +42,21 @@ const rolePermissions: Record<string, RegExp[]> = {
 };
 
 export function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // Skip RBAC for static assets, public images, icons, and API/demo endpoints
+  if (
+    path === '/login' ||
+    path === '/unauthorized' ||
+    path.startsWith('/demo') ||
+    path.startsWith('/_next') ||
+    path.startsWith('/api') ||
+    path.startsWith('/images') ||
+    path.includes('.')
+  ) {
+    return NextResponse.next();
+  }
+
   const userCookie = request.cookies.get('user');
 
   // Redirect to login if not authenticated
@@ -54,16 +73,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  const path = request.nextUrl.pathname;
-
   // Redirect root path to dashboard
   if (path === '/' || path === '') {
     return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
-  // Skip RBAC for login page, unauthorized page, demo page, and static assets
-  if (path === '/login' || path === '/unauthorized' || path.startsWith('/demo') || path.startsWith('/_next') || path.startsWith('/api')) {
-    return NextResponse.next();
   }
 
   // Check role permissions
@@ -82,6 +94,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|unauthorized|demo).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|images|login|unauthorized|demo).*)',
   ],
 };

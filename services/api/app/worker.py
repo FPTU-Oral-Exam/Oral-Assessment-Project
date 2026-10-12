@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from sqlalchemy import select
 
-from . import ai, runtime_settings, speech, storage, fluency, pronunciation_wer, metrics
+from . import ai, runtime_settings, speech, storage, fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image
 from .db import SessionLocal
 from .documents import process_document
 from .grading import check_config, failure, review_question
@@ -135,20 +135,94 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
             log.warning("fluency_analysis_failed attempt=%s error=%s", attempt.id, str(e))
 
     # Analyze pronunciation (Part 2 - Read Aloud)
+    # Analyze pronunciation and PTE standardized tasks (Part 1 RA or Part 2 RS)
     pronunciation_result = None
-    reference_text = attempt.question.get('text') if isinstance(attempt.question, dict) else None
-    expected_points = attempt.question.get('expected_points', []) if isinstance(attempt.question, dict) else []
+    q_dict = attempt.question if isinstance(attempt.question, dict) else {}
+    reference_text = (
+        q_dict.get('reference_text') or 
+        q_dict.get('expected_text') or 
+        q_dict.get('text') or 
+        q_dict.get('prompt') or 
+        q_dict.get('sentence') or 
+        (q_dict.get('expected_points')[0] if q_dict.get('expected_points') and isinstance(q_dict.get('expected_points'), list) else None)
+    )
+    expected_points = q_dict.get('expected_points', []) if isinstance(q_dict.get('expected_points'), list) else []
 
-    # If this is Part 2 (has reference text), calculate WER
-    if reference_text and transcript:
+    # If this question is a PTE task (Part 1 RA, Part 2 RS, Part 3 DI), evaluate with PTE Engine
+    pte_result = None
+    pte_rs_result = None
+    pte_di_result = None
+    q_part_type = (
+        q_dict.get("part_type") or 
+        q_dict.get("type") or 
+        q_dict.get("question_type") or 
+        ""
+    ).upper()
+    q_part_num = q_dict.get("part") or q_dict.get("part_number") or 0
+    q_title = (q_dict.get("title") or "").lower()
+    q_instruction = (q_dict.get("instruction") or "").lower()
+
+    is_part_2 = (
+        q_part_type in ["REPEAT_SENTENCE", "PTE_REPEAT_SENTENCE", "RS", "PART_2", "PART2"] or
+        q_part_num == 2 or
+        "repeat sentence" in q_title or
+        "repeat sentence" in q_instruction or
+        "repeat after" in q_instruction or
+        (getattr(attempt, "sequence", 0) in [1, 2] and reference_text and len(reference_text.split()) <= 18)
+    )
+
+    is_part_3 = (
+        q_part_type in ["DESCRIBE_IMAGE", "PTE_DESCRIBE_IMAGE", "DI", "PART_3", "PART3"] or
+        q_part_num == 3 or
+        "describe image" in q_title or
+        "describe image" in q_instruction or
+        "describe picture" in q_title or
+        "describe picture" in q_instruction or
+        bool(q_dict.get("image_url")) or
+        bool(q_dict.get("image"))
+    )
+
+    if is_part_3 and transcript:
+        try:
+            di_keywords = q_dict.get("keywords") or q_dict.get("key_terms") or []
+            di_sample = q_dict.get("sample_answer") or reference_text or ""
+            di_image = q_dict.get("image_url") or q_dict.get("image") or ""
+            pte_di_result = pte_describe_image.evaluate_pte_describe_image(
+                student_transcript=transcript,
+                keywords=di_keywords,
+                sample_answer=di_sample,
+                image_url=di_image,
+                segments=segments,
+                duration_seconds=duration_seconds,
+                stt_confidence=confidence or 0.85
+            )
+        except Exception as e:
+            log.warning("pte_di_scoring_failed attempt=%s error=%s", attempt.id, str(e))
+    elif reference_text and transcript:
         try:
             pronunciation_result = pronunciation_wer.grade_reading_aloud(
                 reference_text=reference_text,
                 hypothesis_text=transcript,
                 avg_logprob=confidence
             )
+            if is_part_2:
+                pte_rs_result = pte_repeat_sentence.evaluate_pte_repeat_sentence(
+                    reference_text=reference_text,
+                    student_transcript=transcript,
+                    segments=segments,
+                    duration_seconds=duration_seconds,
+                    stt_confidence=confidence or 0.9
+                )
+            else:
+                pte_result = pte_read_aloud.evaluate_pte_read_aloud(
+                    reference_text=reference_text,
+                    student_transcript=transcript,
+                    segments=segments,
+                    duration_seconds=duration_seconds,
+                    stt_confidence=confidence or 0.9
+                )
         except Exception as e:
-            log.warning("pronunciation_wer_failed attempt=%s error=%s", attempt.id, str(e))
+            log.warning("pte_scoring_failed attempt=%s error=%s", attempt.id, str(e))
 
     # ============================================================
     # EVIDENCE RETRIEVAL
@@ -245,46 +319,71 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
     }
 
     # ============================================================
-    # MERGE ENHANCED METRICS
+    # MERGE ENHANCED METRICS & PTE STANDARDIZED SCORES
     # ============================================================
 
-    if enhanced_metrics:
-        # Add enhanced metrics to assessment
+    if enhanced_metrics or pte_di_result or pte_rs_result or pte_result or pronunciation_result:
+        fluency_obj = (enhanced_metrics or {}).get("fluency", {})
         assessment["enhanced_metrics"] = {
             "fluency": {
-                "score": enhanced_metrics["fluency"].get('fluency_score'),
-                "speech_rate_wps": enhanced_metrics["fluency"].get('speech_rate_wps'),
-                "speech_rate_status": enhanced_metrics["fluency"].get('speech_rate_status'),
-                "pause_count": enhanced_metrics["fluency"].get('pause_count'),
-                "pause_ratio": enhanced_metrics["fluency"].get('pause_ratio_per_word'),
-                "filled_pause_count": enhanced_metrics["fluency"].get('filled_pause_count'),
-                "transcript_with_pauses": enhanced_metrics["fluency"].get('transcript_with_pauses')
-            },
+                "score": fluency_obj.get('fluency_score'),
+                "speech_rate_wps": fluency_obj.get('speech_rate_wps'),
+                "speech_rate_status": fluency_obj.get('speech_rate_status'),
+                "pause_count": fluency_obj.get('pause_count'),
+                "pause_ratio": fluency_obj.get('pause_ratio_per_word'),
+                "filled_pause_count": fluency_obj.get('filled_pause_count'),
+                "transcript_with_pauses": fluency_obj.get('transcript_with_pauses')
+            } if fluency_obj else None,
             "pronunciation": pronunciation_result if pronunciation_result else None,
-            "lexical": enhanced_metrics["lexical"]
+            "lexical": (enhanced_metrics or {}).get("lexical"),
+            "pte_read_aloud": pte_result if pte_result else None,
+            "pte_repeat_sentence": pte_rs_result if pte_rs_result else None,
+            "pte_describe_image": pte_di_result if pte_di_result else None,
         }
 
-        # Override score calculation if we have enhanced metrics
-        # This gives us a more accurate score based on actual speech metrics
-        if pronunciation_result and pronunciation_result.get('is_valid', True):
-            # For Part 2: Weight pronunciation heavily
+        # Override score with official PTE standard if available
+        if pte_di_result:
+            assessment['score'] = pte_di_result["overall"]["score_10"]
+            assessment['pte_score_90'] = pte_di_result["overall"]["score_90"]
+            assessment['pte_total_points'] = pte_di_result["overall"]["total_points"]
+            assessment['feedback'] = (
+                f"PTE Describe Image: {pte_di_result['overall']['score_90']}/90 ({pte_di_result['overall']['total_points']}/16 pts). "
+                f"Content ({pte_di_result['scores']['content']['score']}/6): {pte_di_result['scores']['content']['comment']} | "
+                f"Fluency ({pte_di_result['scores']['oral_fluency']['score']}/5): {pte_di_result['scores']['oral_fluency']['comment']} | "
+                f"Pronunciation ({pte_di_result['scores']['pronunciation']['score']}/5): {pte_di_result['scores']['pronunciation']['comment']}"
+            )
+        elif pte_rs_result:
+            assessment['score'] = pte_rs_result["overall"]["score_10"]
+            assessment['pte_score_90'] = pte_rs_result["overall"]["score_90"]
+            assessment['pte_total_points'] = pte_rs_result["overall"]["total_points"]
+            assessment['feedback'] = (
+                f"PTE Repeat Sentence: {pte_rs_result['overall']['score_90']}/90 ({pte_rs_result['overall']['total_points']}/13 pts). "
+                f"Content ({pte_rs_result['scores']['content']['score']}/3): {pte_rs_result['scores']['content']['comment']} | "
+                f"Fluency ({pte_rs_result['scores']['oral_fluency']['score']}/5): {pte_rs_result['scores']['oral_fluency']['comment']} | "
+                f"Pronunciation ({pte_rs_result['scores']['pronunciation']['score']}/5): {pte_rs_result['scores']['pronunciation']['comment']}"
+            )
+        elif pte_result:
+            assessment['score'] = pte_result["overall"]["score_10"]
+            assessment['pte_score_90'] = pte_result["overall"]["score_90"]
+            assessment['pte_total_points'] = pte_result["overall"]["total_points"]
+            assessment['feedback'] = (
+                f"PTE Read Aloud: {pte_result['overall']['score_90']}/90 ({pte_result['overall']['total_points']}/15 pts). "
+                f"Content ({pte_result['scores']['content']['score']}/5): {pte_result['scores']['content']['comment']} | "
+                f"Fluency ({pte_result['scores']['oral_fluency']['score']}/5): {pte_result['scores']['oral_fluency']['comment']} | "
+                f"Pronunciation ({pte_result['scores']['pronunciation']['score']}/5): {pte_result['scores']['pronunciation']['comment']}"
+            )
+        elif pronunciation_result and pronunciation_result.get('is_valid', True):
+            # For Part 2 fallback: Weight pronunciation heavily
             pronunciation_score = pronunciation_result.get('score', 0) / 10  # Convert to 0-10
-            fluency_score = enhanced_metrics["fluency"].get('fluency_score', 0) / 10  # Convert to 0-10
+            fluency_score = (fluency_obj.get('fluency_score', 0) / 10) if fluency_obj else 5.0
 
             # Weighted average: 50% pronunciation (WER), 30% fluency, 20% content
             auto_score = (pronunciation_score * 0.50 + fluency_score * 0.30 + (assessment.get('score', 5)) * 0.20)
-
-            # Only use auto score if it's reasonable
             if 0 <= auto_score <= 10:
-                # Blend with LLM score (50/50)
                 llm_score = assessment.get('score', 5)
                 assessment['score'] = round((auto_score + llm_score) / 2, 2)
-
-        elif fluency_result:
-            # For non-Part 2: Weight fluency heavily
-            fluency_score = enhanced_metrics["fluency"].get('fluency_score', 0) / 10
-
-            # Blend: 30% auto (fluency), 70% LLM
+        elif fluency_obj:
+            fluency_score = fluency_obj.get('fluency_score', 0) / 10
             llm_score = assessment.get('score', 5)
             assessment['score'] = round((fluency_score * 0.30 + llm_score * 0.70), 2)
 

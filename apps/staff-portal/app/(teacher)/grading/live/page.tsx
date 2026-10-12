@@ -7,19 +7,49 @@ import {
   Loader2,
   Volume2,
   Activity,
-  BookOpen,
   Target,
   CheckCircle2,
   AlertTriangle,
   Star,
-  MessageSquare,
   Mic2,
-  RefreshCw
+  RefreshCw,
+  Info,
+  BookOpen,
+  Headphones
 } from 'lucide-react';
+import { PTEScoreAnalysisModal, PTEScoreAnalysisData } from '../components/PTEScoreAnalysisModal';
+import { PTEAudioPlayer } from '../components/PTEAudioPlayer';
 
-// Demo questions
-const PART1_QUESTION = "Tell me about your favorite hobby. Why do you enjoy it?";
-const PART2_REFERENCE = "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet and is commonly used for typing practice.";
+// PTE Academic Official Demo Read Aloud Reference Text
+const PTE_PART1_RA_TEXT = "Before the discovery of Australia, people in the old world were convinced that all swans were white, an unassailable belief as it seemed completely confirmed by empirical evidence. The sighting of the first black swan might have been an interesting surprise for a few scientists, but that is not where the significance of the story lies.";
+
+// PTE Academic Official Demo Repeat Sentence Reference Text (From Image)
+const PTE_PART2_RS_TEXT = "At that time, people moved from towns to villages.";
+
+// PTE Academic Official Demo Describe Image Sample & Image
+const PTE_PART3_DI_IMAGE = "/images/air_composition_pie_chart.svg";
+const PTE_PART3_DI_SAMPLE = (
+  "The pie chart represents the approximate composition of the air. " +
+  "As we can see from the chart there are oxygen, other gases, and nitrogen in the atmosphere. " +
+  "In addition, Nitrogen is the first most abundant gas in the atmosphere which occupies 79%, " +
+  "followed by Oxygen which is 20%. In terms of other gases, it includes carbon dioxide, argon, " +
+  "and water vapor have a proportion of 1%. In conclusion, the chart is very useful since it " +
+  "clearly shows the composition of the air."
+);
+
+interface PTESkillScore {
+  score: number;
+  max_score: number;
+  comment: string;
+}
+
+interface PTEToken {
+  word: string;
+  is_correct?: boolean;
+  is_matched?: boolean;
+  is_relevant?: boolean;
+  status?: string;
+}
 
 interface GradingResult {
   part_type: string;
@@ -37,6 +67,8 @@ interface GradingResult {
     wer: number;
     score: number;
     grade: string;
+    grade_description?: string;
+    feedback?: string;
   };
   lexical_metrics?: {
     total_words: number;
@@ -45,10 +77,38 @@ interface GradingResult {
     vocabulary_level: string;
   };
   feedback: string;
+  // PTE Academic Enhancements
+  scores?: {
+    content?: PTESkillScore;
+    oral_fluency?: PTESkillScore;
+    pronunciation?: PTESkillScore;
+  };
+  overall?: {
+    total_points: number;
+    max_points: number;
+    score_10: number;
+    score_90: number;
+    score_100: number;
+  };
+  student_tokens?: PTEToken[];
+  reference_tokens?: PTEToken[];
+  reference_text?: string;
+  sample_answer?: string;
+  image_url?: string;
+  real_audio_url?: string;
+  alignment_stats?: {
+    matched_words?: number;
+    total_reference_words?: number;
+    total_student_words?: number;
+    recall_percentage?: number;
+    wer?: number;
+    matched_keywords_count?: number;
+    total_keywords?: number;
+  };
 }
 
 export default function LiveGradingPage() {
-  const [currentPart, setCurrentPart] = useState<'part1' | 'part2'>('part1');
+  const [currentPart, setCurrentPart] = useState<'part1' | 'part2' | 'part3'>('part1');
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -60,6 +120,10 @@ export default function LiveGradingPage() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [duration, setDuration] = useState(0);
+
+  const isPart1 = currentPart === 'part1';
+  const isPart2 = currentPart === 'part2';
+  const isPart3 = currentPart === 'part3';
 
   const startRecording = useCallback(async () => {
     try {
@@ -117,9 +181,17 @@ export default function LiveGradingPage() {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const endpoint = currentPart === 'part1'
-        ? 'http://localhost:8000/api/demo/grade/part1'
-        : 'http://localhost:8000/api/demo/grade/part2';
+      let endpoint = 'http://localhost:8000/api/demo/grade/part1';
+      if (currentPart === 'part2') {
+        endpoint = 'http://localhost:8000/api/demo/grade/part2';
+        formData.append('reference_text', PTE_PART2_RS_TEXT);
+      } else if (currentPart === 'part3') {
+        endpoint = 'http://localhost:8000/api/demo/grade/part3';
+        formData.append('sample_answer', PTE_PART3_DI_SAMPLE);
+        formData.append('image_url', PTE_PART3_DI_IMAGE);
+      } else {
+        formData.append('reference_text', PTE_PART1_RA_TEXT);
+      }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -131,7 +203,7 @@ export default function LiveGradingPage() {
         throw new Error(errData.detail || 'Lỗi khi chấm điểm');
       }
 
-      const data = await response.json();
+      const data: GradingResult = await response.json();
       setResult(data);
 
     } catch (err) {
@@ -156,186 +228,230 @@ export default function LiveGradingPage() {
     setError(null);
   };
 
-  // Results View
+  // ==========================================
+  // RESULTS VIEW: PTE AI SCORE ANALYSIS MODAL
+  // ==========================================
   if (result) {
-    const scoreColor = result.score >= 8 ? 'text-emerald-600' : result.score >= 6 ? 'text-amber-600' : 'text-red-600';
-    const fluencyBg = result.fluency_metrics.speech_rate_status === 'OPTIMAL' ? 'bg-emerald-100 text-emerald-700'
-      : result.fluency_metrics.speech_rate_status === 'SLOW' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700';
+    const pteData: PTEScoreAnalysisData = {
+      part_type: result.part_type,
+      transcript: result.transcript,
+      reference_text: result.reference_text || (isPart1 ? PTE_PART1_RA_TEXT : isPart2 ? PTE_PART2_RS_TEXT : undefined),
+      sample_answer: result.sample_answer || (isPart3 ? PTE_PART3_DI_SAMPLE : undefined),
+      image_url: result.image_url || (isPart3 ? PTE_PART3_DI_IMAGE : undefined),
+      scores: result.scores,
+      overall: result.overall,
+      student_tokens: result.student_tokens,
+      reference_tokens: result.reference_tokens,
+      student_audio_url: audioUrl || undefined,
+      real_audio_url: result.real_audio_url || (isPart1 ? '/audio/pte_ra_prompt.wav' : isPart2 ? '/audio/pte_rs_prompt.wav' : undefined),
+      alignment_stats: result.alignment_stats,
+    };
 
     return (
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
-        <button onClick={reset} className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
-          <RefreshCw className="w-4 h-4" /> Làm bài khác
-        </button>
-
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-          <div className={`text-6xl font-black ${scoreColor} mb-2`}>{result.score.toFixed(1)}</div>
-          <div className="text-slate-600">{result.part_type === 'FREE_RESPONSE' ? 'Part 1: Free Response' : 'Part 2: Read Aloud'}</div>
+      <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-4">
+        {/* Top Actions */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={reset}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-2xs hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Làm lại bài thi
+          </button>
+          <span className="text-xs text-slate-500 font-medium">
+            Mô phỏng 100% giao diện chấm thi PTE Success
+          </span>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Volume2 className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold">Transcript</h3>
-            <span className="ml-auto text-xs text-emerald-600">STT: {(result.stt_confidence * 100).toFixed(0)}%</span>
-          </div>
-          <p className="text-slate-700 italic">"{result.transcript}"</p>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="bg-blue-50 rounded-xl border border-blue-100 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Activity className="w-5 h-5 text-blue-600" />
-              <h3 className="font-bold">Fluency</h3>
-            </div>
-            <div className="text-2xl font-black mb-2">{result.fluency_metrics.speech_rate_wps.toFixed(1)} wps</div>
-            <span className={`px-2 py-1 rounded text-xs font-bold ${fluencyBg}`}>
-              {result.fluency_metrics.speech_rate_status === 'OPTIMAL' ? 'Tối ưu' :
-               result.fluency_metrics.speech_rate_status === 'SLOW' ? 'Hơi chậm' : 'Quá chậm'}
-            </span>
-          </div>
-
-          {result.pronunciation_metrics ? (
-            <div className="bg-purple-50 rounded-xl border border-purple-100 p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Target className="w-5 h-5 text-purple-600" />
-                <h3 className="font-bold">WER</h3>
-              </div>
-              <div className="text-3xl font-black text-purple-600">
-                {(result.pronunciation_metrics.wer * 100).toFixed(1)}%
-              </div>
-              <div className="text-sm text-slate-500 mt-1">{result.pronunciation_metrics.grade}</div>
-            </div>
-          ) : result.lexical_metrics ? (
-            <div className="bg-green-50 rounded-xl border border-green-100 p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <BookOpen className="w-5 h-5 text-green-600" />
-                <h3 className="font-bold">Vocabulary</h3>
-              </div>
-              <div className="text-3xl font-black text-green-600">{result.lexical_metrics.ttr.toFixed(2)}</div>
-              <div className="text-sm text-slate-500 mt-1">TTR - {result.lexical_metrics.vocabulary_level}</div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="bg-amber-50 rounded-xl border border-amber-200 p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Star className="w-5 h-5 text-amber-600" />
-            <h3 className="font-bold text-amber-900">AI Feedback</h3>
-          </div>
-          <p className="text-amber-900">{result.feedback}</p>
+        {/* PTE Score Analysis Card */}
+        <div className="flex justify-center">
+          <PTEScoreAnalysisModal data={pteData} onClose={reset} />
         </div>
       </div>
     );
   }
 
-  // Recording View
-  const isPart1 = currentPart === 'part1';
-  const bgColor = isPart1 ? 'from-blue-500 to-blue-600' : 'from-purple-500 to-purple-600';
-
+  // ==========================================
+  // RECORDING VIEW: PTE SPEAKING QUESTION
+  // ==========================================
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
-      <div className={`bg-gradient-to-r ${bgColor} rounded-2xl p-6 text-white`}>
-        <div className="flex items-center gap-3 mb-2">
-          {isPart1 ? <MessageSquare className="w-6 h-6" /> : <Mic2 className="w-6 h-6" />}
-          <h1 className="text-xl font-bold">
-            {isPart1 ? 'Part 1: Free Response' : 'Part 2: Read Aloud'}
+    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6">
+      {/* Tab Switcher */}
+      <div className="flex p-1 bg-slate-100 rounded-xl max-w-md mx-auto">
+        <button
+          onClick={() => { reset(); setCurrentPart('part1'); }}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            isPart1 ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Part 1: RA
+        </button>
+        <button
+          onClick={() => { reset(); setCurrentPart('part2'); }}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            isPart2 ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Part 2: RS
+        </button>
+        <button
+          onClick={() => { reset(); setCurrentPart('part3'); }}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            isPart3 ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Part 3: Describe Image
+        </button>
+      </div>
+
+      {/* Header Banner */}
+      <div className={`bg-gradient-to-r ${
+        isPart1 ? 'from-blue-600 to-indigo-600' : isPart2 ? 'from-indigo-600 to-purple-600' : 'from-emerald-600 to-teal-700'
+      } rounded-2xl p-6 text-white shadow-sm`}>
+        <div className="flex items-center gap-3 mb-1.5">
+          {isPart1 ? (
+            <Mic2 className="w-6 h-6 text-blue-200" />
+          ) : isPart2 ? (
+            <Headphones className="w-6 h-6 text-purple-200" />
+          ) : (
+            <Activity className="w-6 h-6 text-emerald-200" />
+          )}
+          <h1 className="text-lg font-bold">
+            {isPart1
+              ? 'PTE Academic - Part 1: Read Aloud (RA)'
+              : isPart2
+              ? 'PTE Academic - Part 2: Repeat Sentence (RS)'
+              : 'PTE Academic - Part 3: Describe Image (DI)'}
           </h1>
         </div>
-        <p className="text-blue-100 text-sm">
-          {isPart1 ? 'Trả lời câu hỏi về chủ đề' : 'Đọc to câu văn theo mẫu'}
+        <p className="text-white/90 text-xs">
+          {isPart1
+            ? 'Đọc to đoạn văn học thuật. AI chấm 3 tiêu chí: Content (0-5), Oral Fluency (0-5), Pronunciation (0-5).'
+            : isPart2
+            ? 'Lặp lại chính xác câu nghe được. AI chấm 3 tiêu chí: Content (0-3), Oral Fluency (0-5), Pronunciation (0-5).'
+            : 'Mô tả chi tiết biểu đồ/hình ảnh trong 40 giây. AI chấm 3 tiêu chí: Content (0-6), Oral Fluency (0-5), Pronunciation (0-5).'}
         </p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h2 className="text-sm font-bold text-slate-500 uppercase mb-3">Câu hỏi</h2>
-        <p className="text-lg text-slate-900 leading-relaxed">
-          {isPart1 ? PART1_QUESTION : PART2_REFERENCE}
-        </p>
-      </div>
+      {/* Official PTE Instruction Box */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-4">
+        {/* Chrome advisory banner matching PTE screenshot */}
+        <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-lg text-xs text-amber-900 flex items-start justify-between gap-2">
+          <span>
+            <strong>Note from PTE Success:</strong> We recommend using <strong>Chrome</strong> browser for the best compatibility with the microphone and audio.
+          </span>
+        </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-8">
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-2 text-red-700">
-              <AlertTriangle className="w-5 h-5" />
-              <span>{error}</span>
+        <p className="text-xs font-semibold text-slate-700 italic">
+          {isPart1
+            ? 'Look at the text below. In 40 seconds, you must read this text aloud as naturally and clearly as possible. You have 40 seconds to read.'
+            : isPart2
+            ? 'sentence. Please repeat the sentence exactly as you hear it. The microphone will stop after 3 seconds of silence!'
+            : 'image is showing. You will have 40 seconds to give your response. The microphone will stop after 3 seconds of silence!'}
+        </p>
+
+        {/* For Part 2 RS: Prompt audio player */}
+        {isPart2 && (
+          <div className="p-4 rounded-xl bg-indigo-50/50 border border-indigo-100 space-y-2">
+            <span className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+              <Headphones className="w-4 h-4 text-indigo-600" />
+              Real audio (Audio gốc đề bài - Nghe trước khi lặp lại):
+            </span>
+            <PTEAudioPlayer
+              src="/audio/pte_rs_prompt.wav"
+              hasStop={true}
+              hasSpeed={true}
+              defaultDuration={3}
+            />
+          </div>
+        )}
+
+        {/* For Part 3 DI: Image Display */}
+        {isPart3 ? (
+          <div className="space-y-3">
+            <div className="p-3 rounded-xl bg-white border border-slate-200 flex justify-center shadow-2xs">
+              <img
+                src={PTE_PART3_DI_IMAGE}
+                alt="Composition of the Air Pie Chart"
+                className="max-h-72 w-auto object-contain rounded-lg"
+              />
             </div>
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+            <p className="text-base text-slate-800 leading-relaxed font-serif">
+              {isPart1 ? PTE_PART1_RA_TEXT : PTE_PART2_RS_TEXT}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Recording Area */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs">
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-xs flex items-center gap-2 text-red-700">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
         {!audioUrl ? (
-          <div className="text-center">
+          <div className="text-center py-2">
             {!isRecording ? (
               <>
                 <button
                   onClick={startRecording}
-                  className={`w-24 h-24 rounded-full ${isPart1 ? 'bg-blue-500' : 'bg-purple-500'} text-white flex items-center justify-center mx-auto mb-4 shadow-lg hover:scale-105 transition-transform`}
+                  className={`w-20 h-20 rounded-full ${isPart1 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white flex items-center justify-center mx-auto mb-3 shadow-md hover:scale-105 transition-transform`}
                 >
-                  <Mic className="w-10 h-10" />
+                  <Mic className="w-8 h-8" />
                 </button>
-                <p className="text-slate-600 mb-2">Nhấn để bắt đầu ghi âm</p>
+                <p className="text-xs font-medium text-slate-600">Bấm nút Micro để bắt đầu lặp lại câu</p>
               </>
             ) : (
               <>
-                <div className="relative w-24 h-24 mx-auto mb-4">
-                  <div className="absolute inset-0 rounded-full bg-red-500 animate-pulse" />
-                  <div className={`relative w-24 h-24 rounded-full ${isPart1 ? 'bg-blue-500' : 'bg-purple-500'} text-white flex items-center justify-center shadow-lg`}>
-                    <span className="text-2xl font-bold">{formatTime(duration)}</span>
+                <div className="relative w-20 h-20 mx-auto mb-3">
+                  <div className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-30" />
+                  <div className="relative w-20 h-20 rounded-full bg-red-600 text-white flex items-center justify-center shadow-md">
+                    <span className="text-xl font-bold font-mono">{formatTime(duration)}</span>
                   </div>
                 </div>
-                <p className="text-red-600 font-semibold mb-4">Đang ghi âm...</p>
+                <p className="text-xs font-bold text-red-600 mb-3 animate-pulse">Đang ghi âm...</p>
                 <button
                   onClick={stopRecording}
-                  className="px-6 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold flex items-center gap-2 mx-auto"
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center gap-2 mx-auto"
                 >
-                  <Square className="w-5 h-5" /> Dừng ghi
+                  <Square className="w-4 h-4" /> Dừng ghi âm
                 </button>
               </>
             )}
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="bg-slate-50 rounded-lg p-4">
-              <audio src={audioUrl} controls className="w-full" />
-              <div className="text-sm text-slate-500 mt-2">Thời lượng: {formatTime(duration)}</div>
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center justify-between">
+              <audio src={audioUrl} controls className="h-8 max-w-sm" />
+              <div className="text-xs font-semibold text-slate-500">
+                Thời lượng: {formatTime(duration)}
+              </div>
             </div>
-            <div className="flex gap-4">
-              <button onClick={reset} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold">
+
+            <div className="flex gap-3">
+              <button
+                onClick={reset}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+              >
                 Ghi lại
               </button>
               <button
                 onClick={submitAudio}
                 disabled={isProcessing}
-                className={`flex-1 py-3 text-white rounded-xl font-semibold flex items-center justify-center gap-2 ${
-                  isPart1 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'
-                } disabled:opacity-50`}
+                className={`flex-1 py-2.5 ${isPart1 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-2xs`}
               >
-                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-                {isProcessing ? 'Đang xử lý...' : 'Nộp bài & Chấm điểm'}
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {isProcessing ? 'AI đang chấm điểm...' : 'Nộp bài & Chấm điểm'}
               </button>
             </div>
           </div>
         )}
-      </div>
-
-      <div className="flex justify-center gap-4">
-        <button
-          onClick={() => { reset(); setCurrentPart('part1'); }}
-          className={`px-4 py-2 rounded-lg font-semibold ${
-            isPart1 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Part 1
-        </button>
-        <button
-          onClick={() => { reset(); setCurrentPart('part2'); }}
-          className={`px-4 py-2 rounded-lg font-semibold ${
-            !isPart1 ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Part 2
-        </button>
       </div>
     </div>
   );

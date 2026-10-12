@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Search,
   Loader2,
@@ -535,6 +536,13 @@ export default function GradingPage() {
           >
             02 · Thẩm định độc lập (Blind Marking)
           </button>
+          <Link
+            href="/grading/live"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20 hover:opacity-90 transition-all"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>03 · Chấm Trực tiếp (Live PTE Demo)</span>
+          </Link>
         </div>
       </div>
 
@@ -908,6 +916,11 @@ export default function GradingPage() {
                           <EnhancedMetricsPanel
                             metrics={att.assessment.enhanced_metrics}
                             overallScore={att.assessment?.score ?? undefined}
+                            studentAudioUrl={audioEvidence ? `/api/evidence/${audioEvidence.id}/content` : undefined}
+                            realAudioUrl={
+                              (att.question as any)?.audio_url ||
+                              (att.sequence === 2 ? '/audio/pte_rs_prompt.wav' : '/audio/pte_ra_prompt.wav')
+                            }
                           />
                         </div>
                       )}

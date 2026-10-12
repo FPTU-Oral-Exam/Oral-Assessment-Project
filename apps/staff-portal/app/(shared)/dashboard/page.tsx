@@ -145,6 +145,25 @@ export default async function DashboardPage() {
                 </Link>
 
                 <Link
+                  href="/grading/live"
+                  className="flex items-center justify-between p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 hover:border-emerald-400 hover:bg-emerald-50/70 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-bold text-emerald-950 group-hover:text-emerald-700">Chấm Trực tiếp (Live PTE)</h3>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600 text-white font-semibold">Demo</span>
+                      </div>
+                      <p className="text-xs text-slate-500">Test chấm Part 1 (RA), Part 2 (RS), Part 3 (DI)</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-emerald-600 group-hover:translate-x-1 transition-all" />
+                </Link>
+
+                <Link
                   href="/schedule"
                   className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition-all group"
                 >

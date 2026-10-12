@@ -27,7 +27,7 @@ from typing import Optional
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "api"))
 
-from app import fluency, pronunciation_wer, metrics
+from app import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image
 
 
 # ============================================================
@@ -275,6 +275,276 @@ def test_metrics_integration():
 
 
 # ============================================================
+# PTE READ ALOUD VALIDATION TESTS
+# ============================================================
+
+def test_pte_read_aloud():
+    """Test PTE Academic Part 1 Read Aloud Evaluation Engine."""
+    print("\n" + "=" * 60)
+    print("TEST: PTE Academic - Part 1: Read Aloud (RA)")
+    print("=" * 60)
+
+    ref_text = (
+        "Before the discovery of Australia, people in the old world were convinced that all swans were white, "
+        "an unassailable belief as it seemed completely confirmed by empirical evidence. "
+        "The sighting of the first black swan might have been an interesting surprise for a few scientists, "
+        "but that is not where the significance of the story lies."
+    )
+
+    hyp_image_sample = (
+        "Before the discovery of Australia, people in the old world were convinced that all swans were white, "
+        "and an established life as instantly completely conformed by embrace of evidence. "
+        "Ah, this the sighting of the first black swan may have been an interesting surprise for a few scientists, "
+        "but certainly not where the significance of the story lies."
+    )
+
+    test_cases = [
+        (
+            "PTE_PERFECT",
+            ref_text,
+            ref_text,
+            5, 4,
+            "Exact reading match"
+        ),
+        (
+            "PTE_IMAGE_SAMPLE",
+            ref_text,
+            hyp_image_sample,
+            4, 4,
+            "Sample reading from PTE platform screenshot"
+        ),
+        (
+            "PTE_HALF_ACCURACY",
+            ref_text,
+            "Before the discovery of Australia people in the old world were convinced that all swans were white",
+            3, 3,
+            "Half passage read accurately"
+        )
+    ]
+
+    results = []
+    for name, reference, hypothesis, exp_content_min, exp_fluency_min, desc in test_cases:
+        print(f"\n📊 Testing: {name}")
+        print(f"   Description: {desc}")
+
+        res = pte_read_aloud.evaluate_pte_read_aloud(
+            reference_text=reference,
+            student_transcript=hypothesis,
+            duration_seconds=18.0,
+            stt_confidence=0.92
+        )
+
+        content = res["scores"]["content"]
+        fluency = res["scores"]["oral_fluency"]
+        pronun = res["scores"]["pronunciation"]
+        overall = res["overall"]
+
+        print(f"   Content: {content['score']}/5 (Ratio: {content['ratio_percent']}%) - {content['comment']}")
+        print(f"   Fluency: {fluency['score']}/5 (WPS: {fluency['speech_rate_wps']}) - {fluency['comment']}")
+        print(f"   Pronunciation: {pronun['score']}/5 (WER: {res['alignment_stats']['wer']}%) - {pronun['comment']}")
+        print(f"   Overall: {overall['score_90']}/90 ({overall['score_10']}/10)")
+
+        # Verify token diffing
+        has_tokens = len(res["student_tokens"]) > 0 and len(res["reference_tokens"]) > 0
+        has_valid_scores = (
+            content["score"] >= exp_content_min - 1 and
+            fluency["score"] >= exp_fluency_min - 1 and
+            pronun["score"] >= 2
+        )
+
+        valid = has_tokens and has_valid_scores
+        print(f"   ✅ Tokens generated: {has_tokens}")
+        print(f"   ✅ Criteria within expected bounds: {has_valid_scores}")
+
+        results.append({
+            'name': name,
+            'ai_score': overall['score_90'],
+            'expected_min': 50,
+            'valid': valid
+        })
+
+    return results
+
+
+# ============================================================
+# TEST PTE REPEAT SENTENCE (PART 2)
+# ============================================================
+
+def test_pte_repeat_sentence():
+    """Test Pearson PTE Part 2 Repeat Sentence evaluation engine."""
+    print("\n" + "=" * 60)
+    print("🧪 TESTING PTE PART 2: REPEAT SENTENCE (RS)")
+    print("=" * 60)
+
+    prompt_ref = "At that time, people moved from towns to villages."
+    hyp_screenshot = "At that time, people to the moon."
+
+    test_cases = [
+        (
+            "PTE_RS_PERFECT",
+            prompt_ref,
+            prompt_ref,
+            3, 4,
+            "100% exact repetition"
+        ),
+        (
+            "PTE_RS_SCREENSHOT_SAMPLE",
+            prompt_ref,
+            hyp_screenshot,
+            2, 4,
+            "User screenshot sample: >=50% words in sequence"
+        ),
+        (
+            "PTE_RS_PARTIAL_UNDER_50",
+            prompt_ref,
+            "People moved to the city center.",
+            1, 3,
+            "Under 50% words in correct sequence"
+        )
+    ]
+
+    results = []
+    for name, reference, hypothesis, exp_content_min, exp_fluency_min, desc in test_cases:
+        print(f"\n📊 Testing: {name}")
+        print(f"   Description: {desc}")
+
+        res = pte_repeat_sentence.evaluate_pte_repeat_sentence(
+            reference_text=reference,
+            student_transcript=hypothesis,
+            duration_seconds=3.5,
+            stt_confidence=0.92
+        )
+
+        content = res["scores"]["content"]
+        fluency = res["scores"]["oral_fluency"]
+        pronun = res["scores"]["pronunciation"]
+        overall = res["overall"]
+
+        print(f"   Content: {content['score']}/3 (Ratio: {content['ratio_percent']}%) - {content['comment']}")
+        print(f"   Fluency: {fluency['score']}/5 (WPS: {fluency['speech_rate_wps']}) - {fluency['comment']}")
+        print(f"   Pronunciation: {pronun['score']}/5 (WER: {res['alignment_stats']['wer']}%) - {pronun['comment']}")
+        print(f"   Overall: {overall['score_90']}/90 ({overall['score_10']}/10, total {overall['total_points']}/13)")
+
+        # Verify token diffing
+        has_tokens = len(res["student_tokens"]) > 0 and len(res["reference_tokens"]) > 0
+        has_valid_scores = (
+            content["score"] >= exp_content_min and
+            fluency["score"] >= exp_fluency_min - 1 and
+            pronun["score"] >= 2
+        )
+
+        valid = has_tokens and has_valid_scores
+        print(f"   ✅ Tokens generated: {has_tokens}")
+        print(f"   ✅ Criteria within expected bounds: {has_valid_scores}")
+
+        results.append({
+            'name': name,
+            'ai_score': overall['score_90'],
+            'expected_min': 40,
+            'valid': valid
+        })
+
+    return results
+
+
+# ============================================================
+# TEST PTE DESCRIBE IMAGE (PART 3)
+# ============================================================
+
+def test_pte_describe_image():
+    """Test Pearson PTE Part 3 Describe Image evaluation engine."""
+    print("\n" + "=" * 60)
+    print("🧪 TESTING PTE PART 3: DESCRIBE IMAGE (DI)")
+    print("=" * 60)
+
+    keywords = ["nitrogen", "oxygen", "percentage", "composition", "air", "gas", "pie chart"]
+    sample_answer = (
+        "The given pie chart illustrates the composition of the air. It is clearly seen that "
+        "nitrogen accounts for the highest percentage at 78 percent, followed by oxygen at 21 percent. "
+        "Other gases make up only one percent of the atmosphere. In conclusion, nitrogen and oxygen "
+        "are the two primary components."
+    )
+    screenshot_hypothesis = (
+        "The picture, um, is lost. So it lost by the uh the percentage of the uh "
+        "composition of the air, which on the oxygen, it take about one percent "
+        "while the nitrogen, of big."
+    )
+
+    test_cases = [
+        (
+            "PTE_DI_PERFECT",
+            keywords,
+            sample_answer,
+            sample_answer,
+            25.0,
+            5, 4,
+            "100% comprehensive description covering all aspects"
+        ),
+        (
+            "PTE_DI_SCREENSHOT_SAMPLE",
+            keywords,
+            sample_answer,
+            screenshot_hypothesis,
+            22.0,
+            4, 2,
+            "User screenshot sample: 4/6 content, 2/5 fluency, 3/5 pronunciation"
+        ),
+        (
+            "PTE_DI_MINIMAL",
+            keywords,
+            sample_answer,
+            "This is a pie chart of air. It has oxygen.",
+            5.0,
+            2, 2,
+            "Very basic description with 2 keywords"
+        )
+    ]
+
+    results = []
+    for name, kw, sample, hypothesis, dur, exp_content_min, exp_fluency_min, desc in test_cases:
+        print(f"\n📊 Testing: {name}")
+        print(f"   Description: {desc}")
+
+        res = pte_describe_image.evaluate_pte_describe_image(
+            keywords=kw,
+            sample_answer=sample,
+            student_transcript=hypothesis,
+            duration_seconds=dur,
+            stt_confidence=0.88
+        )
+
+        content = res["scores"]["content"]
+        fluency = res["scores"]["oral_fluency"]
+        pronun = res["scores"]["pronunciation"]
+        overall = res["overall"]
+
+        print(f"   Content: {content['score']}/6 (Matched: {content['matched_keywords']}) - {content['comment']}")
+        print(f"   Fluency: {fluency['score']}/5 (WPS: {fluency['speech_rate_wps']}) - {fluency['comment']}")
+        print(f"   Pronunciation: {pronun['score']}/5 (Confidence: {pronun.get('stt_confidence', 0.85)}) - {pronun['comment']}")
+        print(f"   Overall: {overall['score_90']}/90 ({overall['score_10']}/10, total {overall['total_points']}/16)")
+
+        has_tokens = len(res["student_tokens"]) > 0
+        has_valid_scores = (
+            content["score"] >= exp_content_min - 1 and
+            fluency["score"] >= exp_fluency_min - 1 and
+            pronun["score"] >= 2
+        )
+
+        valid = has_tokens and has_valid_scores
+        print(f"   ✅ Tokens tagged: {has_tokens}")
+        print(f"   ✅ Criteria within expected bounds: {has_valid_scores}")
+
+        results.append({
+            'name': name,
+            'ai_score': overall['score_90'],
+            'expected_min': 35,
+            'valid': valid
+        })
+
+    return results
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -290,6 +560,9 @@ def main():
     all_results.extend(test_pronunciation_wer())
     all_results.extend(test_lexical_diversity())
     all_results.append(test_metrics_integration())
+    all_results.extend(test_pte_read_aloud())
+    all_results.extend(test_pte_repeat_sentence())
+    all_results.extend(test_pte_describe_image())
 
     # Summary
     print("\n" + "=" * 60)
