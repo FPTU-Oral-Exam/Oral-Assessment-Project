@@ -44,6 +44,7 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/schedule', label: 'Lịch coi thi được gán', icon: Calendar },
     { href: '/proctor', label: 'Phòng coi thi & Giám sát', icon: Radio },
     { href: '/grading', label: 'Đánh giá & Chấm bài', icon: Award },
+    { href: '/grading/live', label: 'Chấm trực tiếp (Live PTE)', icon: Sparkles },
   ],
 };
 

@@ -4,24 +4,38 @@ Cho phép record audio và chấm điểm THẬT Part 1 và Part 2
 """
 
 import io
+from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import numpy as np
 import wave
 
-from . import fluency, pronunciation_wer, metrics
+from . import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image
+
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(prefix="/demo", tags=["demo-grading"])
 
+DEFAULT_PTE_RA_TEXT = (
+    "Before the discovery of Australia, people in the old world were convinced that all swans were white, "
+    "an unassailable belief as it seemed completely confirmed by empirical evidence. "
+    "The sighting of the first black swan might have been an interesting surprise for a few scientists, "
+    "but that is not where the significance of the story lies."
+)
+
+DEFAULT_PTE_RS_TEXT = "At that time, people moved from towns to villages."
+
 
 class Part1Request(BaseModel):
-    question: str = "Tell me about your favorite hobby. Why do you enjoy it?"
-    reference_text: Optional[str] = None
+    question: Optional[str] = "PTE Read Aloud - Read the passage clearly and naturally."
+    reference_text: str = DEFAULT_PTE_RA_TEXT
 
 
 class Part2Request(BaseModel):
-    reference_text: str = "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet and is commonly used for typing practice."
+    reference_text: str = DEFAULT_PTE_RS_TEXT
 
 
 class GradingResult(BaseModel):
@@ -33,6 +47,17 @@ class GradingResult(BaseModel):
     pronunciation_metrics: Optional[dict] = None
     lexical_metrics: Optional[dict] = None
     feedback: str
+    # PTE Academic Enhancements
+    scores: Optional[dict] = None
+    overall: Optional[dict] = None
+    student_tokens: Optional[list] = None
+    reference_tokens: Optional[list] = None
+    reference_text: Optional[str] = None
+    sample_answer: Optional[str] = None
+    image_url: Optional[str] = None
+    matched_keywords: Optional[list] = None
+    real_audio_url: Optional[str] = None
+    alignment_stats: Optional[dict] = None
 
 
 def convert_webm_to_wav(audio_data: bytes) -> tuple[bytes, int]:
@@ -139,19 +164,22 @@ async def transcribe_audio(audio_data: bytes, sample_rate: int = 16000) -> tuple
 
 
 @router.post("/grade/part1", response_model=GradingResult)
-async def grade_part1(
+@router.post("/grade/read-aloud", response_model=GradingResult)
+@router.post("/grade/pte/read-aloud", response_model=GradingResult)
+async def grade_part1_read_aloud(
     audio: UploadFile = File(...),
-    question: str = Form("Tell me about your favorite hobby. Why do you enjoy it?")
+    reference_text: Optional[str] = Form(None),
+    question: Optional[str] = Form(None),
+    real_audio_url: Optional[str] = Form(None)
 ):
     """
-    Grade Part 1: Free Response
+    Grade PTE Part 1: Read Aloud (RA)
 
-    Steps:
-    1. Convert audio to WAV
-    2. Transcribe with Whisper
-    3. Analyze fluency metrics
-    4. Analyze lexical diversity
-    5. Calculate final score
+    Standardized 3 Enabling Skills:
+    1. Content (0 - 5): Word accuracy & recall rate using Sequence Alignment
+    2. Oral Fluency (0 - 5): Speech rate (wps), pauses, rhythm
+    3. Pronunciation (0 - 5): Whisper confidence & acoustic phoneme clarity
+    Visual token diffing: student_tokens (green/red) and reference_tokens
     """
     try:
         # Read audio data
@@ -160,76 +188,69 @@ async def grade_part1(
         # Convert to WAV
         wav_data, sample_rate = convert_webm_to_wav(audio_data)
 
-        # Transcribe
+        # Transcribe with Whisper
         transcript, confidence, segments = await transcribe_audio(wav_data, sample_rate)
 
         if not transcript or len(transcript.strip()) < 3:
             raise HTTPException(status_code=400, detail="Audio too short or unclear")
 
-        # Calculate duration from segments
-        duration = 0
+        # Determine reference text
+        effective_ref = reference_text or DEFAULT_PTE_RA_TEXT
+
+        # Duration
+        duration = 0.0
         if segments:
-            duration = max(s.get('end', 0) for s in segments)
+            duration = max(float(s.get('end', 0)) for s in segments)
 
-        # Analyze fluency
-        fluency_result = fluency.analyze_fluency(segments, duration)
-
-        # Analyze lexical diversity
-        lexical_result = metrics.analyze_lexical_diversity(transcript)
-
-        # Calculate score (Part 1: Fluency 30% + Vocabulary 30% + Content 40%)
-        fluency_score = fluency_result.get('fluency_score', 50) / 10
-        lexical_score = lexical_result.get('ttr_score', 50) / 10
-
-        # Content score based on transcript length
-        word_count = len(transcript.split())
-        if word_count >= 50:
-            content_score = 8.0
-        elif word_count >= 30:
-            content_score = 7.0
-        elif word_count >= 20:
-            content_score = 6.0
-        else:
-            content_score = 4.0
-
-        final_score = round(
-            fluency_score * 0.30 +
-            lexical_score * 0.30 +
-            content_score * 0.40,
-            2
+        # Evaluate using complete PTE Read Aloud Engine
+        pte_result = pte_read_aloud.evaluate_pte_read_aloud(
+            reference_text=effective_ref,
+            student_transcript=transcript,
+            segments=segments,
+            duration_seconds=duration,
+            stt_confidence=confidence,
+            real_audio_url=real_audio_url
         )
 
-        # Generate feedback
-        feedback_parts = []
+        content_s = pte_result["scores"]["content"]["score"]
+        fluency_s = pte_result["scores"]["oral_fluency"]["score"]
+        pronun_s = pte_result["scores"]["pronunciation"]["score"]
 
-        if fluency_result.get('speech_rate_status') == 'OPTIMAL':
-            feedback_parts.append(f"Tốc độ nói tốt ({fluency_result.get('speech_rate_wps', 0):.1f} wps)")
-        elif fluency_result.get('speech_rate_status') == 'SLOW':
-            feedback_parts.append(f"Tốc độ hơi chậm ({fluency_result.get('speech_rate_wps', 0):.1f} wps)")
-        else:
-            feedback_parts.append(f"Tốc độ quá chậm ({fluency_result.get('speech_rate_wps', 0):.1f} wps)")
-
-        if lexical_result.get('vocabulary_level') == 'RICH':
-            feedback_parts.append("Vốn từ phong phú")
-        elif lexical_result.get('vocabulary_level') == 'GOOD':
-            feedback_parts.append("Vốn từ tốt")
-        else:
-            feedback_parts.append("Nên sử dụng đa dạng từ vựng hơn")
-
-        if word_count < 20:
-            feedback_parts.append("Câu trả lời hơi ngắn")
-
-        feedback = ". ".join(feedback_parts)
+        feedback = (
+            f"PTE Score: {pte_result['overall']['score_90']}/90 "
+            f"(Content: {content_s}/5, Fluency: {fluency_s}/5, Pronunciation: {pronun_s}/5). "
+            f"{pte_result['scores']['content']['comment']}"
+        )
 
         return GradingResult(
-            part_type="FREE_RESPONSE",
+            part_type="PTE_READ_ALOUD",
             transcript=transcript,
             stt_confidence=round(confidence, 3),
-            score=final_score,
-            fluency_metrics=fluency_result,
-            pronunciation_metrics=None,
-            lexical_metrics=lexical_result,
-            feedback=feedback
+            score=pte_result["overall"]["score_10"],
+            fluency_metrics=pte_result["fluency_metrics"],
+            pronunciation_metrics={
+                "score": pronun_s * 20, # 0-100 scale for legacy panels
+                "wer": pte_result["alignment_stats"]["wer"] / 100.0,
+                "is_valid": True,
+                "grade": "EXCELLENT" if pronun_s >= 5 else "GOOD" if pronun_s == 4 else "FAIR" if pronun_s == 3 else "POOR",
+                "grade_description": pte_result["scores"]["pronunciation"]["comment"],
+                "errors": {
+                    "total": pte_result["alignment_stats"]["substitutions"] + pte_result["alignment_stats"]["deletions"] + pte_result["alignment_stats"]["insertions"],
+                    "substitutions": pte_result["alignment_stats"]["substitutions"],
+                    "deletions": pte_result["alignment_stats"]["deletions"],
+                    "insertions": pte_result["alignment_stats"]["insertions"],
+                },
+                "feedback": pte_result["scores"]["pronunciation"]["comment"]
+            },
+            lexical_metrics=None,
+            feedback=feedback,
+            scores=pte_result["scores"],
+            overall=pte_result["overall"],
+            student_tokens=pte_result["student_tokens"],
+            reference_tokens=pte_result["reference_tokens"],
+            reference_text=effective_ref,
+            real_audio_url=real_audio_url or "/audio/pte_ra_prompt.wav",
+            alignment_stats=pte_result["alignment_stats"]
         )
 
     except HTTPException:
@@ -239,93 +260,199 @@ async def grade_part1(
 
 
 @router.post("/grade/part2", response_model=GradingResult)
-async def grade_part2(
+@router.post("/grade/repeat-sentence", response_model=GradingResult)
+@router.post("/grade/pte/repeat-sentence", response_model=GradingResult)
+async def grade_part2_repeat_sentence(
     audio: UploadFile = File(...),
-    reference_text: str = Form("The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet and is commonly used for typing practice.")
+    prompt_audio: Optional[UploadFile] = File(None),
+    reference_text: Optional[str] = Form(None),
+    real_audio_url: Optional[str] = Form(None)
 ):
     """
-    Grade Part 2: Read Aloud
+    Grade PTE Part 2: Repeat Sentence (RS)
 
-    Steps:
-    1. Convert audio to WAV
-    2. Transcribe with Whisper
-    3. Calculate WER (Word Error Rate)
-    4. Analyze fluency
-    5. Calculate final score
+    Standardized Pearson Enabling Skills:
+    1. Content (0 - 3): Word sequence accuracy
+    2. Oral Fluency (0 - 5): Speech rate, natural delivery
+    3. Pronunciation (0 - 5): Acoustic clarity & phoneme correctness
+    Visual token diffing: student_tokens (green/red) and reference_tokens
     """
     try:
-        # Read audio data
         audio_data = await audio.read()
-
-        # Convert to WAV
         wav_data, sample_rate = convert_webm_to_wav(audio_data)
-
-        # Transcribe
         transcript, confidence, segments = await transcribe_audio(wav_data, sample_rate)
 
-        if not transcript or len(transcript.strip()) < 3:
+        if not transcript or len(transcript.strip()) < 2:
             raise HTTPException(status_code=400, detail="Audio too short or unclear")
 
-        # Calculate duration from segments
-        duration = 0
+        effective_ref = reference_text or DEFAULT_PTE_RS_TEXT
+
+        duration = 0.0
         if segments:
-            duration = max(s.get('end', 0) for s in segments)
+            duration = max(float(s.get('end', 0)) for s in segments)
 
-        # Calculate WER
-        pronunciation_result = pronunciation_wer.grade_reading_aloud(
-            reference_text=reference_text,
-            hypothesis_text=transcript,
-            avg_logprob=confidence
+        effective_real_audio = real_audio_url or "/audio/pte_rs_prompt.wav"
+        if prompt_audio:
+            p_data = await prompt_audio.read()
+            p_wav, _ = convert_webm_to_wav(p_data)
+            custom_path = STATIC_DIR / "custom_prompt.wav"
+            custom_path.write_bytes(p_wav)
+            effective_real_audio = "/api/demo/audio/prompt-custom"
+
+        rs_result = pte_repeat_sentence.evaluate_pte_repeat_sentence(
+            reference_text=effective_ref,
+            student_transcript=transcript,
+            segments=segments,
+            duration_seconds=duration,
+            stt_confidence=confidence,
+            real_audio_url=effective_real_audio
         )
 
-        # Analyze fluency
-        fluency_result = fluency.analyze_fluency(segments, duration)
+        content_s = rs_result["scores"]["content"]["score"]
+        fluency_s = rs_result["scores"]["oral_fluency"]["score"]
+        pronun_s = rs_result["scores"]["pronunciation"]["score"]
 
-        # Calculate score (Part 2: WER 60% + Fluency 40%)
-        wer_score = pronunciation_result.get('score', 0) / 10
-        fluency_score = fluency_result.get('fluency_score', 50) / 10
-
-        final_score = round(
-            wer_score * 0.60 +
-            fluency_score * 0.40,
-            2
+        feedback = (
+            f"PTE RS Score: {rs_result['overall']['score_90']}/90 "
+            f"(Content: {content_s}/3, Fluency: {fluency_s}/5, Pronunciation: {pronun_s}/5). "
+            f"{rs_result['scores']['content']['comment']}"
         )
-
-        # Generate feedback
-        feedback_parts = []
-
-        wer = pronunciation_result.get('wer', 0)
-        if wer <= 0.05:
-            feedback_parts.append("Phát âm xuất sắc!")
-        elif wer <= 0.10:
-            feedback_parts.append("Phát âm tốt, có vài lỗi nhỏ")
-        elif wer <= 0.20:
-            feedback_parts.append("Phát âm khá, cần cải thiện")
-        else:
-            feedback_parts.append(f"Cần luyện tập thêm (WER: {wer*100:.0f}%)")
-
-        if fluency_result.get('speech_rate_status') == 'OPTIMAL':
-            feedback_parts.append(f"Tốc độ tốt ({fluency_result.get('speech_rate_wps', 0):.1f} wps)")
-        elif fluency_result.get('speech_rate_status') == 'SLOW':
-            feedback_parts.append(f"Tốc độ hơi chậm ({fluency_result.get('speech_rate_wps', 0):.1f} wps)")
-
-        feedback = ". ".join(feedback_parts)
 
         return GradingResult(
-            part_type="READ_ALOUD",
+            part_type="PTE_REPEAT_SENTENCE",
             transcript=transcript,
             stt_confidence=round(confidence, 3),
-            score=final_score,
-            fluency_metrics=fluency_result,
-            pronunciation_metrics=pronunciation_result,
+            score=rs_result["overall"]["score_10"],
+            fluency_metrics=rs_result["fluency_metrics"],
+            pronunciation_metrics={
+                "score": pronun_s * 20,
+                "wer": rs_result["alignment_stats"]["wer"] / 100.0,
+                "is_valid": True,
+                "grade": "EXCELLENT" if pronun_s >= 5 else "GOOD" if pronun_s == 4 else "FAIR",
+                "grade_description": rs_result["scores"]["pronunciation"]["comment"],
+                "feedback": rs_result["scores"]["pronunciation"]["comment"]
+            },
             lexical_metrics=None,
-            feedback=feedback
+            feedback=feedback,
+            scores=rs_result["scores"],
+            overall=rs_result["overall"],
+            student_tokens=rs_result["student_tokens"],
+            reference_tokens=rs_result["reference_tokens"],
+            reference_text=effective_ref,
+            real_audio_url=effective_real_audio,
+            alignment_stats=rs_result["alignment_stats"]
         )
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/grade/part3", response_model=GradingResult)
+@router.post("/grade/describe-image", response_model=GradingResult)
+@router.post("/grade/pte/describe-image", response_model=GradingResult)
+async def grade_part3_describe_image(
+    audio: UploadFile = File(...),
+    sample_answer: Optional[str] = Form(None),
+    image_url: Optional[str] = Form(None),
+    keywords: Optional[str] = Form(None),
+):
+    """
+    Grade PTE Part 3: Describe Image (DI)
+
+    Standardized Pearson Enabling Skills:
+    1. Content (0 - 6): Key features, relationships, and overview/conclusion
+    2. Oral Fluency (0 - 5): Speech rate, continuous delivery, false start penalization
+    3. Pronunciation (0 - 5): Acoustic clarity & intelligible speech sounds
+    Visual diff: student_tokens with `is_relevant: true` (Relevant keywords in Green)
+    """
+    try:
+        audio_data = await audio.read()
+        wav_data, sample_rate = convert_webm_to_wav(audio_data)
+        transcript, confidence, segments = await transcribe_audio(wav_data, sample_rate)
+
+        if not transcript or len(transcript.strip()) < 2:
+            raise HTTPException(status_code=400, detail="Audio too short or unclear")
+
+        duration = 0.0
+        if segments:
+            duration = max(float(s.get('end', 0)) for s in segments)
+
+        kw_list = [k.strip() for k in keywords.split(",")] if keywords else None
+
+        di_result = pte_describe_image.evaluate_pte_describe_image(
+            student_transcript=transcript,
+            keywords=kw_list,
+            sample_answer=sample_answer,
+            image_url=image_url,
+            segments=segments,
+            duration_seconds=duration,
+            stt_confidence=confidence,
+        )
+
+        content_s = di_result["scores"]["content"]["score"]
+        fluency_s = di_result["scores"]["oral_fluency"]["score"]
+        pronun_s = di_result["scores"]["pronunciation"]["score"]
+
+        feedback = (
+            f"PTE DI Score: {di_result['overall']['score_90']}/90 "
+            f"(Content: {content_s}/6, Fluency: {fluency_s}/5, Pronunciation: {pronun_s}/5). "
+            f"{di_result['scores']['content']['comment']}"
+        )
+
+        return GradingResult(
+            part_type="PTE_DESCRIBE_IMAGE",
+            transcript=transcript,
+            stt_confidence=round(confidence, 3),
+            score=di_result["overall"]["score_10"],
+            fluency_metrics=di_result["fluency_metrics"],
+            pronunciation_metrics={
+                "score": pronun_s * 20,
+                "is_valid": True,
+                "grade": "EXCELLENT" if pronun_s >= 5 else "GOOD" if pronun_s == 4 else "FAIR",
+                "grade_description": di_result["scores"]["pronunciation"]["comment"],
+                "feedback": di_result["scores"]["pronunciation"]["comment"]
+            },
+            lexical_metrics=None,
+            feedback=feedback,
+            scores=di_result["scores"],
+            overall=di_result["overall"],
+            student_tokens=di_result["student_tokens"],
+            sample_answer=di_result["sample_answer"],
+            image_url=di_result["image_url"],
+            matched_keywords=di_result["matched_keywords"],
+            alignment_stats=di_result["alignment_stats"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/audio/prompt-rs")
+async def get_prompt_rs_audio():
+    wav_path = STATIC_DIR / "pte_rs_prompt.wav"
+    if not wav_path.exists():
+        raise HTTPException(status_code=404, detail="Prompt audio not found")
+    return FileResponse(wav_path, media_type="audio/wav")
+
+
+@router.get("/audio/prompt-ra")
+async def get_prompt_ra_audio():
+    wav_path = STATIC_DIR / "pte_ra_prompt.wav"
+    if not wav_path.exists():
+        raise HTTPException(status_code=404, detail="Prompt audio not found")
+    return FileResponse(wav_path, media_type="audio/wav")
+
+
+@router.get("/audio/prompt-custom")
+async def get_custom_prompt_audio():
+    wav_path = STATIC_DIR / "custom_prompt.wav"
+    if not wav_path.exists():
+        wav_path = STATIC_DIR / "pte_rs_prompt.wav"
+    return FileResponse(wav_path, media_type="audio/wav")
 
 
 @router.get("/health")
