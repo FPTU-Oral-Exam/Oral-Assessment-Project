@@ -27,7 +27,7 @@ from typing import Optional
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "api"))
 
-from app import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture, pte_answer_short_question
+from app import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture, pte_answer_short_question, pte_group_discussion
 
 
 # ============================================================
@@ -729,6 +729,102 @@ def test_pte_answer_short_question():
 
 
 # ============================================================
+# TEST PTE SUMMARIZE GROUP DISCUSSION (PART 6)
+# ============================================================
+
+def test_pte_group_discussion():
+    """Test Pearson PTE Part 6 Summarize Group Discussion evaluation engine."""
+    print("\n" + "=" * 60)
+    print("🧪 TESTING PTE PART 6: SUMMARIZE GROUP DISCUSSION (SGD)")
+    print("=" * 60)
+
+    test_cases = [
+        (
+            "PTE_SGD_COMPREHENSIVE",
+            (
+                "The speakers discussed the impact of artificial intelligence in creative fields. "
+                "The first speaker argued that AI is a powerful tool to handle repetitive tasks and augment human creativity. "
+                "However, the second speaker expressed skepticism regarding originality, homogenization of art, "
+                "and ethical issues around copyright and training data. "
+                "Finally, the third speaker concluded that ethical collaboration, clear regulation guidelines, "
+                "and intellectual property frameworks with royalties are necessary to protect artists."
+            ),
+            45.0,
+            0.92,
+            1, 0,
+            5, 4,
+            "Comprehensive summary covering central topic, 3 speaker viewpoints, and synthesis"
+        ),
+        (
+            "PTE_SGD_MODERATE",
+            (
+                "In this group discussion, the speakers talked about artificial intelligence and human artists. "
+                "One speaker said it can help with initial ideas and save time. "
+                "Another person was concerned about copyright issues and artists not getting permission. "
+                "So there are different opinions about technology."
+            ),
+            30.0,
+            0.85,
+            3, 1,
+            3, 3,
+            "Moderate summary covering main topic and two viewpoints with minor pauses"
+        ),
+        (
+            "PTE_SGD_MINIMAL",
+            "artificial intelligence artists um er",
+            8.0,
+            0.60,
+            4, 2,
+            0, 1,
+            "Fragmented response with isolated keywords and hesitations"
+        ),
+    ]
+
+    results = []
+    for name, hypothesis, dur, conf, pauses, hes, exp_content_min, exp_fluency_min, desc in test_cases:
+        print(f"\n📊 Testing: {name}")
+        print(f"   Description: {desc}")
+
+        res = pte_group_discussion.calculate_pte_group_discussion_score(
+            student_transcript=hypothesis,
+            duration_sec=dur,
+            audio_confidence=conf,
+            pause_count=pauses,
+            hesitations=hes,
+        )
+
+        content = res["scores"]["content"]
+        fluency = res["scores"]["oral_fluency"]
+        pronun = res["scores"]["pronunciation"]
+        overall = res["overall"]
+
+        print(f"   Content: {content['score']}/6 (Matched: {content['matched_keywords']}) - {content['comment']}")
+        print(f"   Fluency: {fluency['score']}/5 (WPS: {fluency['speech_rate_wps']}) - {fluency['comment']}")
+        print(f"   Pronunciation: {pronun['score']}/5 - {pronun['comment']}")
+        print(f"   Overall: {overall['score_90']}/90 ({overall['score_10']}/10, total {overall['total_points']}/16)")
+
+        has_tokens = len(res["student_tokens"]) > 0
+        has_valid_scores = (
+            content["score"] >= exp_content_min and
+            fluency["score"] >= exp_fluency_min - 1 and
+            pronun["score"] >= 1
+        )
+
+        valid = has_tokens and has_valid_scores
+        print(f"   ✅ Tokens generated: {has_tokens}")
+        print(f"   ✅ Criteria within expected bounds: {has_valid_scores}")
+
+        results.append({
+            'name': name,
+            'ai_score': overall['score_90'],
+            'expected_min': 20,
+            'valid': valid
+        })
+
+    return results
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -749,6 +845,7 @@ def main():
     all_results.extend(test_pte_describe_image())
     all_results.extend(test_pte_retell_lecture())
     all_results.extend(test_pte_answer_short_question())
+    all_results.extend(test_pte_group_discussion())
 
     # Summary
     print("\n" + "=" * 60)
