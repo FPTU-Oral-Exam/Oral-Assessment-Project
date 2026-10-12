@@ -15,7 +15,8 @@ import {
   RefreshCw,
   Info,
   BookOpen,
-  Headphones
+  Headphones,
+  HelpCircle
 } from 'lucide-react';
 import { PTEScoreAnalysisModal, PTEScoreAnalysisData } from '../components/PTEScoreAnalysisModal';
 import { PTEAudioPlayer } from '../components/PTEAudioPlayer';
@@ -53,6 +54,10 @@ const PTE_PART4_RL_SAMPLE = (
   "Drawing from his military background, he explained that in the army, soldiers wear uniform clothes and stand in ranks, " +
   "which instills discipline, obedience, and maturity. In conclusion, having more structure and respect is essential for young people."
 );
+
+// PTE Academic Official Demo Answer Short Question Constants
+const PTE_PART5_ASQ_QUESTION = "A specialist who repairs leaking water pipes is called as?";
+const PTE_PART5_ASQ_TARGETS = "plumber, a plumber";
 
 interface PTESkillScore {
   score: number;
@@ -126,7 +131,7 @@ interface GradingResult {
 }
 
 export default function LiveGradingPage() {
-  const [currentPart, setCurrentPart] = useState<'part1' | 'part2' | 'part3' | 'part4'>('part1');
+  const [currentPart, setCurrentPart] = useState<'part1' | 'part2' | 'part3' | 'part4' | 'part5'>('part1');
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -143,6 +148,7 @@ export default function LiveGradingPage() {
   const isPart2 = currentPart === 'part2';
   const isPart3 = currentPart === 'part3';
   const isPart4 = currentPart === 'part4';
+  const isPart5 = currentPart === 'part5';
 
   const startRecording = useCallback(async () => {
     try {
@@ -212,6 +218,10 @@ export default function LiveGradingPage() {
         endpoint = 'http://localhost:8000/api/demo/grade/part4';
         formData.append('lecture_transcript', PTE_PART4_RL_TEXT);
         formData.append('sample_notes', PTE_PART4_RL_SAMPLE);
+      } else if (currentPart === 'part5') {
+        endpoint = 'http://localhost:8000/api/demo/grade/part5';
+        formData.append('question_text', PTE_PART5_ASQ_QUESTION);
+        formData.append('target_answers', PTE_PART5_ASQ_TARGETS);
       } else {
         formData.append('reference_text', PTE_PART1_RA_TEXT);
       }
@@ -258,8 +268,8 @@ export default function LiveGradingPage() {
     const pteData: PTEScoreAnalysisData = {
       part_type: result.part_type,
       transcript: result.transcript,
-      reference_text: result.reference_text || (isPart1 ? PTE_PART1_RA_TEXT : isPart2 ? PTE_PART2_RS_TEXT : isPart4 ? PTE_PART4_RL_TEXT : undefined),
-      sample_answer: result.sample_answer || (isPart3 ? PTE_PART3_DI_SAMPLE : isPart4 ? PTE_PART4_RL_SAMPLE : undefined),
+      reference_text: result.reference_text || (isPart1 ? PTE_PART1_RA_TEXT : isPart2 ? PTE_PART2_RS_TEXT : isPart4 ? PTE_PART4_RL_TEXT : isPart5 ? PTE_PART5_ASQ_QUESTION : undefined),
+      sample_answer: result.sample_answer || (isPart3 ? PTE_PART3_DI_SAMPLE : isPart4 ? PTE_PART4_RL_SAMPLE : isPart5 ? PTE_PART5_ASQ_TARGETS : undefined),
       image_url: result.image_url || (isPart3 ? PTE_PART3_DI_IMAGE : undefined),
       prompt_audio_url: result.prompt_audio_url || (isPart4 ? PTE_PART4_RL_AUDIO : undefined),
       scores: result.scores,
@@ -334,6 +344,14 @@ export default function LiveGradingPage() {
         >
           Part 4: RL
         </button>
+        <button
+          onClick={() => { reset(); setCurrentPart('part5'); }}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            isPart5 ? 'bg-white text-amber-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Part 5: ASQ
+        </button>
       </div>
 
       {/* Header Banner */}
@@ -344,7 +362,9 @@ export default function LiveGradingPage() {
           ? 'from-indigo-600 to-purple-600'
           : isPart3
           ? 'from-emerald-600 to-teal-700'
-          : 'from-purple-600 to-violet-700'
+          : isPart4
+          ? 'from-purple-600 to-violet-700'
+          : 'from-amber-600 to-orange-600'
       } rounded-2xl p-6 text-white shadow-sm`}>
         <div className="flex items-center gap-3 mb-1.5">
           {isPart1 ? (
@@ -353,8 +373,10 @@ export default function LiveGradingPage() {
             <Headphones className="w-6 h-6 text-purple-200" />
           ) : isPart3 ? (
             <Activity className="w-6 h-6 text-emerald-200" />
-          ) : (
+          ) : isPart4 ? (
             <BookOpen className="w-6 h-6 text-purple-200" />
+          ) : (
+            <HelpCircle className="w-6 h-6 text-amber-200" />
           )}
           <h1 className="text-lg font-bold">
             {isPart1
@@ -363,7 +385,9 @@ export default function LiveGradingPage() {
               ? 'PTE Academic - Part 2: Repeat Sentence (RS)'
               : isPart3
               ? 'PTE Academic - Part 3: Describe Image (DI)'
-              : 'PTE Academic - Part 4: Re-tell Lecture (RL)'}
+              : isPart4
+              ? 'PTE Academic - Part 4: Re-tell Lecture (RL)'
+              : 'PTE Academic - Part 5: Answer Short Question (ASQ)'}
           </h1>
         </div>
         <p className="text-white/90 text-xs">
@@ -373,7 +397,9 @@ export default function LiveGradingPage() {
             ? 'Lặp lại chính xác câu nghe được. AI chấm 3 tiêu chí: Content (0-3), Oral Fluency (0-5), Pronunciation (0-5).'
             : isPart3
             ? 'Mô tả chi tiết biểu đồ/hình ảnh trong 40 giây. AI chấm 3 tiêu chí: Content (0-6), Oral Fluency (0-5), Pronunciation (0-5).'
-            : 'Nghe bài giảng và thuật lại nội dung chính trong 40 giây. AI chấm 3 tiêu chí: Content (0-6), Oral Fluency (0-5), Pronunciation (0-5).'}
+            : isPart4
+            ? 'Nghe bài giảng và thuật lại nội dung chính trong 40 giây. AI chấm 3 tiêu chí: Content (0-6), Oral Fluency (0-5), Pronunciation (0-5).'
+            : 'Nghe câu hỏi và trả lời ngắn gọn trong 1-2 từ. AI chấm 3 tiêu chí: Content/Vocabulary (0-1), Oral Fluency (0-5), Pronunciation (0-5).'}
         </p>
       </div>
 
@@ -393,7 +419,9 @@ export default function LiveGradingPage() {
             ? 'sentence. Please repeat the sentence exactly as you hear it. The microphone will stop after 3 seconds of silence!'
             : isPart3
             ? 'image is showing. You will have 40 seconds to give your response. The microphone will stop after 3 seconds of silence!'
-            : 'You will hear a lecture. After listening to the lecture, in 10 seconds, please retell what you have heard in your own words. You have 40 seconds to speak.'}
+            : isPart4
+            ? 'You will hear a lecture. After listening to the lecture, in 10 seconds, please retell what you have heard in your own words. You have 40 seconds to speak.'
+            : 'You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.'}
         </p>
 
         {/* For Part 2 RS: Prompt audio player */}
@@ -436,6 +464,23 @@ export default function LiveGradingPage() {
           </div>
         )}
 
+        {/* For Part 5 ASQ: Question card & hint */}
+        {isPart5 && (
+          <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200/80 space-y-3">
+            <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+              <HelpCircle className="w-4 h-4 text-amber-600" />
+              Question Prompt (Câu hỏi đề bài):
+            </span>
+            <p className="text-base text-slate-800 font-serif font-medium">
+              "{PTE_PART5_ASQ_QUESTION}"
+            </p>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white rounded-lg border border-amber-200 text-xs text-amber-800 font-medium">
+              <span>💡 Target Answer:</span>
+              <span className="font-bold">{PTE_PART5_ASQ_TARGETS}</span>
+            </div>
+          </div>
+        )}
+
         {/* For Part 3 DI: Image Display */}
         {isPart3 ? (
           <div className="space-y-3">
@@ -447,7 +492,7 @@ export default function LiveGradingPage() {
               />
             </div>
           </div>
-        ) : isPart4 ? null : (
+        ) : isPart4 || isPart5 ? null : (
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
             <p className="text-base text-slate-800 leading-relaxed font-serif">
               {isPart1 ? PTE_PART1_RA_TEXT : PTE_PART2_RS_TEXT}
@@ -478,13 +523,19 @@ export default function LiveGradingPage() {
                       ? 'bg-indigo-600 hover:bg-indigo-700'
                       : isPart3
                       ? 'bg-emerald-600 hover:bg-emerald-700'
-                      : 'bg-purple-600 hover:bg-purple-700'
+                      : isPart4
+                      ? 'bg-purple-600 hover:bg-purple-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
                   } text-white flex items-center justify-center mx-auto mb-3 shadow-md hover:scale-105 transition-transform`}
                 >
                   <Mic className="w-8 h-8" />
                 </button>
                 <p className="text-xs font-medium text-slate-600">
-                  {isPart4 ? 'Bấm nút Micro để bắt đầu thuật lại bài giảng' : 'Bấm nút Micro để bắt đầu thu âm'}
+                  {isPart4
+                    ? 'Bấm nút Micro để bắt đầu thuật lại bài giảng'
+                    : isPart5
+                    ? 'Bấm nút Micro để bắt đầu trả lời câu hỏi'
+                    : 'Bấm nút Micro để bắt đầu thu âm'}
                 </p>
               </>
             ) : (
@@ -524,7 +575,17 @@ export default function LiveGradingPage() {
               <button
                 onClick={submitAudio}
                 disabled={isProcessing}
-                className={`flex-1 py-2.5 ${isPart1 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-2xs`}
+                className={`flex-1 py-2.5 ${
+                  isPart1
+                    ? 'bg-blue-600 hover:bg-blue-700'
+                    : isPart2
+                    ? 'bg-indigo-600 hover:bg-indigo-700'
+                    : isPart3
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : isPart4
+                    ? 'bg-purple-600 hover:bg-purple-700'
+                    : 'bg-amber-600 hover:bg-orange-700'
+                } text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-2xs`}
               >
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 {isProcessing ? 'AI đang chấm điểm...' : 'Nộp bài & Chấm điểm'}

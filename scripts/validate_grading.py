@@ -27,7 +27,7 @@ from typing import Optional
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "api"))
 
-from app import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture
+from app import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture, pte_answer_short_question
 
 
 # ============================================================
@@ -642,6 +642,93 @@ def test_pte_retell_lecture():
 
 
 # ============================================================
+# TEST PTE ANSWER SHORT QUESTION (PART 5)
+# ============================================================
+
+def test_pte_answer_short_question():
+    """Test Pearson PTE Part 5 Answer Short Question evaluation engine."""
+    print("\n" + "=" * 60)
+    print("🧪 TESTING PTE PART 5: ANSWER SHORT QUESTION (ASQ)")
+    print("=" * 60)
+
+    question = "A specialist who repairs leaking water pipes is called as?"
+    targets = ["plumber", "a plumber", "the plumber"]
+
+    test_cases = [
+        (
+            "PTE_ASQ_EXACT",
+            question,
+            targets,
+            "plumber",
+            2.0,
+            1, 4, 4,
+            "Exact target word match with swift response"
+        ),
+        (
+            "PTE_ASQ_PHRASE",
+            question,
+            targets,
+            "a plumber",
+            2.2,
+            1, 4, 4,
+            "Target phrase with article"
+        ),
+        (
+            "PTE_ASQ_INCORRECT",
+            question,
+            targets,
+            "electrician",
+            2.0,
+            0, 4, 4,
+            "Incorrect vocabulary response"
+        )
+    ]
+
+    results = []
+    for name, q_text, t_list, hypothesis, dur, exp_content_exact, exp_fluency_min, exp_pronun_min, desc in test_cases:
+        print(f"\n📊 Testing: {name}")
+        print(f"   Description: {desc}")
+
+        res = pte_answer_short_question.evaluate_pte_asq(
+            student_transcript=hypothesis,
+            target_answers=t_list,
+            question_prompt=q_text,
+            duration_seconds=dur,
+            stt_confidence=0.92
+        )
+
+        content = res["scores"]["content"]
+        fluency = res["scores"]["oral_fluency"]
+        pronun = res["scores"]["pronunciation"]
+        overall = res["overall"]
+
+        print(f"   Content: {content['score']}/1 ({content['comment']})")
+        print(f"   Fluency: {fluency['score']}/5 - {fluency['comment']}")
+        print(f"   Pronunciation: {pronun['score']}/5 - {pronun['comment']}")
+        print(f"   Overall: {overall['score_90']}/90 ({overall['score_10']}/10, total {overall['total_points']}/11)")
+
+        has_tokens = len(res["student_tokens"]) > 0
+        has_valid_scores = (
+            content["score"] == exp_content_exact and
+            fluency["score"] >= exp_fluency_min - 1 and
+            pronun["score"] >= 2
+        )
+
+        valid = has_tokens and has_valid_scores
+        print(f"   ✅ Tokens generated: {has_tokens}")
+        print(f"   ✅ Criteria within expected bounds: {has_valid_scores}")
+
+        results.append({
+            'name': name,
+            'ai_score': overall['score_90'],
+            'expected_min': 15,
+            'valid': valid
+        })
+
+    return results
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -661,6 +748,7 @@ def main():
     all_results.extend(test_pte_repeat_sentence())
     all_results.extend(test_pte_describe_image())
     all_results.extend(test_pte_retell_lecture())
+    all_results.extend(test_pte_answer_short_question())
 
     # Summary
     print("\n" + "=" * 60)

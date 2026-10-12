@@ -70,10 +70,13 @@ export function PTEScoreAnalysisModal({
   const isRS = data.part_type.includes('REPEAT_SENTENCE') || data.part_type.includes('RS');
   const isDI = data.part_type.includes('DESCRIBE_IMAGE') || data.part_type.includes('DI');
   const isRL = data.part_type.includes('RETELL_LECTURE') || data.part_type.includes('RL');
+  const isASQ = data.part_type.includes('ANSWER_SHORT_QUESTION') || data.part_type.includes('ASQ');
 
   // Tooltip content for enabling skills
   const tooltips: Record<string, string> = {
-    content: isRL
+    content: isASQ
+      ? 'Content assesses vocabulary accuracy. 1/1 for appropriate word choice, 0/1 for incorrect response.'
+      : isRL
       ? 'Content assesses how accurately and thoroughly you convey the ideas, aspects, and developments of the lecture (0-6 scale).'
       : isDI
       ? 'Content assesses description of key features, relationships, and conclusion of the image (0-6 scale).'
@@ -144,7 +147,7 @@ export function PTEScoreAnalysisModal({
                   )}
                 </td>
                 <td className="py-3 px-3 font-bold text-slate-900 text-sm text-center">
-                  {data.scores.content?.score ?? '-'}/{data.scores.content?.max_score ?? (isDI || isRL ? 6 : isRS ? 3 : 5)}
+                  {data.scores.content?.score ?? '-'}/{data.scores.content?.max_score ?? (isASQ ? 1 : isDI || isRL ? 6 : isRS ? 3 : 5)}
                 </td>
                 <td className="py-3 pl-4 text-slate-700 leading-relaxed text-[13px]">
                   {data.scores.content?.comment || 'All or almost all words in sequence.'}
@@ -234,6 +237,17 @@ export function PTEScoreAnalysisModal({
               <span className="flex items-center gap-1.5 text-emerald-700">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                 Relevant keywords
+              </span>
+            </div>
+          ) : isASQ ? (
+            <div className="flex items-center gap-5 text-xs font-semibold pt-1">
+              <span className="flex items-center gap-1.5 text-emerald-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                Target word match
+              </span>
+              <span className="flex items-center gap-1.5 text-red-600">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                Other / filler words
               </span>
             </div>
           ) : (
@@ -328,6 +342,23 @@ export function PTEScoreAnalysisModal({
                 </div>
               </div>
             )}
+          </div>
+        ) : isASQ ? (
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <h3 className="text-sm font-bold text-slate-900">Question prompt:</h3>
+              <div className="text-[14px] leading-relaxed text-slate-800 bg-slate-50/90 p-4 rounded-xl border border-slate-200/80 select-text">
+                {data.reference_text || 'Question prompt not provided'}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-bold text-slate-900">Target answer(s):</h3>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium text-sm">
+                <span>🎯</span>
+                <span>{data.sample_answer || 'plumber, a plumber'}</span>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-2.5 pt-2">
