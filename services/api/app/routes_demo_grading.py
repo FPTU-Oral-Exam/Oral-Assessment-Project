@@ -12,7 +12,7 @@ from typing import Optional
 import numpy as np
 import wave
 
-from . import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image
+from . import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture
 
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -55,6 +55,7 @@ class GradingResult(BaseModel):
     reference_text: Optional[str] = None
     sample_answer: Optional[str] = None
     image_url: Optional[str] = None
+    prompt_audio_url: Optional[str] = None
     matched_keywords: Optional[list] = None
     real_audio_url: Optional[str] = None
     alignment_stats: Optional[dict] = None
@@ -429,6 +430,100 @@ async def grade_part3_describe_image(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/grade/part4", response_model=GradingResult)
+@router.post("/grade/retell-lecture", response_model=GradingResult)
+@router.post("/grade/pte/retell-lecture", response_model=GradingResult)
+async def grade_part4_retell_lecture(
+    audio: UploadFile = File(...),
+    lecture_transcript: Optional[str] = Form(None),
+    sample_notes: Optional[str] = Form(None),
+    keywords: Optional[str] = Form(None),
+):
+    """
+    Grade PTE Part 4: Re-tell Lecture (RL)
+
+    Standardized Pearson Enabling Skills:
+    1. Content (0 - 6): Ideas, characters, aspects, developments from lecture
+    2. Oral Fluency (0 - 5): Constant, natural rate of speech, lack of hesitations
+    3. Pronunciation (0 - 5): Acoustic clarity & intelligible speech sounds
+    Visual diff: student_tokens with `is_relevant: true` (Lecture keywords in Green)
+    """
+    try:
+        audio_data = await audio.read()
+        wav_data, sample_rate = convert_webm_to_wav(audio_data)
+        transcript, confidence, segments = await transcribe_audio(wav_data, sample_rate)
+
+        if not transcript or len(transcript.strip()) < 2:
+            raise HTTPException(status_code=400, detail="Audio too short or unclear")
+
+        duration = 0.0
+        if segments:
+            duration = max(float(s.get('end', 0)) for s in segments)
+
+        kw_list = [k.strip() for k in keywords.split(",")] if keywords else None
+
+        rl_result = pte_retell_lecture.evaluate_pte_retell_lecture(
+            student_transcript=transcript,
+            lecture_transcript=lecture_transcript,
+            keywords=kw_list,
+            sample_notes=sample_notes,
+            segments=segments,
+            duration_seconds=duration,
+            stt_confidence=confidence,
+        )
+
+        content_s = rl_result["scores"]["content"]["score"]
+        fluency_s = rl_result["scores"]["oral_fluency"]["score"]
+        pronun_s = rl_result["scores"]["pronunciation"]["score"]
+
+        feedback = (
+            f"PTE RL Score: {rl_result['overall']['score_90']}/90 "
+            f"(Content: {content_s}/6, Fluency: {fluency_s}/5, Pronunciation: {pronun_s}/5). "
+            f"{rl_result['scores']['content']['comment']}"
+        )
+
+        return GradingResult(
+            part_type="PTE_RETELL_LECTURE",
+            transcript=transcript,
+            stt_confidence=round(confidence, 3),
+            score=rl_result["overall"]["score_10"],
+            fluency_metrics=rl_result["fluency_metrics"],
+            pronunciation_metrics={
+                "score": pronun_s * 20,
+                "is_valid": True,
+                "grade": "EXCELLENT" if pronun_s >= 5 else "GOOD" if pronun_s == 4 else "FAIR",
+                "grade_description": rl_result["scores"]["pronunciation"]["comment"],
+                "feedback": rl_result["scores"]["pronunciation"]["comment"]
+            },
+            lexical_metrics=None,
+            feedback=feedback,
+            scores=rl_result["scores"],
+            overall=rl_result["overall"],
+            student_tokens=rl_result["student_tokens"],
+            reference_text=rl_result["reference_text"],
+            sample_answer=rl_result["sample_answer"],
+            prompt_audio_url=rl_result["prompt_audio_url"],
+            matched_keywords=rl_result["matched_keywords"],
+            alignment_stats=rl_result["alignment_stats"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/audio/prompt-rl")
+async def get_prompt_rl_audio():
+    audio_path = STATIC_DIR / "pte_rl_prompt.mp3"
+    if not audio_path.exists():
+        audio_path = STATIC_DIR / "pte_rl_prompt.wav"
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Prompt audio not found")
+    media = "audio/mpeg" if audio_path.suffix == ".mp3" else "audio/wav"
+    return FileResponse(audio_path, media_type=media)
 
 
 @router.get("/audio/prompt-rs")
