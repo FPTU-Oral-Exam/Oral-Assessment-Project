@@ -71,10 +71,13 @@ export function PTEScoreAnalysisModal({
   const isDI = data.part_type.includes('DESCRIBE_IMAGE') || data.part_type.includes('DI');
   const isRL = data.part_type.includes('RETELL_LECTURE') || data.part_type.includes('RL');
   const isASQ = data.part_type.includes('ANSWER_SHORT_QUESTION') || data.part_type.includes('ASQ');
+  const isSGD = data.part_type.includes('SUMMARIZE_GROUP_DISCUSSION') || data.part_type.includes('SGD');
 
   // Tooltip content for enabling skills
   const tooltips: Record<string, string> = {
-    content: isASQ
+    content: isSGD
+      ? 'Content assesses how accurately you synthesize multiple speaker perspectives, central topic, and ethical/practical solutions from the group discussion (0-6 scale).'
+      : isASQ
       ? 'Content assesses vocabulary accuracy. 1/1 for appropriate word choice, 0/1 for incorrect response.'
       : isRL
       ? 'Content assesses how accurately and thoroughly you convey the ideas, aspects, and developments of the lecture (0-6 scale).'
@@ -147,7 +150,7 @@ export function PTEScoreAnalysisModal({
                   )}
                 </td>
                 <td className="py-3 px-3 font-bold text-slate-900 text-sm text-center">
-                  {data.scores.content?.score ?? '-'}/{data.scores.content?.max_score ?? (isASQ ? 1 : isDI || isRL ? 6 : isRS ? 3 : 5)}
+                  {data.scores.content?.score ?? '-'}/{data.scores.content?.max_score ?? (isASQ ? 1 : isDI || isRL || isSGD ? 6 : isRS ? 3 : 5)}
                 </td>
                 <td className="py-3 pl-4 text-slate-700 leading-relaxed text-[13px]">
                   {data.scores.content?.comment || 'All or almost all words in sequence.'}
@@ -232,7 +235,7 @@ export function PTEScoreAnalysisModal({
           )}
 
           {/* Legend */}
-          {isDI || isRL ? (
+          {isDI || isRL || isSGD ? (
             <div className="flex items-center gap-5 text-xs font-semibold pt-1">
               <span className="flex items-center gap-1.5 text-emerald-700">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -270,7 +273,7 @@ export function PTEScoreAnalysisModal({
                 <span
                   key={idx}
                   className={
-                    isDI || isRL
+                    isDI || isRL || isSGD
                       ? token.is_relevant || token.status === 'relevant'
                         ? 'text-[#16a34a] font-normal'
                         : 'text-slate-800 font-normal'
@@ -288,8 +291,38 @@ export function PTEScoreAnalysisModal({
           </div>
         </div>
 
-        {/* 2. REAL AUDIO, PROMPT LECTURE, or SAMPLE ANSWER */}
-        {isRL ? (
+        {/* 2. REAL AUDIO, PROMPT LECTURE, DISCUSSION, or SAMPLE ANSWER */}
+        {isSGD ? (
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2.5">
+              <h3 className="text-sm font-bold text-slate-900">Group discussion audio:</h3>
+              <PTEAudioPlayer
+                src={data.prompt_audio_url || '/audio/pte_sgd_prompt.mp3'}
+                hasStop={true}
+                hasSpeed={true}
+                defaultDuration={90}
+              />
+            </div>
+
+            {/* Sample Notes Box */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-bold text-slate-900">Sample summary notes:</h3>
+              <div className="text-[14px] leading-relaxed text-slate-800 bg-slate-50/90 p-4 rounded-xl border border-slate-200/80 whitespace-pre-line select-text">
+                {data.sample_answer || 'Sample summary not provided'}
+              </div>
+            </div>
+
+            {/* Reference Multi-speaker Discussion Script */}
+            {data.reference_text && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-bold text-slate-900">Discussion transcript (Multi-speaker):</h3>
+                <div className="text-[13px] leading-relaxed text-slate-600 bg-slate-50/60 p-3 rounded-xl border border-slate-200/60 max-h-48 overflow-y-auto whitespace-pre-line select-text font-serif">
+                  {data.reference_text}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : isRL ? (
           <div className="space-y-4 pt-2">
             <div className="space-y-2.5">
               <h3 className="text-sm font-bold text-slate-900">Lecture audio:</h3>

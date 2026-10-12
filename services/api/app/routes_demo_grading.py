@@ -12,7 +12,7 @@ from typing import Optional
 import numpy as np
 import wave
 
-from . import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture, pte_answer_short_question
+from . import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture, pte_answer_short_question, pte_group_discussion
 
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -592,6 +592,111 @@ async def grade_part5_answer_short_question(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/grade/part6", response_model=GradingResult)
+@router.post("/grade/summarize-group-discussion", response_model=GradingResult)
+@router.post("/grade/pte/summarize-group-discussion", response_model=GradingResult)
+async def grade_part6_summarize_group_discussion(
+    audio: UploadFile = File(...),
+    discussion_transcript: Optional[str] = Form(None),
+    sample_summary: Optional[str] = Form(None),
+):
+    """
+    Grade PTE Part 6: Summarize Group Discussion (SGD)
+
+    Standardized Pearson Enabling Skills:
+    1. Content (0 - 6): Multi-speaker discussion points & discourse synthesis
+    2. Oral Fluency (0 - 5): Speech rate, phrasing, hesitation penalties
+    3. Pronunciation (0 - 5): Phonetic clarity & intelligibility
+    """
+    try:
+        audio_data = await audio.read()
+        wav_data, sample_rate = convert_webm_to_wav(audio_data)
+        transcript, confidence, segments = await transcribe_audio(wav_data, sample_rate)
+
+        if not transcript or len(transcript.strip()) < 2:
+            raise HTTPException(status_code=400, detail="Audio too short or unclear")
+
+        duration = 0.0
+        if segments:
+            duration = max(float(s.get('end', 0)) for s in segments)
+
+        pause_count = 0
+        if segments and len(segments) > 1:
+            for i in range(len(segments) - 1):
+                gap = segments[i + 1].get('start', 0) - segments[i].get('end', 0)
+                if gap > 1.5:
+                    pause_count += 1
+
+        import re
+        hesitations = len(re.findall(r'\b(um|uh|er|ah|erm)\b', transcript.lower()))
+
+        sgd_result = pte_group_discussion.calculate_pte_group_discussion_score(
+            student_transcript=transcript,
+            discussion_text=discussion_transcript or pte_group_discussion.DEFAULT_SGD_DISCUSSION_TEXT,
+            sample_summary=sample_summary or pte_group_discussion.DEFAULT_SGD_SAMPLE_SUMMARY,
+            duration_sec=duration if duration > 0 else 40.0,
+            audio_confidence=confidence,
+            pause_count=pause_count,
+            hesitations=hesitations,
+        )
+
+        content_s = sgd_result["scores"]["content"]["score"]
+        fluency_s = sgd_result["scores"]["oral_fluency"]["score"]
+        pronun_s = sgd_result["scores"]["pronunciation"]["score"]
+
+        feedback = (
+            f"PTE SGD Score: {sgd_result['overall']['score_90']}/90 "
+            f"(Content: {content_s}/6, Fluency: {fluency_s}/5, Pronunciation: {pronun_s}/5). "
+            f"{sgd_result['scores']['content']['comment']}"
+        )
+
+        return GradingResult(
+            part_type="PTE_SUMMARIZE_GROUP_DISCUSSION",
+            transcript=transcript,
+            stt_confidence=round(confidence, 3),
+            score=sgd_result["overall"]["score_10"],
+            fluency_metrics={
+                "speech_rate_wps": sgd_result["alignment_stats"]["speech_rate_wps"],
+                "speech_rate_status": "OPTIMAL" if fluency_s >= 4 else "ACCEPTABLE" if fluency_s >= 3 else "NEEDS_IMPROVEMENT",
+                "pause_count": pause_count,
+                "filled_pause_count": hesitations,
+                "fluency_score": fluency_s * 20
+            },
+            pronunciation_metrics={
+                "score": pronun_s * 20,
+                "is_valid": True,
+                "grade": "EXCELLENT" if pronun_s >= 5 else "GOOD" if pronun_s == 4 else "FAIR",
+                "grade_description": sgd_result["scores"]["pronunciation"]["comment"],
+                "feedback": sgd_result["scores"]["pronunciation"]["comment"]
+            },
+            lexical_metrics=None,
+            feedback=feedback,
+            scores=sgd_result["scores"],
+            overall=sgd_result["overall"],
+            student_tokens=sgd_result["student_tokens"],
+            reference_text=sgd_result["reference_text"],
+            sample_answer=sgd_result["sample_answer"],
+            prompt_audio_url=sgd_result["prompt_audio_url"],
+            matched_keywords=sgd_result["alignment_stats"]["matched_keywords"],
+            alignment_stats=sgd_result["alignment_stats"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/audio/prompt-sgd")
+async def get_prompt_sgd_audio():
+    audio_path = STATIC_DIR / "pte_sgd_prompt.mp3"
+    if not audio_path.exists():
+        audio_path = Path(__file__).resolve().parents[3] / "apps" / "staff-portal" / "public" / "audio" / "pte_sgd_prompt.mp3"
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="SGD prompt audio not found")
+    return FileResponse(audio_path, media_type="audio/mpeg")
 
 
 @router.get("/audio/prompt-rl")
