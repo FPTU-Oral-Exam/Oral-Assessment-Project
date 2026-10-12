@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { UploadProgress, QuestionNav, CameraPreview } from '../components';
-import { useRecording } from '../hooks/useRecording';
+import { UploadProgress, QuestionNav, CameraPreview, PTEQuestionCard } from '../components';
+import type { PTEPhase } from '../components/PTEQuestionCard';
+import { playPTEBeep } from '../lib/pte-audio';
+import { useRecording, createCleanAudioBlob } from '../hooks/useRecording';
 import { useChunkedUpload } from '../hooks/useChunkedUpload';
 import { useExamSession } from '../hooks/useExamSession';
 import { useMediaDevices } from '../hooks/useMediaDevices';
@@ -17,6 +19,11 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   const [recordedAudio, setRecordedAudio] = useState<{ blob: Blob; url: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
+  // PTE State Machine
+  const [ptePhase, setPtePhase] = useState<PTEPhase>('PREPARING');
+  const [prepRemaining, setPrepRemaining] = useState<number>(0);
+  const [speakRemaining, setSpeakRemaining] = useState<number>(40);
 
   const {
     session,
@@ -63,8 +70,11 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     }
   }, [sessionId, initSession]);
 
-  // Cleanup preview audio URL on unmount
+  // Cleanup preview audio URL on unmount & reload preview audio element when changed
   useEffect(() => {
+    if (recordedAudio && audioPreviewRef.current) {
+      audioPreviewRef.current.load();
+    }
     return () => {
       if (recordedAudio) {
         URL.revokeObjectURL(recordedAudio.url);
@@ -94,13 +104,15 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       }
     }
 
-    if (recordedAudio) {
-      URL.revokeObjectURL(recordedAudio.url);
-      setRecordedAudio(null);
-    }
+    setRecordedAudio((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev.url);
+      }
+      return null;
+    });
 
     await startRecording();
-  }, [currentAttempt, startRecording, recordedAudio]);
+  }, [currentAttempt, startRecording]);
 
   // Handle stopping recording - creates local preview for student to review
   const handleStopRecordingClick = useCallback(async () => {
@@ -108,7 +120,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       const blobs = await stopRecording();
       if (blobs.length === 0) return;
 
-      const audioBlob = new Blob(blobs, { type: 'audio/webm' });
+      const audioBlob = await createCleanAudioBlob(blobs);
       const url = URL.createObjectURL(audioBlob);
       setRecordedAudio({ blob: audioBlob, url });
     } catch (err) {
@@ -116,13 +128,14 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     }
   }, [stopRecording]);
 
-  // Handle submitting recorded answer and advancing to the next question
-  const handleSubmitAndNext = useCallback(async () => {
-    if (!currentAttempt || !recordedAudio) return;
+  // Submit audio file directly (used for both manual submit and PTE auto-submit)
+  const submitAudioBlob = useCallback(async (blob: Blob) => {
+    if (!currentAttempt) return;
     setSubmitError(null);
 
     try {
-      const audioFile = new File([recordedAudio.blob], 'recording.webm', {
+      const cleanBlob = await createCleanAudioBlob([blob]);
+      const audioFile = new File([cleanBlob], 'recording.webm', {
         type: 'audio/webm',
       });
       const attemptKey = currentAttempt.id;
@@ -140,8 +153,10 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       });
 
       // 4. Clean up recording preview
-      URL.revokeObjectURL(recordedAudio.url);
-      setRecordedAudio(null);
+      if (recordedAudio) {
+        URL.revokeObjectURL(recordedAudio.url);
+        setRecordedAudio(null);
+      }
       clearBlobs();
       resetUpload();
 
@@ -152,6 +167,12 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       setSubmitError(err instanceof Error ? err.message : 'Có lỗi khi nộp bài; vui lòng thử lại');
     }
   }, [currentAttempt, recordedAudio, upload, token, clearBlobs, resetUpload, refreshSession, sessionId]);
+
+  // Handle submitting recorded answer and advancing to the next question
+  const handleSubmitAndNext = useCallback(async () => {
+    if (!recordedAudio) return;
+    await submitAudioBlob(recordedAudio.blob);
+  }, [recordedAudio, submitAudioBlob]);
 
   // Handle re-recording
   const handleRerecord = useCallback(() => {
@@ -174,6 +195,156 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       console.error('Failed to finish session:', err);
     }
   }, [sessionId, finishSession, stopAllMedia, onFinish]);
+
+  const isPTE = Boolean(
+    currentAttempt?.type && currentAttempt.type !== 'OPEN_RESPONSE'
+  );
+
+  // Start recording with Beep sound for PTE
+  const triggerStartPTERecording = useCallback(async (speakTime: number) => {
+    setPtePhase('RECORDING');
+    setSpeakRemaining(speakTime);
+    try {
+      await playPTEBeep();
+    } catch (e) {
+      console.warn('Beep audio error:', e);
+    }
+    await handleStartRecording();
+  }, [handleStartRecording]);
+
+  // Track last question attempt ID that was initialized
+  const lastInitializedAttemptIdRef = useRef<string | null>(null);
+
+  // When question changes, reset timers and initiate PTE phase
+  useEffect(() => {
+    if (!currentAttempt) return;
+    const isPte = Boolean(
+      currentAttempt.type && currentAttempt.type !== 'OPEN_RESPONSE'
+    );
+    if (!isPte) return;
+
+    // Guard: Only initialize ONCE per question attempt!
+    if (lastInitializedAttemptIdRef.current === currentAttempt.id) {
+      return;
+    }
+    lastInitializedAttemptIdRef.current = currentAttempt.id;
+
+    const prep = currentAttempt.prep_time ?? 0;
+    const speak = currentAttempt.speak_time ?? 40;
+    setPrepRemaining(prep);
+    setSpeakRemaining(speak);
+
+    if (currentAttempt.prompt_audio) {
+      setPtePhase('AUDIO_PLAYING');
+    } else if (prep > 0) {
+      setPtePhase('PREPARING');
+    } else {
+      void triggerStartPTERecording(speak);
+    }
+  }, [currentAttempt?.id, isPTE, triggerStartPTERecording]);
+
+  // Handle Prep countdown
+  useEffect(() => {
+    if (!isPTE || ptePhase !== 'PREPARING') return;
+
+    if (prepRemaining <= 0) {
+      const speak = currentAttempt?.speak_time ?? 40;
+      void triggerStartPTERecording(speak);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setPrepRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          const speak = currentAttempt?.speak_time ?? 40;
+          void triggerStartPTERecording(speak);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isPTE, ptePhase, prepRemaining, currentAttempt?.speak_time, triggerStartPTERecording]);
+
+  // Handle Speak countdown and auto-submission
+  useEffect(() => {
+    if (!isPTE || ptePhase !== 'RECORDING') return;
+
+    const timer = setInterval(() => {
+      setSpeakRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          void (async () => {
+            try {
+              const blobs = await stopRecording();
+              if (blobs.length > 0) {
+                const blob = await createCleanAudioBlob(blobs);
+                await submitAudioBlob(blob);
+              }
+            } catch (err) {
+              console.error('PTE auto-submit on timeout failed:', err);
+            }
+          })();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isPTE, ptePhase, stopRecording, submitAudioBlob]);
+
+  // Audio prompt completed
+  const handleAudioEnded = useCallback(() => {
+    const prep = currentAttempt?.prep_time ?? 0;
+    if (prep > 0) {
+      setPtePhase('PREPARING');
+      setPrepRemaining(prep);
+    } else {
+      const speak = currentAttempt?.speak_time ?? 40;
+      void triggerStartPTERecording(speak);
+    }
+  }, [currentAttempt?.prep_time, currentAttempt?.speak_time, triggerStartPTERecording]);
+
+  // Skip preparation
+  const handleSkipPrep = useCallback(() => {
+    const speak = currentAttempt?.speak_time ?? 40;
+    void triggerStartPTERecording(speak);
+  }, [currentAttempt?.speak_time, triggerStartPTERecording]);
+
+  // Immediate recording trigger for PTE (skip listening audio or preparation)
+  const handleImmediatePTERecording = useCallback(async () => {
+    const speak = currentAttempt?.speak_time ?? 40;
+    await triggerStartPTERecording(speak);
+  }, [currentAttempt?.speak_time, triggerStartPTERecording]);
+
+  // Early finish and submit for PTE
+  const handlePTEFinishAndSubmit = useCallback(async () => {
+    try {
+      const blobs = await stopRecording();
+      if (blobs.length > 0) {
+        const blob = await createCleanAudioBlob(blobs);
+        await submitAudioBlob(blob);
+      }
+    } catch (err) {
+      console.error('PTE early submit failed:', err);
+    }
+  }, [stopRecording, submitAudioBlob]);
+
+  // Early stop recording for PTE (allows review before manual submit)
+  const handlePTEStopRecording = useCallback(async () => {
+    setPtePhase('RECORDED');
+    await handleStopRecordingClick();
+  }, [handleStopRecordingClick]);
+
+  // Re-record for PTE
+  const handlePTERerecord = useCallback(() => {
+    handleRerecord();
+    const speak = currentAttempt?.speak_time ?? 40;
+    void triggerStartPTERecording(speak);
+  }, [handleRerecord, currentAttempt?.speak_time, triggerStartPTERecording]);
 
   // Loading state
   if (isLoading && !session) {
@@ -245,6 +416,18 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                 Hoàn thành &amp; Nộp bài
               </button>
             </div>
+          ) : isPTE && currentAttempt ? (
+            <PTEQuestionCard
+              attempt={currentAttempt}
+              phase={ptePhase}
+              prepTimeRemaining={prepRemaining}
+              speakTimeRemaining={speakRemaining}
+              totalPrepTime={currentAttempt.prep_time ?? 0}
+              totalSpeakTime={currentAttempt.speak_time ?? 40}
+              onAudioEnded={handleAudioEnded}
+              onSkipPrep={handleSkipPrep}
+              onSkipAudioToRecord={handleImmediatePTERecording}
+            />
           ) : (
             <div style={styles.questionCard}>
               <div style={styles.questionCardHeader}>
@@ -261,18 +444,20 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
 
           {!isAllAnswered && (
             <div style={styles.recordingArea}>
-              {/* Timer Display */}
-              <div style={styles.timerDisplay}>
-                <span style={styles.timerLabel}>
-                  {isRecording ? 'Thời gian ghi âm: ' : recordedAudio ? 'Thời lượng câu trả lời: ' : 'Thời gian: '}
-                </span>
-                <span style={{ ...styles.timerValue, color: isRecording ? '#dc2626' : '#1e293b' }}>
-                  {formatTimer(duration)}
-                </span>
-              </div>
+              {/* Timer Display (Standard non-PTE questions only) */}
+              {!isPTE && (
+                <div style={styles.timerDisplay}>
+                  <span style={styles.timerLabel}>
+                    {isRecording ? 'Thời gian ghi âm: ' : recordedAudio ? 'Thời lượng câu trả lời: ' : 'Thời gian: '}
+                  </span>
+                  <span style={{ ...styles.timerValue, color: isRecording ? '#dc2626' : '#1e293b' }}>
+                    {formatTimer(duration)}
+                  </span>
+                </div>
+              )}
 
-              {/* State 1: Ready to record */}
-              {!isRecording && !recordedAudio && !isUploading && (
+              {/* State 1: Ready to record (Non-PTE questions only) */}
+              {!isPTE && !isRecording && !recordedAudio && !isUploading && (
                 <div style={styles.actionCenter}>
                   <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 16px 0' }}>
                     Dành thời gian suy nghĩ câu hỏi, sau đó bấm <strong>&quot;Bắt đầu trả lời&quot;</strong> để ghi âm.
@@ -284,16 +469,63 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                 </div>
               )}
 
+              {/* Ready to record for PTE questions (Before audio finishes or during preparation) */}
+              {isPTE && !isRecording && !recordedAudio && !isUploading && (
+                <div style={styles.actionCenter}>
+                  <div style={styles.pteMicBanner}>
+                    <span style={{ fontSize: '24px' }}>🎙️</span>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '15px' }}>
+                        {ptePhase === 'AUDIO_PLAYING'
+                          ? 'Microphone đã sẵn sàng — Bạn có thể thu âm bất cứ lúc nào'
+                          : `Thời gian chuẩn bị: còn ${prepRemaining} giây`}
+                      </div>
+                      <div style={{ color: '#64748b', fontSize: '13px', marginTop: '2px' }}>
+                        {ptePhase === 'AUDIO_PLAYING'
+                          ? 'Nếu đã sẵn sàng trả lời, bạn có thể bấm nút bên dưới để ghi âm ngay mà không cần đợi nghe hết file âm thanh.'
+                          : 'Bấm nút bên dưới để bỏ qua đếm ngược và bắt đầu thu âm ngay lập tức.'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    style={styles.startRecordBtn}
+                    onClick={handleImmediatePTERecording}
+                  >
+                    <span>🎙️</span>
+                    <span>Bắt đầu thu âm ngay</span>
+                  </button>
+                </div>
+              )}
+
               {/* State 2: Currently recording */}
               {isRecording && (
                 <div style={styles.actionCenter}>
                   <p style={{ color: '#dc2626', fontWeight: 600, fontSize: '14px', margin: '0 0 16px 0' }}>
-                    ● Đang thu âm giọng nói của bạn... Hãy nói to rõ vào micro.
+                    {isPTE
+                      ? '● Đang ghi âm câu trả lời... Hết giờ đếm ngược sẽ tự động nộp bài.'
+                      : '● Đang thu âm giọng nói của bạn... Hãy nói to rõ vào micro.'}
                   </p>
-                  <button style={styles.stopRecordBtn} onClick={handleStopRecordingClick}>
-                    <span>⏹️</span>
-                    <span>Kết thúc trả lời</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                    {isPTE && (
+                      <button
+                        style={{ ...styles.stopRecordBtn, backgroundColor: '#0284c7' }}
+                        onClick={handlePTEFinishAndSubmit}
+                      >
+                        <span>✓</span>
+                        <span>Hoàn thành &amp; Nộp ngay ⏭</span>
+                      </button>
+                    )}
+                    <button
+                      style={{
+                        ...styles.stopRecordBtn,
+                        backgroundColor: isPTE ? '#475569' : '#dc2626',
+                      }}
+                      onClick={isPTE ? handlePTEStopRecording : handleStopRecordingClick}
+                    >
+                      <span>⏹️</span>
+                      <span>{isPTE ? 'Dừng để nghe lại' : 'Kết thúc trả lời'}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -301,7 +533,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
               {!isRecording && recordedAudio && !isUploading && (
                 <div style={styles.reviewCard}>
                   <div style={{ fontSize: '14px', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
-                    🎧 Nghe lại câu trả lời vừa ghi âm:
+                    🎧 Nghe lại bản ghi âm giọng nói của bạn (vừa thu âm):
                   </div>
                   <audio ref={audioPreviewRef} controls src={recordedAudio.url} style={{ width: '100%', marginBottom: '16px' }} />
 
@@ -324,7 +556,10 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                       <span>{isLastQuestion ? 'Nộp câu trả lời & Nộp bài' : `Nộp câu ${currentSequence} & Sang câu tiếp theo →`}</span>
                     </button>
 
-                    <button style={styles.rerecordBtn} onClick={handleRerecord}>
+                    <button
+                      style={styles.rerecordBtn}
+                      onClick={isPTE ? handlePTERerecord : handleRerecord}
+                    >
                       <span>🔄 Thu âm lại</span>
                     </button>
                   </div>
@@ -519,6 +754,18 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+  },
+  pteMicBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    backgroundColor: '#eff6ff',
+    border: '1px solid #bfdbfe',
+    borderRadius: '10px',
+    padding: '12px 20px',
+    marginBottom: '16px',
+    textAlign: 'left' as const,
+    maxWidth: '520px',
   },
   startRecordBtn: {
     display: 'flex',

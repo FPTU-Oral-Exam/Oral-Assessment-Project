@@ -42,15 +42,15 @@ export function ExamListPage({ onStartExam, onViewResults, onLogout }: ExamListP
 
   const [startingExamId, setStartingExamId] = useState<string | null>(null);
 
-  const handleSelectExam = async (exam: StudentExam) => {
+  const handleSelectExam = async (exam: StudentExam, restartFromStart = false) => {
     try {
       setStartingExamId(exam.id);
       let sessionId = exam.session_id;
 
       const isFinished = ['SUBMITTED', 'REVIEW_REQUIRED', 'COMPLETED'].includes(exam.status);
 
-      // Nếu bài đã nộp hoặc hoàn thành, bấm nút là muốn THI LẠI (Tạo attempt mới)
-      if (isFinished) {
+      // Nếu bài đã nộp hoặc người dùng bấm thi lại từ đầu: tạo session mới (new_attempt=true)
+      if (isFinished || restartFromStart) {
         const session = await api.createSession(exam.id, true);
         if (session && session.id) {
           onStartExam(session.id);

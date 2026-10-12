@@ -3,7 +3,7 @@ import type { StudentExam, SessionStatus } from '@oralai/shared';
 
 interface ExamCardProps {
   exam: StudentExam;
-  onSelectExam: (exam: StudentExam) => void;
+  onSelectExam: (exam: StudentExam, restartFromStart?: boolean) => void;
   isLoading?: boolean;
 }
 
@@ -35,7 +35,7 @@ export function ExamCard({ exam, onSelectExam, isLoading }: ExamCardProps) {
 
   const handleClick = () => {
     if (isLoading) return;
-    onSelectExam(exam);
+    onSelectExam(exam, false);
   };
 
   return (
@@ -54,18 +54,35 @@ export function ExamCard({ exam, onSelectExam, isLoading }: ExamCardProps) {
         {exam.practice && <span style={styles.practice}>Luyện tập</span>}
       </div>
 
-      <button
-        onClick={handleClick}
-        disabled={isLoading || exam.status === 'UPLOADING'}
-        style={{
-          ...styles.button,
-          background: buttonColor,
-          opacity: isLoading ? 0.6 : 1,
-          cursor: isLoading ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {isLoading ? 'Đang khởi tạo lượt thi...' : actionText}
-      </button>
+      <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
+        <button
+          onClick={handleClick}
+          disabled={isLoading || exam.status === 'UPLOADING'}
+          style={{
+            ...styles.button,
+            background: buttonColor,
+            opacity: isLoading ? 0.6 : 1,
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {isLoading ? 'Đang khởi tạo lượt thi...' : actionText}
+        </button>
+
+        {isInProgress && (
+          <button
+            onClick={() => onSelectExam(exam, true)}
+            disabled={isLoading || exam.status === 'UPLOADING'}
+            style={{
+              ...styles.button,
+              background: '#0284c7',
+              opacity: isLoading ? 0.6 : 1,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            🔄 Bắt đầu lại từ Câu 1
+          </button>
+        )}
+      </div>
     </div>
   );
 }

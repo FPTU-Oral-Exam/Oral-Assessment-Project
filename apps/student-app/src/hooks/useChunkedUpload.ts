@@ -54,7 +54,12 @@ export function useChunkedUpload(): UseChunkedUploadResult {
         const result = await uploader.upload(file, options);
         return result.id;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+        let errorMessage = err instanceof Error ? err.message : 'Upload failed';
+        // Improve error messaging for common cases
+        if (errorMessage.includes('Failed to complete upload')) {
+          errorMessage = 'Upload thất bại: file ghi âm có thể quá ngắn hoặc rỗng. Vui lòng thử ghi âm dài hơn.';
+        }
+        console.error('Upload error details:', err);
         setError(errorMessage);
         throw err;
       } finally {
