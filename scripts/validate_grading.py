@@ -27,7 +27,7 @@ from typing import Optional
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "api"))
 
-from app import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image
+from app import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture
 
 
 # ============================================================
@@ -545,6 +545,103 @@ def test_pte_describe_image():
 
 
 # ============================================================
+# TEST PTE RE-TELL LECTURE (PART 4)
+# ============================================================
+
+def test_pte_retell_lecture():
+    """Test Pearson PTE Part 4 Re-tell Lecture evaluation engine."""
+    print("\n" + "=" * 60)
+    print("🧪 TESTING PTE PART 4: RE-TELL LECTURE (RL)")
+    print("=" * 60)
+
+    lecture = (
+        "I want to talk about young people and structure. This was last Wednesday afternoon at a school in Brooklyn, New York. "
+        "The trick I play in all of my school appearances is that when I get through with my little homily to the kids, "
+        "I then invite them to ask questions, and when they raise their hands, I say, 'Come up,' and I make them come up and stand in front of me. "
+        "I make them stand at attention like a soldier. In the army, we put them in an environment of structure, put them in ranks, "
+        "make them all wear the same clothes, cut all their hair off. We teach them to obey instructions and know the consequences. "
+        "It gives them structure and maturity. We need more of this kind of structure and respect in the lives of our children."
+    )
+
+    test_cases = [
+        (
+            "PTE_RL_PERFECT",
+            lecture,
+            (
+                "The speaker discussed young people and the importance of structure at a school in Brooklyn. "
+                "Furthermore, he explained that in the military, soldiers are placed in an environment of structure, "
+                "wearing the same clothes and standing in ranks to learn respect and obedience. In conclusion, "
+                "providing structure helps children become mature."
+            ),
+            28.0,
+            5, 4, 4,
+            "Comprehensive retelling with main ideas, key details, and discourse markers"
+        ),
+        (
+            "PTE_RL_MODERATE",
+            lecture,
+            (
+                "The lecture was about young people, um, in Brooklyn school. The man was in the army, and he talked about "
+                "structure and soldiers wearing same clothes. It gives them, uh, respect and mature."
+            ),
+            22.0,
+            3, 2, 3,
+            "Moderate retelling with minor pauses, capturing some key points"
+        ),
+        (
+            "PTE_RL_MINIMAL",
+            lecture,
+            "army structure soldier",
+            5.0,
+            1, 2, 3,
+            "Fragmented response with isolated keywords"
+        )
+    ]
+
+    results = []
+    for name, lec_text, hypothesis, dur, exp_content_min, exp_fluency_min, exp_pronun_min, desc in test_cases:
+        print(f"\n📊 Testing: {name}")
+        print(f"   Description: {desc}")
+
+        res = pte_retell_lecture.evaluate_pte_retell_lecture(
+            student_transcript=hypothesis,
+            lecture_transcript=lec_text,
+            duration_seconds=dur,
+            stt_confidence=0.88
+        )
+
+        content = res["scores"]["content"]
+        fluency = res["scores"]["oral_fluency"]
+        pronun = res["scores"]["pronunciation"]
+        overall = res["overall"]
+
+        print(f"   Content: {content['score']}/6 (Matched: {content['matched_keywords']}) - {content['comment']}")
+        print(f"   Fluency: {fluency['score']}/5 (WPS: {fluency['speech_rate_wps']}) - {fluency['comment']}")
+        print(f"   Pronunciation: {pronun['score']}/5 (Confidence: {pronun.get('stt_confidence', 0.88)}) - {pronun['comment']}")
+        print(f"   Overall: {overall['score_90']}/90 ({overall['score_10']}/10, total {overall['total_points']}/16)")
+
+        has_tokens = len(res["student_tokens"]) > 0
+        has_valid_scores = (
+            content["score"] >= exp_content_min - 1 and
+            fluency["score"] >= exp_fluency_min - 1 and
+            pronun["score"] >= 2
+        )
+
+        valid = has_tokens and has_valid_scores
+        print(f"   ✅ Tokens tagged: {has_tokens}")
+        print(f"   ✅ Criteria within expected bounds: {has_valid_scores}")
+
+        results.append({
+            'name': name,
+            'ai_score': overall['score_90'],
+            'expected_min': 20,
+            'valid': valid
+        })
+
+    return results
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -563,6 +660,7 @@ def main():
     all_results.extend(test_pte_read_aloud())
     all_results.extend(test_pte_repeat_sentence())
     all_results.extend(test_pte_describe_image())
+    all_results.extend(test_pte_retell_lecture())
 
     # Summary
     print("\n" + "=" * 60)
