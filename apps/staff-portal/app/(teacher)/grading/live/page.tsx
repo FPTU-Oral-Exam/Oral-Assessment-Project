@@ -16,7 +16,8 @@ import {
   Info,
   BookOpen,
   Headphones,
-  HelpCircle
+  HelpCircle,
+  Users
 } from 'lucide-react';
 import { PTEScoreAnalysisModal, PTEScoreAnalysisData } from '../components/PTEScoreAnalysisModal';
 import { PTEAudioPlayer } from '../components/PTEAudioPlayer';
@@ -58,6 +59,23 @@ const PTE_PART4_RL_SAMPLE = (
 // PTE Academic Official Demo Answer Short Question Constants
 const PTE_PART5_ASQ_QUESTION = "A specialist who repairs leaking water pipes is called as?";
 const PTE_PART5_ASQ_TARGETS = "plumber, a plumber";
+
+// PTE Academic Official Demo Summarize Group Discussion Constants
+const PTE_PART6_SGD_AUDIO = "/audio/pte_sgd_prompt.mp3";
+const PTE_PART6_SGD_TRANSCRIPT = (
+  "Speaker 1: I think the biggest shift we're seeing in creative fields is the integration of Artificial Intelligence. Some people are worried that AI will replace human artists, but I see it more as a powerful tool. It can handle repetitive tasks and generate initial ideas, which frees up artists to focus on the more complex, emotional aspects of creativity.\n\n" +
+  "Speaker 2: I see your point, but I'm more skeptical. My concern is about originality. If everyone is using the same AI models, won't we see a homogenization of art? The unique style of an artist might get lost. Plus, there are ethical issues around copyright, especially when AI is trained on existing artists' work without their permission.\n\n" +
+  "Speaker 3: Both are valid points. I think the solution lies in regulation and how we use the technology. AI is incredibly efficient for brainstorming and creating variations, which is a huge benefit. However, we need clear guidelines on data usage and intellectual property to protect artists.\n\n" +
+  "Speaker 1: Exactly. For example, a designer could use AI to generate a hundred different logo concepts in minutes, but it still requires a human eye to select the best one and refine it. It's about augmenting our process, not automating our judgment. The final emotional connection comes from the artist.\n\n" +
+  "Speaker 2: But that reliance can become a crutch. If young artists lean too heavily on AI for initial ideas, they might not develop their own fundamental skills of sketching and conceptualization. It could lead to a generation of artists who are great curators but not necessarily great creators. The ethical point about training data also remains a major unresolved issue.\n\n" +
+  "Speaker 3: I agree, which is why the framework is so important. The future isn't about AI versus human artists; it's about ethical collaboration. This framework should ensure transparent data sourcing and perhaps even a system for royalties. The goal should be to augment human creativity, not replace it, and that requires rules to protect both originality and the rights of all creators."
+);
+const PTE_PART6_SGD_SAMPLE = (
+  "The group discussed the impact of artificial intelligence on creative fields and artists.\n" +
+  "- Speaker 1 argued that AI serves as a powerful augmenting tool for repetitive tasks and initial ideas.\n" +
+  "- Speaker 2 expressed skepticism regarding artistic originality, homogenization, and uncredited training data copyright.\n" +
+  "- Speaker 3 advocated for regulatory frameworks, transparent sourcing, and royalties to ensure ethical collaboration."
+);
 
 interface PTESkillScore {
   score: number;
@@ -131,7 +149,7 @@ interface GradingResult {
 }
 
 export default function LiveGradingPage() {
-  const [currentPart, setCurrentPart] = useState<'part1' | 'part2' | 'part3' | 'part4' | 'part5'>('part1');
+  const [currentPart, setCurrentPart] = useState<'part1' | 'part2' | 'part3' | 'part4' | 'part5' | 'part6'>('part1');
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -149,6 +167,7 @@ export default function LiveGradingPage() {
   const isPart3 = currentPart === 'part3';
   const isPart4 = currentPart === 'part4';
   const isPart5 = currentPart === 'part5';
+  const isPart6 = currentPart === 'part6';
 
   const startRecording = useCallback(async () => {
     try {
@@ -222,6 +241,10 @@ export default function LiveGradingPage() {
         endpoint = 'http://localhost:8000/api/demo/grade/part5';
         formData.append('question_text', PTE_PART5_ASQ_QUESTION);
         formData.append('target_answers', PTE_PART5_ASQ_TARGETS);
+      } else if (currentPart === 'part6') {
+        endpoint = 'http://localhost:8000/api/demo/grade/part6';
+        formData.append('discussion_transcript', PTE_PART6_SGD_TRANSCRIPT);
+        formData.append('sample_summary', PTE_PART6_SGD_SAMPLE);
       } else {
         formData.append('reference_text', PTE_PART1_RA_TEXT);
       }
@@ -268,16 +291,16 @@ export default function LiveGradingPage() {
     const pteData: PTEScoreAnalysisData = {
       part_type: result.part_type,
       transcript: result.transcript,
-      reference_text: result.reference_text || (isPart1 ? PTE_PART1_RA_TEXT : isPart2 ? PTE_PART2_RS_TEXT : isPart4 ? PTE_PART4_RL_TEXT : isPart5 ? PTE_PART5_ASQ_QUESTION : undefined),
-      sample_answer: result.sample_answer || (isPart3 ? PTE_PART3_DI_SAMPLE : isPart4 ? PTE_PART4_RL_SAMPLE : isPart5 ? PTE_PART5_ASQ_TARGETS : undefined),
+      reference_text: result.reference_text || (isPart1 ? PTE_PART1_RA_TEXT : isPart2 ? PTE_PART2_RS_TEXT : isPart4 ? PTE_PART4_RL_TEXT : isPart5 ? PTE_PART5_ASQ_QUESTION : isPart6 ? PTE_PART6_SGD_TRANSCRIPT : undefined),
+      sample_answer: result.sample_answer || (isPart3 ? PTE_PART3_DI_SAMPLE : isPart4 ? PTE_PART4_RL_SAMPLE : isPart5 ? PTE_PART5_ASQ_TARGETS : isPart6 ? PTE_PART6_SGD_SAMPLE : undefined),
       image_url: result.image_url || (isPart3 ? PTE_PART3_DI_IMAGE : undefined),
-      prompt_audio_url: result.prompt_audio_url || (isPart4 ? PTE_PART4_RL_AUDIO : undefined),
+      prompt_audio_url: result.prompt_audio_url || (isPart4 ? PTE_PART4_RL_AUDIO : isPart6 ? PTE_PART6_SGD_AUDIO : undefined),
       scores: result.scores,
       overall: result.overall,
       student_tokens: result.student_tokens,
       reference_tokens: result.reference_tokens,
       student_audio_url: audioUrl || undefined,
-      real_audio_url: result.real_audio_url || (isPart1 ? '/audio/pte_ra_prompt.wav' : isPart2 ? '/audio/pte_rs_prompt.wav' : isPart4 ? PTE_PART4_RL_AUDIO : undefined),
+      real_audio_url: result.real_audio_url || (isPart1 ? '/audio/pte_ra_prompt.wav' : isPart2 ? '/audio/pte_rs_prompt.wav' : isPart4 ? PTE_PART4_RL_AUDIO : isPart6 ? PTE_PART6_SGD_AUDIO : undefined),
       alignment_stats: result.alignment_stats,
     };
 
@@ -352,6 +375,14 @@ export default function LiveGradingPage() {
         >
           Part 5: ASQ
         </button>
+        <button
+          onClick={() => { reset(); setCurrentPart('part6'); }}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+            isPart6 ? 'bg-white text-teal-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Part 6: SGD
+        </button>
       </div>
 
       {/* Header Banner */}
@@ -364,7 +395,9 @@ export default function LiveGradingPage() {
           ? 'from-emerald-600 to-teal-700'
           : isPart4
           ? 'from-purple-600 to-violet-700'
-          : 'from-amber-600 to-orange-600'
+          : isPart5
+          ? 'from-amber-600 to-orange-600'
+          : 'from-teal-600 to-cyan-700'
       } rounded-2xl p-6 text-white shadow-sm`}>
         <div className="flex items-center gap-3 mb-1.5">
           {isPart1 ? (
@@ -375,8 +408,10 @@ export default function LiveGradingPage() {
             <Activity className="w-6 h-6 text-emerald-200" />
           ) : isPart4 ? (
             <BookOpen className="w-6 h-6 text-purple-200" />
-          ) : (
+          ) : isPart5 ? (
             <HelpCircle className="w-6 h-6 text-amber-200" />
+          ) : (
+            <Users className="w-6 h-6 text-teal-200" />
           )}
           <h1 className="text-lg font-bold">
             {isPart1
@@ -387,7 +422,9 @@ export default function LiveGradingPage() {
               ? 'PTE Academic - Part 3: Describe Image (DI)'
               : isPart4
               ? 'PTE Academic - Part 4: Re-tell Lecture (RL)'
-              : 'PTE Academic - Part 5: Answer Short Question (ASQ)'}
+              : isPart5
+              ? 'PTE Academic - Part 5: Answer Short Question (ASQ)'
+              : 'PTE Academic - Part 6: Summarize Group Discussion (SGD)'}
           </h1>
         </div>
         <p className="text-white/90 text-xs">
@@ -399,7 +436,9 @@ export default function LiveGradingPage() {
             ? 'Mô tả chi tiết biểu đồ/hình ảnh trong 40 giây. AI chấm 3 tiêu chí: Content (0-6), Oral Fluency (0-5), Pronunciation (0-5).'
             : isPart4
             ? 'Nghe bài giảng và thuật lại nội dung chính trong 40 giây. AI chấm 3 tiêu chí: Content (0-6), Oral Fluency (0-5), Pronunciation (0-5).'
-            : 'Nghe câu hỏi và trả lời ngắn gọn trong 1-2 từ. AI chấm 3 tiêu chí: Content/Vocabulary (0-1), Oral Fluency (0-5), Pronunciation (0-5).'}
+            : isPart5
+            ? 'Nghe câu hỏi và trả lời ngắn gọn trong 1-2 từ. AI chấm 3 tiêu chí: Content/Vocabulary (0-1), Oral Fluency (0-5), Pronunciation (0-5).'
+            : 'Nghe hội thoại nhóm 3 người và tóm tắt đa chiều quan điểm trong 40-90 giây. AI chấm 3 tiêu chí: Content (0-6), Oral Fluency (0-5), Pronunciation (0-5).'}
         </p>
       </div>
 
@@ -421,7 +460,9 @@ export default function LiveGradingPage() {
             ? 'image is showing. You will have 40 seconds to give your response. The microphone will stop after 3 seconds of silence!'
             : isPart4
             ? 'You will hear a lecture. After listening to the lecture, in 10 seconds, please retell what you have heard in your own words. You have 40 seconds to speak.'
-            : 'You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.'}
+            : isPart5
+            ? 'You will hear a question. Please give a simple and short answer. Often just one or a few words is enough.'
+            : 'You will hear a group discussion. In 10 seconds, please summarize what you have heard in your own words. You will have 40 to 90 seconds to speak.'}
         </p>
 
         {/* For Part 2 RS: Prompt audio player */}
@@ -481,6 +522,30 @@ export default function LiveGradingPage() {
           </div>
         )}
 
+        {/* For Part 6 SGD: Discussion audio player & transcript */}
+        {isPart6 && (
+          <div className="p-4 rounded-xl bg-teal-50/50 border border-teal-100 space-y-3">
+            <span className="text-xs font-bold text-teal-900 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-teal-600" />
+              Group Discussion Audio (Nghe hội thoại 3 người trước khi tóm tắt):
+            </span>
+            <PTEAudioPlayer
+              src={PTE_PART6_SGD_AUDIO}
+              hasStop={true}
+              hasSpeed={true}
+              defaultDuration={90}
+            />
+            <details className="text-xs text-slate-500 pt-1">
+              <summary className="cursor-pointer font-semibold text-teal-700 hover:text-teal-900">
+                Xem gợi ý Transcript hội thoại phân vai
+              </summary>
+              <div className="mt-2 p-3 bg-white rounded-lg border border-teal-100 text-slate-700 leading-relaxed font-serif text-[13px] whitespace-pre-line max-h-48 overflow-y-auto">
+                {PTE_PART6_SGD_TRANSCRIPT}
+              </div>
+            </details>
+          </div>
+        )}
+
         {/* For Part 3 DI: Image Display */}
         {isPart3 ? (
           <div className="space-y-3">
@@ -492,7 +557,7 @@ export default function LiveGradingPage() {
               />
             </div>
           </div>
-        ) : isPart4 || isPart5 ? null : (
+        ) : isPart4 || isPart5 || isPart6 ? null : (
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
             <p className="text-base text-slate-800 leading-relaxed font-serif">
               {isPart1 ? PTE_PART1_RA_TEXT : PTE_PART2_RS_TEXT}
@@ -525,7 +590,9 @@ export default function LiveGradingPage() {
                       ? 'bg-emerald-600 hover:bg-emerald-700'
                       : isPart4
                       ? 'bg-purple-600 hover:bg-purple-700'
-                      : 'bg-amber-600 hover:bg-amber-700'
+                      : isPart5
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-teal-600 hover:bg-teal-700'
                   } text-white flex items-center justify-center mx-auto mb-3 shadow-md hover:scale-105 transition-transform`}
                 >
                   <Mic className="w-8 h-8" />
@@ -535,6 +602,8 @@ export default function LiveGradingPage() {
                     ? 'Bấm nút Micro để bắt đầu thuật lại bài giảng'
                     : isPart5
                     ? 'Bấm nút Micro để bắt đầu trả lời câu hỏi'
+                    : isPart6
+                    ? 'Bấm nút Micro để bắt đầu tóm tắt hội thoại'
                     : 'Bấm nút Micro để bắt đầu thu âm'}
                 </p>
               </>
@@ -584,7 +653,9 @@ export default function LiveGradingPage() {
                     ? 'bg-emerald-600 hover:bg-emerald-700'
                     : isPart4
                     ? 'bg-purple-600 hover:bg-purple-700'
-                    : 'bg-amber-600 hover:bg-orange-700'
+                    : isPart5
+                    ? 'bg-amber-600 hover:bg-orange-700'
+                    : 'bg-teal-600 hover:bg-teal-700'
                 } text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-2xs`}
               >
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
