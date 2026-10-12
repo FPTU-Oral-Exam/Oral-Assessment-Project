@@ -12,7 +12,7 @@ from typing import Optional
 import numpy as np
 import wave
 
-from . import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture
+from . import fluency, pronunciation_wer, metrics, pte_read_aloud, pte_repeat_sentence, pte_describe_image, pte_retell_lecture, pte_answer_short_question
 
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -507,6 +507,85 @@ async def grade_part4_retell_lecture(
             prompt_audio_url=rl_result["prompt_audio_url"],
             matched_keywords=rl_result["matched_keywords"],
             alignment_stats=rl_result["alignment_stats"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/grade/part5", response_model=GradingResult)
+@router.post("/grade/answer-short-question", response_model=GradingResult)
+@router.post("/grade/pte/answer-short-question", response_model=GradingResult)
+async def grade_part5_answer_short_question(
+    audio: UploadFile = File(...),
+    question_prompt: Optional[str] = Form(None),
+    target_answers: Optional[str] = Form(None),
+):
+    """
+    Grade PTE Part 5: Answer Short Question (ASQ)
+
+    Standardized Pearson Enabling Skills:
+    1. Content / Vocabulary (0 - 1): Appropriate target word choice
+    2. Oral Fluency (0 - 5): Response speed and minimal hesitation
+    3. Pronunciation (0 - 5): Target word clarity and intelligibility
+    """
+    try:
+        audio_data = await audio.read()
+        wav_data, sample_rate = convert_webm_to_wav(audio_data)
+        transcript, confidence, segments = await transcribe_audio(wav_data, sample_rate)
+
+        if not transcript or len(transcript.strip()) < 1:
+            raise HTTPException(status_code=400, detail="Audio too short or unclear")
+
+        duration = 0.0
+        if segments:
+            duration = max(float(s.get('end', 0)) for s in segments)
+
+        targets_list = [t.strip() for t in target_answers.split(",")] if target_answers else None
+
+        asq_result = pte_answer_short_question.evaluate_pte_asq(
+            student_transcript=transcript,
+            target_answers=targets_list,
+            question_prompt=question_prompt,
+            segments=segments,
+            duration_seconds=duration,
+            stt_confidence=confidence,
+        )
+
+        content_s = asq_result["scores"]["content"]["score"]
+        fluency_s = asq_result["scores"]["oral_fluency"]["score"]
+        pronun_s = asq_result["scores"]["pronunciation"]["score"]
+
+        feedback = (
+            f"PTE ASQ Score: {asq_result['overall']['score_90']}/90 "
+            f"(Content: {content_s}/1, Fluency: {fluency_s}/5, Pronunciation: {pronun_s}/5). "
+            f"{asq_result['scores']['content']['comment']}"
+        )
+
+        return GradingResult(
+            part_type="PTE_ANSWER_SHORT_QUESTION",
+            transcript=transcript,
+            stt_confidence=round(confidence, 3),
+            score=asq_result["overall"]["score_10"],
+            fluency_metrics=asq_result["fluency_metrics"],
+            pronunciation_metrics={
+                "score": pronun_s * 20,
+                "is_valid": True,
+                "grade": "EXCELLENT" if pronun_s >= 5 else "GOOD" if pronun_s == 4 else "FAIR",
+                "grade_description": asq_result["scores"]["pronunciation"]["comment"],
+                "feedback": asq_result["scores"]["pronunciation"]["comment"]
+            },
+            lexical_metrics=None,
+            feedback=feedback,
+            scores=asq_result["scores"],
+            overall=asq_result["overall"],
+            student_tokens=asq_result["student_tokens"],
+            reference_text=asq_result["reference_text"],
+            sample_answer=asq_result["sample_answer"],
+            matched_keywords=[asq_result["sample_answer"]] if content_s == 1 else [],
+            alignment_stats=asq_result["alignment_stats"],
         )
 
     except HTTPException:
