@@ -431,7 +431,6 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
         response_time: q.response_time,
         media_url: q.media_url,
         status: 'APPROVED' as QuestionStatus,
-        is_predicted: false,
         usage_count: 0,
         tags: [],
         created_at: Date.now(),

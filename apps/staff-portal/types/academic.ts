@@ -111,7 +111,6 @@ export interface AcademicQuestionItem {
   response_time: number;
   difficulty: DifficultyLevel;
   status: QuestionStatus;
-  is_predicted: boolean;
   usage_count: number;
   tags: string[];
   sample_answer?: string;
