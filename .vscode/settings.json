@@ -1,0 +1,5 @@
+{
+  "workbench.editorAssociations": {
+    "*.drawio": "hediet.vscode-drawio-text"
+  }
+}
