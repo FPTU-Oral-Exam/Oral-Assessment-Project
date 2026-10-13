@@ -2,12 +2,13 @@ import React, { useState, FormEvent } from 'react';
 import { api } from '../lib/api';
 
 interface LoginPageProps {
-  onLogin: (token: string, user: import('@oralai/shared').User) => void;
+  onLogin: (token: string, user: import('@oralai/shared').User, examCode?: string) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [mssv, setMssv] = useState('');
   const [password, setPassword] = useState('');
+  const [examCode, setExamCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -24,7 +25,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         );
         return;
       }
-      onLogin(response.token, response.user);
+      onLogin(response.token, response.user, examCode);
     } catch (err: any) {
       setError(err?.message || err?.error?.message || 'MSSV hoặc mật khẩu không đúng');
     } finally {
@@ -104,6 +105,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               required
               disabled={isLoading}
               placeholder="Nhập mật khẩu"
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '16px',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label htmlFor="examCode" style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: '500',
+              color: '#374151',
+            }}>
+              Mã kỳ thi
+            </label>
+            <input
+              id="examCode"
+              type="text"
+              value={examCode}
+              onChange={(e) => setExamCode(e.target.value)}
+              disabled={isLoading}
+              placeholder="Nhập mã kỳ thi (VD: PTE-01) hoặc để trống"
               style={{
                 width: '100%',
                 padding: '12px',

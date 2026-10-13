@@ -157,6 +157,8 @@ def teacher_schedule(db: Session = Depends(get_db), user=Depends(teacher)):
                         Course.teacher_id == user.id,
                         Course.owner_id == user.id,
                         Course.code == "ORAL-PRACTICE",
+                        Course.code == "PTE-CORE",
+                        Course.code.like("PTE%"),
                     )
                 )
             )
@@ -314,6 +316,8 @@ def list_results(
                     select(Section.course_id).where(Section.teacher_id == user.id)
                 ),
                 Course.code == "ORAL-PRACTICE",
+                Course.code == "PTE-CORE",
+                Course.code.like("PTE%"),
             )
         )
 

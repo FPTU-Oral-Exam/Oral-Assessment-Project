@@ -196,6 +196,13 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     }
   }, [sessionId, finishSession, stopAllMedia, onFinish]);
 
+  // Auto finish when all questions answered
+  useEffect(() => {
+    if (session && !isLoading && !currentAttempt && !session.current_attempt && session.question_count > 0) {
+      void handleFinish();
+    }
+  }, [session, isLoading, currentAttempt, handleFinish]);
+
   const isPTE = Boolean(
     currentAttempt?.type && currentAttempt.type !== 'OPEN_RESPONSE'
   );
@@ -229,17 +236,15 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     }
     lastInitializedAttemptIdRef.current = currentAttempt.id;
 
-    const prep = currentAttempt.prep_time ?? 0;
+    const prep = 10; // Cố định 10 giây đọc đề chuẩn bị theo yêu cầu
     const speak = currentAttempt.speak_time ?? 40;
     setPrepRemaining(prep);
     setSpeakRemaining(speak);
 
     if (currentAttempt.prompt_audio) {
       setPtePhase('AUDIO_PLAYING');
-    } else if (prep > 0) {
-      setPtePhase('PREPARING');
     } else {
-      void triggerStartPTERecording(speak);
+      setPtePhase('PREPARING');
     }
   }, [currentAttempt?.id, isPTE, triggerStartPTERecording]);
 
@@ -296,17 +301,11 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     return () => clearInterval(timer);
   }, [isPTE, ptePhase, stopRecording, submitAudioBlob]);
 
-  // Audio prompt completed
+  // Audio prompt completed -> 10 giây đọc đề chuẩn bị
   const handleAudioEnded = useCallback(() => {
-    const prep = currentAttempt?.prep_time ?? 0;
-    if (prep > 0) {
-      setPtePhase('PREPARING');
-      setPrepRemaining(prep);
-    } else {
-      const speak = currentAttempt?.speak_time ?? 40;
-      void triggerStartPTERecording(speak);
-    }
-  }, [currentAttempt?.prep_time, currentAttempt?.speak_time, triggerStartPTERecording]);
+    setPtePhase('PREPARING');
+    setPrepRemaining(10);
+  }, []);
 
   // Skip preparation
   const handleSkipPrep = useCallback(() => {
@@ -422,7 +421,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
               phase={ptePhase}
               prepTimeRemaining={prepRemaining}
               speakTimeRemaining={speakRemaining}
-              totalPrepTime={currentAttempt.prep_time ?? 0}
+              totalPrepTime={10}
               totalSpeakTime={currentAttempt.speak_time ?? 40}
               onAudioEnded={handleAudioEnded}
               onSkipPrep={handleSkipPrep}
