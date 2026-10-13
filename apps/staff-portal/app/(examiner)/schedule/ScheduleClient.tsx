@@ -108,6 +108,7 @@ export default function ScheduleClient() {
   // Modals
   const [showFapModal, setShowFapModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [generatingSlotId, setGeneratingSlotId] = useState<string | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -210,6 +211,27 @@ export default function ScheduleClient() {
     setRefreshing(true);
     await fetchScheduleData();
     toast.success('Đã làm mới dữ liệu lịch thi');
+  };
+
+  const handleGenerateVariant = async (slotId: string) => {
+    try {
+      setGeneratingSlotId(slotId);
+      const res = await fetch(`/api/examiner/slots/${slotId}/generate-variant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail?.message || data.detail || 'Không thể sinh mã đề');
+      }
+      toast.success(`Đã sinh mã đề thành công: ${data.variant_name || 'Mã đề ATA'}`);
+      await fetchScheduleData();
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi sinh mã đề ATA');
+    } finally {
+      setGeneratingSlotId(null);
+    }
   };
 
   // Filtered Slots
@@ -556,10 +578,36 @@ export default function ScheduleClient() {
                             </div>
                           </div>
                           {slot.exam_variant_name ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
-                              <FileText className="w-2.5 h-2.5" />
-                              {slot.exam_variant_name}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                                <FileText className="w-2.5 h-2.5" />
+                                {slot.exam_variant_name}
+                              </span>
+                              {isExaminer && (
+                                <button
+                                  onClick={() => handleGenerateVariant(slot.id)}
+                                  disabled={generatingSlotId === slot.id}
+                                  className="text-[10px] text-purple-600 hover:text-purple-800 underline disabled:opacity-50 transition"
+                                  title="Tạo lại mã đề mới từ Ngân hàng câu hỏi"
+                                >
+                                  {generatingSlotId === slot.id ? '...' : 'Đổi đề'}
+                                </button>
+                              )}
+                            </div>
+                          ) : isExaminer ? (
+                            <button
+                              onClick={() => handleGenerateVariant(slot.id)}
+                              disabled={generatingSlotId === slot.id}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-300 px-2 py-0.5 rounded transition disabled:opacity-50"
+                              title="Sinh mã đề ATA tự động theo ma trận câu hỏi"
+                            >
+                              {generatingSlotId === slot.id ? (
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                              ) : (
+                                <Sparkles className="w-2.5 h-2.5 text-purple-600" />
+                              )}
+                              <span>Sinh đề ATA</span>
+                            </button>
                           ) : (
                             <span className="text-[10px] text-amber-600 font-medium">Chưa sinh mã đề</span>
                           )}

@@ -306,6 +306,13 @@ export const examinerService = {
     return apiClient.post<GenerateVariantsResponse>(`/examiner/exams/${examId}/generate-variants`);
   },
 
+  /**
+   * Sinh mã đề ATA cho một ca thi đơn lẻ
+   */
+  generateVariantForSlot: (slotId: string): Promise<{ success: boolean; slot_id: string; variant_id: string; variant_name: string; questions_count: number; slot_status: string }> => {
+    return apiClient.post(`/examiner/slots/${slotId}/generate-variant`);
+  },
+
   // -------------------------------------------------------------------------
   // Results & Grading
   // -------------------------------------------------------------------------
