@@ -95,6 +95,7 @@ export default function ScheduleClient() {
   const router = useRouter();
   const { user } = useUser();
   const isExaminer = user?.roles?.some((r: string) => ['EXAMINER', 'SYSTEM_ADMIN'].includes(r));
+  const isTeacher = user?.roles?.some((r: string) => ['TEACHER', 'SYSTEM_ADMIN'].includes(r));
 
   const [semesters, setSemesters] = useState<Semester[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -699,14 +700,16 @@ export default function ScheduleClient() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <Link
-                            href="/proctor"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
-                            title="Vào phòng coi thi & giám sát thí sinh"
-                          >
-                            <span>Coi thi</span>
-                            <Radio className="w-3 h-3" />
-                          </Link>
+                          {isTeacher && (
+                            <Link
+                              href="/proctor"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                              title="Vào phòng coi thi & giám sát thí sinh"
+                            >
+                              <span>Coi thi</span>
+                              <Radio className="w-3 h-3" />
+                            </Link>
+                          )}
                           {isExaminer && (
                             <>
                               <Link
