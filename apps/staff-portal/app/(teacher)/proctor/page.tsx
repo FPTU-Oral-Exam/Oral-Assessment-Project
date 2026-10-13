@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Radio,
   CheckCircle2,
@@ -14,7 +16,8 @@ import {
   HardDriveDownload,
   Search,
   Monitor,
-  Volume2
+  Volume2,
+  ArrowLeft,
 } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 
@@ -62,8 +65,14 @@ const INITIAL_WORKSTATIONS: Workstation[] = Array.from({ length: 35 }, (_, i) =>
   };
 });
 
-export default function ProctorPage() {
+function ProctorContent() {
   const { user } = useUser();
+  const searchParams = useSearchParams();
+  const slotId = searchParams.get('slot_id');
+  const roomName = searchParams.get('room') || 'Lab 301';
+  const courseCode = searchParams.get('course') || 'ENG101';
+  const examName = searchParams.get('exam') || 'Kỳ thi vấn đáp';
+
   const [workstations, setWorkstations] = useState<Workstation[]>(INITIAL_WORKSTATIONS);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<Workstation | null>(null);
@@ -99,15 +108,29 @@ export default function ProctorPage() {
       {/* Session Title & Live Signal */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold mb-2 border border-emerald-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Phòng Thi Đang Hoạt Động (Live Relay)</span>
+          <Link
+            href="/schedule"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors mb-3 group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+            <span>Quay lại Lịch coi thi</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold mb-2 border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Phòng Thi Đang Hoạt Động (Live Relay)</span>
+            </div>
+            {slotId && (
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold mb-2 border border-blue-200">
+                Ca #{slotId.slice(-6)}
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Phòng Lab 301 — Môn ENG101 (Software Engineering)
+            Phòng {roomName} — Môn {courseCode} ({examName})
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Ca thi: <strong>Ca 1 (08:00 - 09:30)</strong> | Cán bộ coi thi: <strong className="text-slate-800">{user?.name || user?.username || 'Giám thị'}</strong>
+            Cán bộ coi thi: <strong className="text-slate-800">{user?.name || user?.username || 'Giám thị'}</strong>
           </p>
         </div>
 
@@ -341,5 +364,20 @@ export default function ProctorPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProctorPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-12 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
+          <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-700">Đang nạp dữ liệu phòng coi thi...</p>
+        </div>
+      }
+    >
+      <ProctorContent />
+    </Suspense>
   );
 }
