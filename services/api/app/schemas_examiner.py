@@ -144,3 +144,66 @@ class BatchStudentOut(BaseModel):
     full_name: str
     room: str
     eligibility_status: str
+
+
+# === Results Overview (One-shot aggregation for Examiner Results Portal) ===
+
+class SlotResultsOverviewItem(BaseModel):
+    slot_id: str
+    slot_number: int
+    room: str
+    date: float
+    start_time: str
+    end_time: str
+    status: str
+    grade_locked: bool
+    teacher_id: Optional[str] = None
+    teacher_name: Optional[str] = None
+    exam_id: str
+    exam_name: str
+    course_id: str
+    course_code: str
+    course_name: str
+    semester_id: Optional[str] = None
+    semester_name: Optional[str] = None
+    student_count: int = 0
+    completed_count: int = 0
+    discrepancy_count: int = 0
+    average_score: Optional[float] = None
+
+
+class ResultsOverviewResponse(BaseModel):
+    total_slots: int
+    total_students: int
+    completed_students: int
+    locked_slots: int
+    discrepancy_slots: int
+    slots: List[SlotResultsOverviewItem]
+
+
+# === Global Candidates Directory (For /students Candidate Hub) ===
+
+class GlobalCandidateItem(BaseModel):
+    id: str
+    roll_number: str
+    full_name: str
+    eligibility_status: str
+    allocation_status: str
+    course_id: str
+    course_code: str
+    course_name: str
+    semester_id: Optional[str] = None
+    semester_name: Optional[str] = None
+    slot_room: Optional[str] = None
+    batch_name: Optional[str] = None
+    assigned_slot_id: Optional[str] = None
+
+
+class GlobalCandidateListResponse(BaseModel):
+    total: int
+    eligible_count: int
+    disqualified_count: int
+    assigned_count: int
+    unassigned_count: int
+    candidates: List[GlobalCandidateItem]
+

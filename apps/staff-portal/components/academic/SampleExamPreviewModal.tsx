@@ -30,6 +30,7 @@ const TYPE_LIGHT_THEME: Record<
   DI: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badgeBg: 'bg-amber-600' },
   SI: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', badgeBg: 'bg-rose-600' },
   RL: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badgeBg: 'bg-indigo-600' },
+  ASQ: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', badgeBg: 'bg-cyan-600' },
 };
 
 export default function SampleExamPreviewModal({
@@ -104,7 +105,17 @@ export default function SampleExamPreviewModal({
         {/* Questions List */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {(exam.items || []).map((item, index) => {
-            const meta = QUESTION_TYPES_META[item.type];
+            const meta = QUESTION_TYPES_META[item.type] || {
+              type: item.type,
+              name: item.type,
+              badge: item.type,
+              description: '',
+              color: 'text-slate-400',
+              bgLight: 'bg-slate-500/10',
+              borderColor: 'border-slate-500/30',
+              defaultPrepTime: item.prep_time || 30,
+              defaultResponseTime: item.response_time || 40,
+            };
             const typeStyle = TYPE_LIGHT_THEME[item.type] || TYPE_LIGHT_THEME.RA;
 
             return (
@@ -121,7 +132,7 @@ export default function SampleExamPreviewModal({
                       className={`px-2.5 py-0.5 rounded-md text-xs font-bold border flex items-center gap-1.5 ${typeStyle.bg} ${typeStyle.text} ${typeStyle.border}`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${typeStyle.badgeBg}`} />
-                      <span>{item.type} · {meta.name}</span>
+                      <span>{item.type} · {meta?.name || item.type}</span>
                     </span>
                     <span className="font-mono text-xs font-semibold text-slate-500">
                       {item.code}

@@ -91,3 +91,10 @@ sequenceDiagram
     Server-->>Client: Trả về Biên lai nộp bài (AWAITING_STT)
     Server->>Worker: Đẩy tác vụ STT Faster-Whisper & LLM Grader
 ```
+
+---
+
+## 4. Đặc tả Chi tiết Trải nghiệm Khảo thí Desktop (Exam Experience Spec)
+
+Chi tiết State Machine phòng thi, quy chuẩn âm thanh Web Audio API (Beep 1000Hz, Warning 10s, Cut-off Chime), giao diện tối giản chuẩn quốc tế và chính sách bảo mật điểm thi xem tại:
+👉 **[SPEC-09: Student App Exam Experience Specification](file:///c:/Users/admin/Documents/A_FPT/Tempory_Project/AI-Oral-Assessment-Platform/docs/specifications/09-student-app-exam-experience-spec.md)**

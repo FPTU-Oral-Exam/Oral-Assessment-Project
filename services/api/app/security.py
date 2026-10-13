@@ -100,7 +100,7 @@ staff = roles("SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER", "TEACHER", "ACADE
 academy = roles("SYSTEM_ADMIN", "ADMIN", "ACADEMY")
 editor = roles("SYSTEM_ADMIN", "ADMIN", "ACADEMY")
 teacher = roles("SYSTEM_ADMIN", "ADMIN", "TEACHER", "REVIEWER")
-student = roles("STUDENT")
+student = roles("STUDENT", "SYSTEM_ADMIN", "ADMIN")
 admin = roles("SYSTEM_ADMIN", "ADMIN")
 examiner = roles("SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER")
 
@@ -135,6 +135,11 @@ def course_access(db, course_id, user):
 def public_user(user):
     # NOTE: User model has 'role' (singular string) after Phase 0 RBAC migration.
     # We keep 'roles' (plural list) in the returned dict for Staff Portal UI compatibility.
+    # For SYSTEM_ADMIN / ADMIN, grant full staff roles to allow comprehensive development access.
+    if user.role in ("SYSTEM_ADMIN", "ADMIN"):
+        all_roles = ["SYSTEM_ADMIN", "ACADEMY", "EXAMINER", "TEACHER"]
+    else:
+        all_roles = [user.role]
     return {
         "id": user.id,
         "username": user.username,
@@ -142,7 +147,7 @@ def public_user(user):
         "role": user.role,
         "status": user.status,
         "email": user.email,
-        "roles": [user.role],
+        "roles": all_roles,
     }
 
 

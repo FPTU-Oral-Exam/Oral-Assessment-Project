@@ -84,7 +84,7 @@
 
 > **⚠️ Lưu ý kiến trúc:** Tách riêng hoàn toàn API Examiner vào `/api/examiner/...` để tránh xung đột với các router khác và đảm bảo RBAC chặt chẽ.
 
-* **Nhiệm vụ 2.0: Tái cấu trúc API Examiner (API Isolation)**
+* **Nhiệm vụ 2.0: Tái cấu trúc API Examiner (API Isolation)** ✅ ĐÃ HOÀN THÀNH
   - **Tệp tin:** `services/api/app/routes_examiner.py`
   - **Thay đổi:** Thêm prefix riêng cho TẤT CẢ endpoint trong router:
     + `/semesters` → `/examiner/semesters`
@@ -95,8 +95,7 @@
     + `/candidates` → `/examiner/candidates`
     + `/enrollments` → `/examiner/enrollments`
     + `/batches` → `/examiner/batches`
-  - **Lý do:** Hiện tại endpoint `/semesters`, `/courses`, `/exams` trùng với routes gốc. Examiner cần API riêng biệt để phân quyền chính xác và tránh xung đột namespace.
-  - **Hành động:** Cập nhật `app.include_router(routes_examiner.router, prefix="/examiner", tags=["Examiner Portal"])` và thêm prefix path cho từng nhóm endpoint.
+  - **Đã hoàn thành:** Cập nhật 40+ endpoints, bỏ prefix ở `app.include_router()`, cập nhật tests và tài liệu API.
 
 * **Nhiệm vụ 2.1: Xây dựng `ExamManagementClient.tsx`**
   - **Tệp tin:** `apps/staff-portal/app/(examiner)/exams/ExamManagementClient.tsx` và `apps/staff-portal/app/(examiner)/exams/page.tsx`.

@@ -33,6 +33,7 @@ const TYPE_LIGHT_THEME: Record<
   DI: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badgeBg: 'bg-amber-600' },
   SI: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', badgeBg: 'bg-rose-600' },
   RL: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badgeBg: 'bg-indigo-600' },
+  ASQ: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', badgeBg: 'bg-cyan-600' },
 };
 
 export default function QuestionCard({ question, onPreview, onEdit }: QuestionCardProps) {
@@ -40,7 +41,17 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showFullPrompt, setShowFullPrompt] = useState(false);
 
-  const meta = QUESTION_TYPES_META[question.type];
+  const meta = QUESTION_TYPES_META[question.type] || {
+    type: question.type,
+    name: question.type,
+    badge: question.type,
+    description: '',
+    color: 'text-slate-400',
+    bgLight: 'bg-slate-500/10',
+    borderColor: 'border-slate-500/30',
+    defaultPrepTime: question.prep_time || 30,
+    defaultResponseTime: question.response_time || 40,
+  };
   const typeStyle = TYPE_LIGHT_THEME[question.type] || TYPE_LIGHT_THEME.RA;
 
   const difficultyColors = {
@@ -70,7 +81,7 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
               className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${typeStyle.bg} ${typeStyle.text} ${typeStyle.border}`}
             >
               <span className={`w-2 h-2 rounded-full ${typeStyle.badgeBg}`} />
-              <span>{question.type} · {meta.name}</span>
+              <span>{question.type} · {meta?.name || question.type}</span>
             </span>
 
             {/* Code */}

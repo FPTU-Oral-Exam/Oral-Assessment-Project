@@ -45,9 +45,10 @@ export default function UnauthorizedPage() {
             Bạn không có quyền truy cập vào đường dẫn vừa yêu cầu.
             <br /><br />
             <strong>Gợi ý phân quyền OralAI:</strong>
-            <br />• <strong>Giám thị / Khảo thí</strong> (Quản lý ca thi, Lịch thi, Thí sinh): Đăng nhập bằng tài khoản role <code>EXAMINER</code> (ví dụ: <code>examiner1</code>).
-            <br />• <strong>Giảng viên chấm thi</strong> (Môn học, Rubric, Chấm bài): Đăng nhập bằng tài khoản role <code>TEACHER</code> (ví dụ: <code>teacher1</code>).
-            <br />• <strong>Quản trị viên</strong>: Đăng nhập bằng tài khoản <code>admin</code>.
+            <br />• <strong>Ban Học thuật</strong> (Kho câu hỏi, Quy chuẩn dạng bài, Ma trận, Rubrics): Đăng nhập bằng tài khoản role <code>ACADEMY</code> (ví dụ: <code>academy</code>).
+            <br />• <strong>Cán bộ Khảo thí</strong> (Quản lý ca thi, Lịch thi, Thí sinh, Điểm số): Đăng nhập bằng tài khoản role <code>EXAMINER</code> (ví dụ: <code>examiner</code>).
+            <br />• <strong>Giảng viên chấm thi</strong> (Coi thi, Chấm bài): Đăng nhập bằng tài khoản role <code>TEACHER</code> (ví dụ: <code>teacher</code>).
+            <br />• <strong>Quản trị viên Hệ thống</strong>: Đăng nhập bằng tài khoản <code>admin</code>.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">

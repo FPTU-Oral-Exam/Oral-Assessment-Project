@@ -14,38 +14,38 @@ from app.security import hasher
 ACCOUNTS = [
     {
         "username": "admin",
-        "name": "Quản trị viên Hệ thống",
+        "name": "Nguyễn Văn Gia Bình (Super Admin)",
         "role": "SYSTEM_ADMIN",
         "password": "Admin@123456",
-        "description": "Quản trị toàn quyền: Cấu hình hệ thống, Quản lý tài khoản, Audit log",
+        "description": "Quản trị viên Hệ thống: Toàn quyền cấu hình AI/OAuth, người dùng, audit log và điều phối",
     },
     {
         "username": "academy",
-        "name": "Cán bộ Học thuật",
+        "name": "Ban Học thuật (Master Curators)",
         "role": "ACADEMY",
         "password": "Admin@123456",
-        "description": "Quản lý môn học chuẩn, LO, Rubric, Item Bank & Master Blueprint",
+        "description": "Cán bộ Học thuật: Quản lý Kho câu hỏi PTE Speaking, Cấu hình Dạng bài, Ma trận Đề thi, Rubrics",
     },
     {
         "username": "examiner",
-        "name": "Cán bộ Khảo thí",
+        "name": "Cán bộ Khảo thí (Exam Board)",
         "role": "EXAMINER",
         "password": "Examiner@123456",
-        "description": "Quản lý học kỳ, mở môn thi, danh sách sinh viên, ca thi & phân bổ mã đề ATA",
+        "description": "Cán bộ Khảo thí: Quản lý học kỳ, kỳ thi, ca thi, danh sách sinh viên & phê duyệt điểm số",
     },
     {
-        "username": "teacher1",
+        "username": "teacher",
         "name": "Giảng viên Chấm thi",
         "role": "TEACHER",
         "password": "Teacher@123456",
-        "description": "Coi thi trực tiếp (/proctor) và chấm điểm bài thi (/grading)",
+        "description": "Giảng viên Chấm thi: Giám sát phòng thi trực tiếp (/proctor) và chấm bài (/grading)",
     },
     {
-        "username": "student1",
+        "username": "student",
         "name": "Nguyễn Văn An (Sinh viên)",
         "role": "STUDENT",
         "password": "Student@123456",
-        "description": "Thí sinh làm bài thi vấn đáp trên ứng dụng Student App Desktop",
+        "description": "Thí sinh: Đăng nhập vào ứng dụng Student App Desktop để làm bài thi vấn đáp",
     },
 ]
 

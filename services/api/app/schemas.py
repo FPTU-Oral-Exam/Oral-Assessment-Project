@@ -333,7 +333,7 @@ class GradeOutput(Input):
 
 
 class RoleIn(Input):
-    role: Literal["SYSTEM_ADMIN", "EXAMINER", "TEACHER", "STUDENT", "ADMIN", "REVIEWER"]
+    role: Literal["SYSTEM_ADMIN", "ACADEMY", "EXAMINER", "TEACHER", "STUDENT", "ADMIN", "REVIEWER"]
 
 
 class QuestionBankItemIn(Input):

@@ -155,19 +155,22 @@ def login(body: schemas.Login, request: Request, response: Response, db: Session
         cache.expire(key, 65)
         if count > 30:
             fail(429, "RATE_LIMITED", "Quá nhiều lần đăng nhập; thử lại sau 1 phút")
-    user = db.scalar(select(User).where(func.lower(User.username) == clean_username.lower()))
+    user = db.scalar(
+        select(User).where(func.lower(User.username) == clean_username.lower())
+    )
     verified = False
     if user:
         verified = verify_password(body.password, user.password_hash) or verify_password(clean_password, user.password_hash)
-        # Development fallback passwords for seed/demo convenience
-        if not verified and user.username.lower() in {"admin", "academy"}:
-            verified = clean_password in {"admin", "admin123", "Admin@123456"}
-        elif not verified and user.username.lower() == "teacher1":
-            verified = clean_password in {"teacher", "teacher123", "Teacher@123456"}
-        elif not verified and user.username.lower() == "examiner":
-            verified = clean_password in {"examiner", "examiner123", "Examiner@123456"}
-        elif not verified and user.username.lower() == "student1":
-            verified = clean_password in {"student", "student123", "Student@123456"}
+        # Development fallback passwords for the 5 standardized accounts only
+        u_name = user.username.lower()
+        if not verified and u_name in {"admin", "academy"}:
+            verified = clean_password in {"Admin@123456", "admin123", "admin"}
+        elif not verified and u_name == "examiner":
+            verified = clean_password in {"Examiner@123456", "examiner123", "examiner"}
+        elif not verified and u_name == "teacher":
+            verified = clean_password in {"Teacher@123456", "teacher123", "teacher"}
+        elif not verified and u_name == "student":
+            verified = clean_password in {"Student@123456", "student123", "student"}
     else:
         verify_password(clean_password, dummy_hash)
 

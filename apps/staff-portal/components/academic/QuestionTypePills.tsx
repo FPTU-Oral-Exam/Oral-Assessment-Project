@@ -20,6 +20,7 @@ const PILLS: PillConfig[] = [
   { key: 'DI', badge: 'DI', label: 'Describe Image', subLabel: 'Mô tả hình ảnh' },
   { key: 'SI', badge: 'SI', label: 'Situation', subLabel: 'Tình huống' },
   { key: 'RL', badge: 'RL', label: 'Re-tell Lecture', subLabel: 'Kể lại bài giảng' },
+  { key: 'ASQ', badge: 'ASQ', label: 'Short Question', subLabel: 'Trả lời ngắn' },
 ];
 
 export default function QuestionTypePills() {

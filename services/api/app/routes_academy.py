@@ -578,6 +578,7 @@ _QUESTION_TYPE_DEFAULTS = [
     {"type": "DI", "name": "Describe Image", "description": "Describe the image in detail within 40 seconds.", "default_prep_time": 25, "default_response_time": 40, "max_score": 10.0},
     {"type": "SI", "name": "Respond to a Situation", "description": "Respond appropriately to the given situation.", "default_prep_time": 20, "default_response_time": 40, "max_score": 10.0},
     {"type": "RL", "name": "Re-tell Lecture", "description": "Re-tell the lecture content within 40 seconds.", "default_prep_time": 10, "default_response_time": 40, "max_score": 10.0},
+    {"type": "ASQ", "name": "Answer Short Question", "description": "Listen to a simple question and give a brief and accurate answer.", "default_prep_time": 3, "default_response_time": 10, "max_score": 10.0},
 ]
 
 

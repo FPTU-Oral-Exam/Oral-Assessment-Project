@@ -13,7 +13,7 @@ import type {
   GeneratedSampleExam,
   QuestionTypeConfig,
 } from '@/types/academic';
-import { QUESTION_TYPES_META } from '@/types/academic';
+import { QUESTION_TYPES_META, DEFAULT_QUESTION_TYPE_CONFIGS } from '@/types/academic';
 import { academyService } from '@/services/academy.service';
 
 /** Backend Question Type Config schema (from /api/academy/question-types) */
@@ -93,7 +93,7 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
   const [rubrics, setRubrics] = useState<RubricSchema[]>([]);
   const [questionTypeConfigs, setQuestionTypeConfigs] = useState<
     Record<QuestionType, QuestionTypeConfig>
-  >({} as Record<QuestionType, QuestionTypeConfig>);
+  >(DEFAULT_QUESTION_TYPE_CONFIGS);
 
   // Loading & error states
   const [isLoading, setIsLoading] = useState(true);
@@ -149,41 +149,26 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
           if (!activeRubricId) setActiveRubricId(loadedRubrics[0].id);
         }
 
-        // Question Type Configs (map to local format)
+        // Question Type Configs (map to local format with safe defaults)
         if (qts.status === 'fulfilled' && qts.value.length > 0) {
           const configs = qts.value as BackendQuestionTypeConfig[];
-          const mapped: Record<string, QuestionTypeConfig> = {} as Record<string, QuestionTypeConfig>;
+          const mapped: Record<QuestionType, QuestionTypeConfig> = { ...DEFAULT_QUESTION_TYPE_CONFIGS };
           for (const cfg of configs) {
             const qt = cfg.type as QuestionType;
-            if (qt in QUESTION_TYPES_META) {
+            if (qt in QUESTION_TYPES_META && qt in DEFAULT_QUESTION_TYPE_CONFIGS) {
+              const base = DEFAULT_QUESTION_TYPE_CONFIGS[qt];
               mapped[qt] = {
+                ...base,
                 code: qt,
-                name: cfg.name,
+                name: cfg.name || base.name,
                 vietnamese_name: QUESTION_TYPES_META[qt].name,
-                description: cfg.description,
-                color_theme: QUESTION_TYPES_META[qt].color.substring(3) as 'blue' | 'purple' | 'emerald' | 'amber' | 'rose' | 'indigo',
-                is_active: true,
-                default_prep_time: cfg.default_prep_time,
-                min_prep_time: cfg.default_prep_time,
-                max_prep_time: cfg.default_prep_time * 2,
-                default_response_time: cfg.default_response_time,
-                min_response_time: cfg.default_response_time,
-                max_response_time: cfg.default_response_time * 2,
-                recommended_question_count: 2,
-                requires_image: false,
-                requires_audio_prompt: false,
-                requires_audio_script: false,
-                requires_key_points: false,
-                min_prompt_words: 10,
-                max_prompt_words: 100,
-                focus_pronunciation: 33,
-                focus_fluency: 33,
-                focus_content: 34,
-                focus_grammar_lexical: 0,
+                description: cfg.description || base.description,
+                default_prep_time: cfg.default_prep_time || base.default_prep_time,
+                default_response_time: cfg.default_response_time || base.default_response_time,
               };
             }
           }
-          setQuestionTypeConfigs(mapped as Record<QuestionType, QuestionTypeConfig>);
+          setQuestionTypeConfigs(mapped);
         }
       } catch (err) {
         if (!cancelled) {
@@ -220,6 +205,7 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
       DI: questions.filter((q) => q.type === 'DI').length,
       SI: questions.filter((q) => q.type === 'SI').length,
       RL: questions.filter((q) => q.type === 'RL').length,
+      ASQ: questions.filter((q) => q.type === 'ASQ').length,
     };
     return counts;
   }, [questions]);
@@ -470,7 +456,7 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
       });
       setQuestionTypeConfigs((prev) => ({
         ...prev,
-        [type]: { ...prev[type], ...data },
+        [type]: { ...(prev[type] || DEFAULT_QUESTION_TYPE_CONFIGS[type]), ...data },
       }));
     } catch (err) {
       console.error('[AcademicContext] Failed to update question type config:', err);
@@ -481,38 +467,25 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
   const resetQuestionTypeConfigs = () => {
     // Reload from backend
     academyService.getQuestionTypeConfigs().then((configs) => {
-      const mapped: Record<string, QuestionTypeConfig> = {} as Record<string, QuestionTypeConfig>;
+      const mapped: Record<QuestionType, QuestionTypeConfig> = { ...DEFAULT_QUESTION_TYPE_CONFIGS };
       for (const cfg of configs as BackendQuestionTypeConfig[]) {
         const qt = cfg.type as QuestionType;
-        if (qt in QUESTION_TYPES_META) {
+        if (qt in QUESTION_TYPES_META && qt in DEFAULT_QUESTION_TYPE_CONFIGS) {
+          const base = DEFAULT_QUESTION_TYPE_CONFIGS[qt];
           mapped[qt] = {
+            ...base,
             code: qt,
-            name: cfg.name,
+            name: cfg.name || base.name,
             vietnamese_name: QUESTION_TYPES_META[qt].name,
-            description: cfg.description,
-            color_theme: 'blue',
-            is_active: true,
-            default_prep_time: cfg.default_prep_time,
-            min_prep_time: cfg.default_prep_time,
-            max_prep_time: cfg.default_prep_time * 2,
-            default_response_time: cfg.default_response_time,
-            min_response_time: cfg.default_response_time,
-            max_response_time: cfg.default_response_time * 2,
-            recommended_question_count: 2,
-            requires_image: false,
-            requires_audio_prompt: false,
-            requires_audio_script: false,
-            requires_key_points: false,
-            min_prompt_words: 10,
-            max_prompt_words: 100,
-            focus_pronunciation: 33,
-            focus_fluency: 33,
-            focus_content: 34,
-            focus_grammar_lexical: 0,
+            description: cfg.description || base.description,
+            default_prep_time: cfg.default_prep_time || base.default_prep_time,
+            default_response_time: cfg.default_response_time || base.default_response_time,
           };
         }
       }
-      setQuestionTypeConfigs(mapped as Record<QuestionType, QuestionTypeConfig>);
+      setQuestionTypeConfigs(mapped);
+    }).catch(() => {
+      setQuestionTypeConfigs(DEFAULT_QUESTION_TYPE_CONFIGS);
     });
   };
 

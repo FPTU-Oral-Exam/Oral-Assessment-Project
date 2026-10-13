@@ -1165,3 +1165,41 @@ class TestAuthorization:
         client = TestClient(app)
         response = client.get("/api/examiner/semesters")
         assert response.status_code == 401
+
+
+# ============================================================================
+# Results Overview & Global Candidate Directory Tests
+# ============================================================================
+
+
+class TestExaminerAggregatedEndpoints:
+    """Test one-shot aggregation endpoints designed for Examiner Portal."""
+
+    def test_results_overview_endpoint(self, env):
+        """Test GET /api/examiner/results/overview returns aggregated metrics."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        res = examiner.get("/api/examiner/results/overview")
+        data = ok(res)
+        assert "total_slots" in data
+        assert "total_students" in data
+        assert "completed_students" in data
+        assert "locked_slots" in data
+        assert "discrepancy_slots" in data
+        assert isinstance(data["slots"], list)
+
+    def test_global_candidates_endpoint(self, env):
+        """Test GET /api/examiner/candidates returns global candidate pool KPIs."""
+        clients, _ = env
+        examiner = clients["examiner"]
+
+        res = examiner.get("/api/examiner/candidates")
+        data = ok(res)
+        assert "total" in data
+        assert "eligible_count" in data
+        assert "disqualified_count" in data
+        assert "assigned_count" in data
+        assert "unassigned_count" in data
+        assert isinstance(data["candidates"], list)
+

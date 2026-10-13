@@ -92,7 +92,7 @@ export class AcademyService {
       if (params?.search) searchParams.set('search', params.search);
 
       const qs = searchParams.toString();
-      const url = qs ? `/api/academy/questions?${qs}` : '/api/academy/questions';
+      const url = qs ? `/academy/questions?${qs}` : '/academy/questions';
       return await apiClient.get<AcademicQuestionItem[]>(url);
     } catch {
       // Fallback khi backend endpoint chưa triển khai (mock handled at Context level)
@@ -101,23 +101,23 @@ export class AcademyService {
   }
 
   async getQuestionById(id: string): Promise<AcademicQuestionItem> {
-    return apiClient.get<AcademicQuestionItem>(`/api/academy/questions/${id}`);
+    return apiClient.get<AcademicQuestionItem>(`/academy/questions/${id}`);
   }
 
   async createQuestion(data: CreateQuestionPayload): Promise<AcademicQuestionItem> {
-    return apiClient.post<AcademicQuestionItem>('/api/academy/questions', data);
+    return apiClient.post<AcademicQuestionItem>('/academy/questions', data);
   }
 
   async updateQuestion(id: string, data: Partial<CreateQuestionPayload>): Promise<AcademicQuestionItem> {
-    return apiClient.put<AcademicQuestionItem>(`/api/academy/questions/${id}`, data);
+    return apiClient.put<AcademicQuestionItem>(`/academy/questions/${id}`, data);
   }
 
   async deleteQuestion(id: string): Promise<{ ok: boolean }> {
-    return apiClient.delete<{ ok: boolean }>(`/api/academy/questions/${id}`);
+    return apiClient.delete<{ ok: boolean }>(`/academy/questions/${id}`);
   }
 
   async approveQuestion(id: string): Promise<AcademicQuestionItem> {
-    return apiClient.post<AcademicQuestionItem>(`/api/academy/questions/${id}/approve`, {});
+    return apiClient.post<AcademicQuestionItem>(`/academy/questions/${id}/approve`, {});
   }
 
   // ==========================================
@@ -126,26 +126,26 @@ export class AcademyService {
 
   async getMatrices(): Promise<ExamBlueprintMatrix[]> {
     try {
-      return await apiClient.get<ExamBlueprintMatrix[]>('/api/academy/matrices');
+      return await apiClient.get<ExamBlueprintMatrix[]>('/academy/matrices');
     } catch {
       return [];
     }
   }
 
   async getMatrixById(id: string): Promise<ExamBlueprintMatrix> {
-    return apiClient.get<ExamBlueprintMatrix>(`/api/academy/matrices/${id}`);
+    return apiClient.get<ExamBlueprintMatrix>(`/academy/matrices/${id}`);
   }
 
   async createMatrix(data: CreateMatrixPayload): Promise<ExamBlueprintMatrix> {
-    return apiClient.post<ExamBlueprintMatrix>('/api/academy/matrices', data);
+    return apiClient.post<ExamBlueprintMatrix>('/academy/matrices', data);
   }
 
   async updateMatrix(id: string, data: Partial<CreateMatrixPayload>): Promise<ExamBlueprintMatrix> {
-    return apiClient.put<ExamBlueprintMatrix>(`/api/academy/matrices/${id}`, data);
+    return apiClient.put<ExamBlueprintMatrix>(`/academy/matrices/${id}`, data);
   }
 
   async deleteMatrix(id: string): Promise<{ ok: boolean }> {
-    return apiClient.delete<{ ok: boolean }>(`/api/academy/matrices/${id}`);
+    return apiClient.delete<{ ok: boolean }>(`/academy/matrices/${id}`);
   }
 
   async getStockHealth(matrixId: string): Promise<{
@@ -153,11 +153,11 @@ export class AcademyService {
     is_ready_for_publishing: boolean;
     health_breakdown: StockHealthStatus[];
   }> {
-    return apiClient.get(`/api/academy/matrices/${matrixId}/stock-health`);
+    return apiClient.get(`/academy/matrices/${matrixId}/stock-health`);
   }
 
   async generateSampleExam(matrixId: string): Promise<GeneratedSampleExam> {
-    return apiClient.post<GeneratedSampleExam>(`/api/academy/matrices/${matrixId}/generate-sample`, {});
+    return apiClient.post<GeneratedSampleExam>(`/academy/matrices/${matrixId}/generate-sample`, {});
   }
 
   // ==========================================
@@ -166,26 +166,26 @@ export class AcademyService {
 
   async getRubrics(): Promise<RubricSchema[]> {
     try {
-      return await apiClient.get<RubricSchema[]>('/api/academy/rubrics');
+      return await apiClient.get<RubricSchema[]>('/academy/rubrics');
     } catch {
       return [];
     }
   }
 
   async getRubricById(id: string): Promise<RubricSchema> {
-    return apiClient.get<RubricSchema>(`/api/academy/rubrics/${id}`);
+    return apiClient.get<RubricSchema>(`/academy/rubrics/${id}`);
   }
 
   async createRubric(data: Omit<RubricSchema, 'id' | 'updated_at'>): Promise<RubricSchema> {
-    return apiClient.post<RubricSchema>('/api/academy/rubrics', data);
+    return apiClient.post<RubricSchema>('/academy/rubrics', data);
   }
 
   async updateRubric(id: string, data: Partial<RubricSchema>): Promise<RubricSchema> {
-    return apiClient.put<RubricSchema>(`/api/academy/rubrics/${id}`, data);
+    return apiClient.put<RubricSchema>(`/academy/rubrics/${id}`, data);
   }
 
   async deleteRubric(id: string): Promise<{ ok: boolean }> {
-    return apiClient.delete<{ ok: boolean }>(`/api/academy/rubrics/${id}`);
+    return apiClient.delete<{ ok: boolean }>(`/academy/rubrics/${id}`);
   }
 
   // ==========================================
@@ -194,7 +194,7 @@ export class AcademyService {
 
   async getQuestionTypeConfigs(): Promise<QuestionTypeConfigResponse[]> {
     try {
-      return await apiClient.get<QuestionTypeConfigResponse[]>('/api/academy/question-types');
+      return await apiClient.get<QuestionTypeConfigResponse[]>('/academy/question-types');
     } catch {
       return [];
     }
@@ -211,7 +211,7 @@ export class AcademyService {
       max_score: number;
     }
   ): Promise<QuestionTypeConfigResponse> {
-    return apiClient.put<QuestionTypeConfigResponse>(`/api/academy/question-types/${type}`, data);
+    return apiClient.put<QuestionTypeConfigResponse>(`/academy/question-types/${type}`, data);
   }
 }
 

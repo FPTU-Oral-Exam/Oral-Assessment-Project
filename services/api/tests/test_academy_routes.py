@@ -227,15 +227,15 @@ class TestAcademicRubrics:
         clients, _ = env
         academy = clients["academy"]
 
-        # 1. List Question Types - should have 6 default types after init
+        # 1. List Question Types - should have 7 default types after init (including ASQ)
         res_list = academy.get("/api/academy/question-types")
         assert res_list.status_code == 200
         qt_list = res_list.json()
-        assert len(qt_list) == 6
+        assert len(qt_list) == 7
 
         # Verify expected types exist
         type_codes = {item["type"] for item in qt_list}
-        expected = {"RA", "RS", "GD", "DI", "SI", "RL"}
+        expected = {"RA", "RS", "GD", "DI", "SI", "RL", "ASQ"}
         assert expected.issubset(type_codes), f"Missing types: {expected - type_codes}"
 
         # 2. Get specific question type config

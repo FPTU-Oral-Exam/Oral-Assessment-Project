@@ -8,7 +8,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "services" / "api"))
 
-from scripts.import_pte_bank_to_db import parse_question_data, EXERCISE_MAP, import_pte_bank
+try:
+    from scripts.import_pte_bank_to_db import parse_question_data, EXERCISE_MAP, import_pte_bank
+except ModuleNotFoundError:
+    from import_pte_bank_to_db import parse_question_data, EXERCISE_MAP, import_pte_bank
 
 
 def test_parse_read_aloud_item():

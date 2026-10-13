@@ -2,7 +2,7 @@ import io
 import random
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from . import schemas as s
@@ -44,9 +44,10 @@ def data(row, *fields):
 
 # ─────────────────────────────────────────────────────────────────
 # Semester endpoints
+# Base path: /examiner/semesters
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/semesters")
+@router.get("/examiner/semesters")
 def list_semesters(db: Session = Depends(get_db), user=Depends(staff)):
     semesters = db.scalars(select(Semester).order_by(Semester.created_at.desc())).all()
     return [
@@ -67,7 +68,7 @@ def list_semesters(db: Session = Depends(get_db), user=Depends(staff)):
     ]
 
 
-@router.post("/semesters", status_code=201)
+@router.post("/examiner/semesters", status_code=201)
 def create_semester(body: s.SemesterIn, db: Session = Depends(get_db), user=Depends(examiner)):
     existing = db.scalar(
         select(Semester).where(Semester.year == body.year, Semester.term == body.term)
@@ -80,7 +81,7 @@ def create_semester(body: s.SemesterIn, db: Session = Depends(get_db), user=Depe
     return {"id": row.id, "name": row.name, "status": row.status}
 
 
-@router.get("/semesters/{semester_id}")
+@router.get("/examiner/semesters/{semester_id}")
 def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     semester = by_id(db, Semester, semester_id)
 
@@ -131,7 +132,7 @@ def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(s
     }
 
 
-@router.post("/semesters/{semester_id}/activate")
+@router.post("/examiner/semesters/{semester_id}/activate")
 def activate_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     row = by_id(db, Semester, semester_id, lock=True)
     row.status = "ACTIVE"
@@ -140,7 +141,7 @@ def activate_semester(semester_id: str, db: Session = Depends(get_db), user=Depe
     return {"status": "ACTIVE"}
 
 
-@router.post("/semesters/{semester_id}/complete")
+@router.post("/examiner/semesters/{semester_id}/complete")
 def complete_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     row = by_id(db, Semester, semester_id, lock=True)
     row.status = "COMPLETED"
@@ -153,7 +154,7 @@ def complete_semester(semester_id: str, db: Session = Depends(get_db), user=Depe
 # Course endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/semesters/{semester_id}/courses")
+@router.get("/examiner/semesters/{semester_id}/courses")
 def list_semester_courses(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     """List all courses in a semester via sections."""
     sections = db.scalars(
@@ -173,7 +174,7 @@ def list_semester_courses(semester_id: str, db: Session = Depends(get_db), user=
     return courses
 
 
-@router.post("/semesters/{semester_id}/courses", status_code=201)
+@router.post("/examiner/semesters/{semester_id}/courses", status_code=201)
 def create_course_in_semester(
     semester_id: str,
     body: ex.CourseAddIn,
@@ -239,7 +240,7 @@ def create_course_in_semester(
     }
 
 
-@router.get("/courses")
+@router.get("/examiner/courses")
 def list_all_courses(db: Session = Depends(get_db), user=Depends(staff)):
     """List all active courses with section count and teacher."""
     courses = db.scalars(
@@ -258,7 +259,7 @@ def list_all_courses(db: Session = Depends(get_db), user=Depends(staff)):
     ]
 
 
-@router.get("/courses/{course_id}")
+@router.get("/examiner/courses/{course_id}")
 def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """Get course detail with sections count and candidate pool statistics."""
     course = by_id(db, Course, course_id)
@@ -288,7 +289,7 @@ def get_course(course_id: str, db: Session = Depends(get_db), user=Depends(staff
     }
 
 
-@router.put("/courses/{course_id}")
+@router.put("/examiner/courses/{course_id}")
 def update_course(
     course_id: str,
     body: s.CourseUpdateIn,
@@ -313,7 +314,7 @@ def update_course(
 # Section endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/courses/{course_id}/sections")
+@router.get("/examiner/courses/{course_id}/sections")
 def list_sections(course_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     sections = db.scalars(select(Section).where(Section.course_id == course_id)).all()
     result = []
@@ -330,7 +331,7 @@ def list_sections(course_id: str, db: Session = Depends(get_db), user=Depends(ex
     return result
 
 
-@router.post("/courses/{course_id}/sections", status_code=201)
+@router.post("/examiner/courses/{course_id}/sections", status_code=201)
 def create_section(course_id: str, body: s.SectionIn, db: Session = Depends(get_db), user=Depends(examiner)):
     course_access(db, course_id, user)
     if body.teacher_id:
@@ -347,7 +348,7 @@ def create_section(course_id: str, body: s.SectionIn, db: Session = Depends(get_
     }
 
 
-@router.patch("/sections/{section_id}")
+@router.patch("/examiner/sections/{section_id}")
 def update_section(section_id: str, body: s.SectionUpdateIn, db: Session = Depends(get_db), user=Depends(examiner)):
     section = by_id(db, Section, section_id, lock=True)
     course_access(db, section.course_id, user)
@@ -381,7 +382,7 @@ def update_section(section_id: str, body: s.SectionUpdateIn, db: Session = Depen
 # Exam endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/exams")
+@router.get("/examiner/exams")
 def list_all_exams(db: Session = Depends(get_db), user=Depends(staff)):
     """List all exams across courses with course_id and slot_count."""
     exams = db.scalars(
@@ -399,7 +400,7 @@ def list_all_exams(db: Session = Depends(get_db), user=Depends(staff)):
     ]
 
 
-@router.get("/courses/{course_id}/exams")
+@router.get("/examiner/courses/{course_id}/exams")
 def list_course_exams(course_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """List all exams for a course."""
     from .models import Exam
@@ -412,7 +413,7 @@ def list_course_exams(course_id: str, db: Session = Depends(get_db), user=Depend
     ]
 
 
-@router.post("/courses/{course_id}/exams", status_code=201)
+@router.post("/examiner/courses/{course_id}/exams", status_code=201)
 def create_exam(
     course_id: str,
     body: s.ExaminerExamIn,
@@ -454,7 +455,7 @@ def create_exam(
     return {**data(exam, "name", "description", "status", "time_limit", "question_count")}
 
 
-@router.get("/exams/{exam_id}")
+@router.get("/examiner/exams/{exam_id}")
 def get_exam(exam_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """Get exam detail with slot count."""
     from .models import Exam
@@ -468,7 +469,7 @@ def get_exam(exam_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     }
 
 
-@router.put("/exams/{exam_id}")
+@router.put("/examiner/exams/{exam_id}")
 def update_exam(
     exam_id: str,
     body: s.ExaminerExamIn,
@@ -495,7 +496,7 @@ def update_exam(
 # Enrollment import endpoint
 # ─────────────────────────────────────────────────────────────────
 
-@router.post("/enrollments/import")
+@router.post("/examiner/enrollments/import")
 async def import_enrollments(
     course_id: str = Form(),
     file: UploadFile = File(),
@@ -573,7 +574,7 @@ async def import_enrollments(
 # Enrollment Management endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/sections/{section_id}/enrollments")
+@router.get("/examiner/sections/{section_id}/enrollments")
 def list_section_enrollments(
     section_id: str,
     db: Session = Depends(get_db),
@@ -601,7 +602,7 @@ def list_section_enrollments(
     ]
 
 
-@router.delete("/enrollments/{enrollment_id}")
+@router.delete("/examiner/enrollments/{enrollment_id}")
 def delete_enrollment(
     enrollment_id: str,
     db: Session = Depends(get_db),
@@ -626,7 +627,7 @@ def delete_enrollment(
 # ScheduleSlot endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/exams/{exam_id}/slots")
+@router.get("/examiner/exams/{exam_id}/slots")
 def list_slots(exam_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     slots = db.scalars(
         select(ScheduleSlot)
@@ -647,7 +648,7 @@ def list_slots(exam_id: str, db: Session = Depends(get_db), user=Depends(staff))
     ]
 
 
-@router.post("/exams/{exam_id}/slots", status_code=201)
+@router.post("/examiner/exams/{exam_id}/slots", status_code=201)
 def create_slots(exam_id: str, body: s.CreateSlotsIn, db: Session = Depends(get_db), user=Depends(examiner)):
     """Create multiple slots and auto-assign enrolled students evenly."""
     from .models import Exam
@@ -716,7 +717,7 @@ def create_slots(exam_id: str, body: s.CreateSlotsIn, db: Session = Depends(get_
 # Slot Detail endpoint
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/slots/{slot_id}")
+@router.get("/examiner/slots/{slot_id}")
 def get_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     """Get slot details including exam_id."""
     slot = by_id(db, ScheduleSlot, slot_id)
@@ -740,7 +741,7 @@ def get_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     }
 
 
-@router.post("/slots/{slot_id}/lock")
+@router.post("/examiner/slots/{slot_id}/lock")
 def lock_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     row = by_id(db, ScheduleSlot, slot_id, lock=True)
     row.grade_locked = True
@@ -749,7 +750,7 @@ def lock_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner
     return {"grade_locked": True}
 
 
-@router.post("/slots/{slot_id}/unlock")
+@router.post("/examiner/slots/{slot_id}/unlock")
 def unlock_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     row = by_id(db, ScheduleSlot, slot_id, lock=True)
     row.grade_locked = False
@@ -762,7 +763,7 @@ def unlock_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examin
 # Teacher assignment endpoint
 # ─────────────────────────────────────────────────────────────────
 
-@router.post("/slots/{slot_id}/assign-teacher")
+@router.post("/examiner/slots/{slot_id}/assign-teacher")
 def assign_teacher_to_slot(
     slot_id: str,
     teacher_id: str = Form(),
@@ -889,7 +890,7 @@ def _assemble_slot_variant(
     return variant
 
 
-@router.post("/exams/{exam_id}/generate-variants")
+@router.post("/examiner/exams/{exam_id}/generate-variants")
 def generate_variants_for_exam(
     exam_id: str,
     db: Session = Depends(get_db),
@@ -977,7 +978,7 @@ def generate_variants_for_exam(
     }
 
 
-@router.post("/slots/{slot_id}/generate-variant")
+@router.post("/examiner/slots/{slot_id}/generate-variant")
 def generate_variant_for_slot(
     slot_id: str,
     db: Session = Depends(get_db),
@@ -1016,7 +1017,7 @@ def generate_variant_for_slot(
     }
 
 
-@router.post("/exams/{exam_id}/publish")
+@router.post("/examiner/exams/{exam_id}/publish")
 def publish_examiner_exam(
     exam_id: str,
     db: Session = Depends(get_db),
@@ -1034,7 +1035,145 @@ def publish_examiner_exam(
 # Results and FAP Export endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/slots/{slot_id}/results")
+@router.get("/examiner/results/overview")
+def results_overview(
+    semester_id: str = None,
+    course_id: str = None,
+    status: str = None,
+    grade_locked: bool = None,
+    search: str = None,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Aggregated Results Overview for Examiner Portal (Single round-trip, eliminates N+1)."""
+    stmt = (
+        select(ScheduleSlot, Exam, Course, Semester)
+        .join(Exam, Exam.id == ScheduleSlot.exam_id)
+        .join(Course, Course.id == Exam.course_id)
+        .outerjoin(Semester, Semester.id == Course.semester_id)
+    )
+
+    if semester_id:
+        stmt = stmt.where(Course.semester_id == semester_id)
+    if course_id:
+        stmt = stmt.where(Course.id == course_id)
+    if status:
+        stmt = stmt.where(ScheduleSlot.status == status)
+    if grade_locked is not None:
+        stmt = stmt.where(ScheduleSlot.grade_locked == grade_locked)
+
+    stmt = stmt.order_by(ScheduleSlot.date.desc(), ScheduleSlot.start_time.asc())
+    rows = db.execute(stmt).all()
+
+    slot_items = []
+    total_students_sum = 0
+    completed_students_sum = 0
+    locked_slots_count = 0
+    discrepancy_slots_count = 0
+
+    for slot, exam, course, semester in rows:
+        # Search filter (room, course code, course name, exam name)
+        if search:
+            search_str = search.lower().strip()
+            match = (
+                search_str in (slot.room or "").lower()
+                or search_str in (course.code or "").lower()
+                or search_str in (course.name or "").lower()
+                or search_str in (exam.name or "").lower()
+            )
+            if not match:
+                continue
+
+        # Teacher resolution
+        teacher = None
+        if slot.teacher_id:
+            teacher = db.get(User, slot.teacher_id)
+        elif slot.batch_id:
+            batch = db.get(ExamBatch, slot.batch_id)
+            if batch and batch.assigned_teacher_id:
+                teacher = db.get(User, batch.assigned_teacher_id)
+
+        # Assigned students in this slot
+        assignments = db.scalars(
+            select(SlotAssignment).where(SlotAssignment.slot_id == slot.id)
+        ).all()
+        student_ids = [a.student_id for a in assignments]
+        student_count = len(student_ids)
+
+        completed_count = 0
+        discrepancy_count = 0
+        avg_score = None
+
+        if student_ids:
+            sessions = db.scalars(
+                select(ExamSession).where(
+                    ExamSession.exam_id == exam.id,
+                    ExamSession.student_id.in_(student_ids),
+                    ExamSession.deleted_at.is_(None),
+                )
+            ).all()
+
+            completed_sessions = [s for s in sessions if s.status in {"SUBMITTED", "GRADED", "COMPLETED"}]
+            completed_count = len(completed_sessions)
+
+            valid_scores = [s.final_score for s in completed_sessions if s.final_score is not None]
+            if valid_scores:
+                avg_score = round(sum(valid_scores) / len(valid_scores), 2)
+
+            # Check discrepancies
+            session_ids = [s.id for s in completed_sessions]
+            if session_ids:
+                flagged_attempts = db.scalar(
+                    select(func.count(Attempt.id)).where(
+                        Attempt.session_id.in_(session_ids),
+                        Attempt.flag_discrepancy.is_(True),
+                    )
+                ) or 0
+                discrepancy_count = flagged_attempts
+
+        if slot.grade_locked:
+            locked_slots_count += 1
+        if discrepancy_count > 0:
+            discrepancy_slots_count += 1
+
+        total_students_sum += student_count
+        completed_students_sum += completed_count
+
+        slot_items.append({
+            "slot_id": slot.id,
+            "slot_number": slot.slot_number,
+            "room": slot.room,
+            "date": slot.date,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+            "status": slot.status,
+            "grade_locked": bool(slot.grade_locked),
+            "teacher_id": teacher.id if teacher else None,
+            "teacher_name": teacher.name if teacher else None,
+            "exam_id": exam.id,
+            "exam_name": exam.name,
+            "course_id": course.id,
+            "course_code": course.code,
+            "course_name": course.name,
+            "semester_id": semester.id if semester else None,
+            "semester_name": semester.name if semester else None,
+            "student_count": student_count,
+            "completed_count": completed_count,
+            "discrepancy_count": discrepancy_count,
+            "average_score": avg_score,
+        })
+
+    return {
+        "total_slots": len(slot_items),
+        "total_students": total_students_sum,
+        "completed_students": completed_students_sum,
+        "locked_slots": locked_slots_count,
+        "discrepancy_slots": discrepancy_slots_count,
+        "slots": slot_items,
+    }
+
+
+@router.get("/examiner/slots/{slot_id}/results")
 def slot_results(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     """Get all results for a slot with student info."""
     slot = by_id(db, ScheduleSlot, slot_id)
@@ -1082,7 +1221,7 @@ def slot_results(slot_id: str, db: Session = Depends(get_db), user=Depends(exami
     return results
 
 
-@router.get("/slots/{slot_id}/export")
+@router.get("/examiner/slots/{slot_id}/export")
 def export_fap(slot_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     """Export results in FAP format as Excel."""
     from openpyxl import Workbook
@@ -1151,7 +1290,7 @@ def export_fap(slot_id: str, db: Session = Depends(get_db), user=Depends(examine
 # ReEvaluation endpoint
 # ─────────────────────────────────────────────────────────────────
 
-@router.post("/attempts/{attempt_id}/request-re-eval")
+@router.post("/examiner/attempts/{attempt_id}/request-re-eval")
 def request_re_evaluation(
     attempt_id: str,
     body: s.ReEvaluationIn,
@@ -1186,7 +1325,7 @@ def request_re_evaluation(
 # Student Attempts endpoint
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/students/{student_id}/attempts")
+@router.get("/examiner/students/{student_id}/attempts")
 def get_student_attempts(
     student_id: str,
     exam_id: str = None,
@@ -1241,7 +1380,7 @@ def get_student_attempts(
 # Master Courses endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/master-courses")
+@router.get("/examiner/master-courses")
 def list_master_courses(db: Session = Depends(get_db), user=Depends(examiner)):
     """List all master courses (university-wide course catalog)."""
     courses = db.scalars(select(MasterCourse).order_by(MasterCourse.code)).all()
@@ -1286,7 +1425,7 @@ def list_master_courses(db: Session = Depends(get_db), user=Depends(examiner)):
 # Course Candidates (Candidate Pool) endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.post("/courses/{course_id}/candidates/import", status_code=200)
+@router.post("/examiner/courses/{course_id}/candidates/import", status_code=200)
 async def import_candidates(
     course_id: str,
     file: UploadFile = File(...),
@@ -1380,7 +1519,7 @@ async def import_candidates(
     }
 
 
-@router.get("/courses/{course_id}/candidates")
+@router.get("/examiner/courses/{course_id}/candidates")
 def list_candidates(
     course_id: str,
     eligibility_status: str = None,
@@ -1428,11 +1567,117 @@ def list_candidates(
     return result
 
 
+@router.get("/examiner/candidates")
+def list_global_candidates(
+    semester_id: str = None,
+    course_id: str = None,
+    eligibility_status: str = None,
+    allocation_status: str = None,
+    search: str = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """List all candidates across courses with global KPIs (For /students Candidate Hub)."""
+    base_query = (
+        select(CourseCandidate, Course, Semester)
+        .join(Course, Course.id == CourseCandidate.course_id)
+        .outerjoin(Semester, Semester.id == Course.semester_id)
+    )
+
+    if semester_id:
+        base_query = base_query.where(Course.semester_id == semester_id)
+    if course_id:
+        base_query = base_query.where(CourseCandidate.course_id == course_id)
+    if search:
+        search_str = f"%{search.strip()}%"
+        base_query = base_query.where(
+            or_(
+                CourseCandidate.roll_number.ilike(search_str),
+                CourseCandidate.full_name.ilike(search_str),
+            )
+        )
+
+    # 1. Compute overall KPI metrics
+    stats_rows = db.execute(
+        select(CourseCandidate.eligibility_status, CourseCandidate.allocation_status)
+        .join(Course, Course.id == CourseCandidate.course_id)
+        .outerjoin(Semester, Semester.id == Course.semester_id)
+        .where(
+            *(
+                [Course.semester_id == semester_id] if semester_id else []
+            ) + (
+                [CourseCandidate.course_id == course_id] if course_id else []
+            ) + (
+                [or_(CourseCandidate.roll_number.ilike(f"%{search.strip()}%"), CourseCandidate.full_name.ilike(f"%{search.strip()}%"))] if search else []
+            )
+        )
+    ).all()
+
+    total_stat = len(stats_rows)
+    eligible_stat = sum(1 for r in stats_rows if r[0] == "ELIGIBLE")
+    disqualified_stat = sum(1 for r in stats_rows if r[0] == "DISQUALIFIED")
+    assigned_stat = sum(1 for r in stats_rows if r[1] == "ASSIGNED")
+    unassigned_stat = sum(1 for r in stats_rows if r[1] == "UNASSIGNED")
+
+    # 2. Apply status filters for paginated list
+    filtered_query = base_query
+    if eligibility_status:
+        filtered_query = filtered_query.where(CourseCandidate.eligibility_status == eligibility_status)
+    if allocation_status:
+        filtered_query = filtered_query.where(CourseCandidate.allocation_status == allocation_status)
+
+    paged_rows = db.execute(
+        filtered_query.order_by(CourseCandidate.roll_number.asc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+    candidates = []
+    for cand, crs, sem in paged_rows:
+        room_name = None
+        batch_name = None
+        if cand.assigned_slot_id:
+            slot = db.get(ScheduleSlot, cand.assigned_slot_id)
+            if slot:
+                room_name = slot.room
+                if slot.batch_id:
+                    batch = db.get(ExamBatch, slot.batch_id)
+                    if batch:
+                        batch_name = batch.name
+
+        candidates.append({
+            "id": cand.id,
+            "roll_number": cand.roll_number,
+            "full_name": cand.full_name,
+            "eligibility_status": cand.eligibility_status,
+            "allocation_status": cand.allocation_status,
+            "course_id": crs.id,
+            "course_code": crs.code,
+            "course_name": crs.name,
+            "semester_id": sem.id if sem else None,
+            "semester_name": sem.name if sem else None,
+            "slot_room": room_name,
+            "batch_name": batch_name,
+            "assigned_slot_id": cand.assigned_slot_id,
+        })
+
+    return {
+        "total": total_stat,
+        "eligible_count": eligible_stat,
+        "disqualified_count": disqualified_stat,
+        "assigned_count": assigned_stat,
+        "unassigned_count": unassigned_stat,
+        "candidates": candidates,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────
 # Course Detail with Stats
 # ─────────────────────────────────────────────────────────────────
 
-@router.get("/courses/{course_id}/detail")
+@router.get("/examiner/courses/{course_id}/detail")
 def get_course_detail(
     course_id: str,
     db: Session = Depends(get_db),
@@ -1492,7 +1737,7 @@ def get_course_detail(
 # Exam Batches (Auto-Allocation) endpoints
 # ─────────────────────────────────────────────────────────────────
 
-@router.post("/exams/{exam_id}/batches", status_code=201)
+@router.post("/examiner/exams/{exam_id}/batches", status_code=201)
 def create_batch_and_allocate(
     exam_id: str,
     body: ex.BatchCreateIn,
@@ -1620,7 +1865,7 @@ def create_batch_and_allocate(
     }
 
 
-@router.get("/exams/{exam_id}/batches")
+@router.get("/examiner/exams/{exam_id}/batches")
 def list_batches(
     exam_id: str,
     db: Session = Depends(get_db),
@@ -1661,7 +1906,7 @@ def list_batches(
     return result
 
 
-@router.get("/batches/{batch_id}/students")
+@router.get("/examiner/batches/{batch_id}/students")
 def list_batch_students(
     batch_id: str,
     db: Session = Depends(get_db),

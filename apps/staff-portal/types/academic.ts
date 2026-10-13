@@ -1,4 +1,4 @@
-export type QuestionType = 'RA' | 'RS' | 'GD' | 'DI' | 'SI' | 'RL';
+export type QuestionType = 'RA' | 'RS' | 'GD' | 'DI' | 'SI' | 'RL' | 'ASQ';
 
 export type SkillCategory = 'SPEAKING' | 'WRITING' | 'READING' | 'LISTENING';
 
@@ -84,6 +84,17 @@ export const QUESTION_TYPES_META: Record<QuestionType, QuestionTypeMeta> = {
     borderColor: 'border-sky-500/30',
     defaultPrepTime: 10,
     defaultResponseTime: 40,
+  },
+  ASQ: {
+    type: 'ASQ',
+    name: 'Answer Short Question',
+    badge: 'ASQ',
+    description: 'Lắng nghe câu hỏi vấn đáp ngắn và trả lời bằng một hoặc vài từ ngắn gọn',
+    color: 'text-cyan-400',
+    bgLight: 'bg-cyan-500/10',
+    borderColor: 'border-cyan-500/30',
+    defaultPrepTime: 3,
+    defaultResponseTime: 10,
   },
 };
 
@@ -379,5 +390,30 @@ export const DEFAULT_QUESTION_TYPE_CONFIGS: Record<QuestionType, QuestionTypeCon
     focus_fluency: 25,
     focus_content: 40,
     focus_grammar_lexical: 15,
+  },
+  ASQ: {
+    code: 'ASQ',
+    name: 'Answer Short Question',
+    vietnamese_name: 'Trả lời câu hỏi vấn đáp ngắn',
+    description: 'Nghe câu hỏi vấn đáp ngắn bằng âm thanh và đưa ra câu trả lời súc tích bằng một hoặc vài từ chuẩn xác.',
+    color_theme: 'cyan' as any,
+    is_active: true,
+    default_prep_time: 3,
+    min_prep_time: 1,
+    max_prep_time: 10,
+    default_response_time: 10,
+    min_response_time: 5,
+    max_response_time: 20,
+    recommended_question_count: 2,
+    requires_image: false,
+    requires_audio_prompt: true,
+    requires_audio_script: true,
+    requires_key_points: false,
+    min_prompt_words: 5,
+    max_prompt_words: 30,
+    focus_pronunciation: 40,
+    focus_fluency: 30,
+    focus_content: 30,
+    focus_grammar_lexical: 0,
   },
 };

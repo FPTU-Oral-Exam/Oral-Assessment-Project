@@ -28,7 +28,16 @@ export class AppApiClient {
    * Tạo URL đầy đủ với query params
    */
   private buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
-    const url = `${this.baseUrl}${path}`;
+    // If path already starts with baseUrl (e.g. path starts with '/api' while baseUrl is '/api'),
+    // normalize it to prevent duplicate prefix like '/api/api/...'
+    let cleanPath = path;
+    if (this.baseUrl && this.baseUrl !== '/' && cleanPath.startsWith(this.baseUrl)) {
+      cleanPath = cleanPath.slice(this.baseUrl.length);
+    }
+    if (!cleanPath.startsWith('/')) {
+      cleanPath = `/${cleanPath}`;
+    }
+    const url = `${this.baseUrl}${cleanPath}`;
     if (!params) return url;
 
     const searchParams = new URLSearchParams();
