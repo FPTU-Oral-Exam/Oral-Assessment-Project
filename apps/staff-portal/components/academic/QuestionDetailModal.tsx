@@ -180,11 +180,10 @@ export default function QuestionDetailModal({ question, onClose }: QuestionDetai
 
           {/* Title & Specs */}
           <div>
-            <h2 className="text-lg font-bold text-slate-900 mb-1">{question.title}</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-1">{cleanTitle(question.title, question.type)}</h2>
             <p className="text-xs text-slate-500 flex items-center gap-4">
               <span>Chuẩn bị: <strong className="text-slate-700">{question.prep_time} giây</strong></span>
               <span>Trả lời: <strong className="text-slate-700">{question.response_time} giây</strong></span>
-              <span>Đã xuất hiện: <strong className="text-slate-700">{question.usage_count} lần</strong></span>
             </p>
           </div>
 
@@ -258,17 +257,7 @@ export default function QuestionDetailModal({ question, onClose }: QuestionDetai
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-slate-200 bg-slate-50/80 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {question.tags.map((t, idx) => (
-              <span
-                key={idx}
-                className="text-[11px] bg-white text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md font-medium"
-              >
-                #{t}
-              </span>
-            ))}
-          </div>
+        <div className="px-6 py-3.5 border-t border-slate-200 bg-slate-50/80 flex items-center justify-end">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-800 transition-colors"
@@ -279,4 +268,15 @@ export default function QuestionDetailModal({ question, onClose }: QuestionDetai
       </div>
     </div>
   );
+}
+
+/**
+ * Làm sạch tiêu đề đang lưu dạng "Answer Short Question #SSQ1733276770014"
+ * → lấy phần trước dấu '#'
+ */
+function cleanTitle(rawTitle: string, _type: string): string {
+  if (!rawTitle) return '';
+  const hashIndex = rawTitle.indexOf('#');
+  const cleaned = hashIndex > 0 ? rawTitle.substring(0, hashIndex).trim() : rawTitle;
+  return cleaned.length > 100 ? cleaned.substring(0, 100) + '...' : cleaned;
 }
