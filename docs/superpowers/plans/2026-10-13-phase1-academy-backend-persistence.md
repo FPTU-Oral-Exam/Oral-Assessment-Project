@@ -472,7 +472,7 @@ git commit -m "feat(academy): implement rubrics studio and question type configu
 - Consumes: Thư mục `data/pte-speaking/`, bảng `academic_questions`
 - Produces: Nhập hơn 600 câu hỏi vào cơ sở dữ liệu với trạng thái `APPROVED`
 
-- [ ] **Step 1: Viết test cho script import**
+- [x] **Step 1: Viết test cho script import**
 
 Tạo `services/api/tests/test_pte_import.py`:
 ```python
@@ -495,12 +495,12 @@ def test_parse_read_aloud_item():
     assert parsed["status"] == "APPROVED"
 ```
 
-- [ ] **Step 2: Chạy test để xác nhận test fails**
+- [x] **Step 2: Chạy test để xác nhận test fails**
 
 Chạy: `python -m pytest services/api/tests/test_pte_import.py -v`
 Kỳ vọng: FAIL với `ModuleNotFoundError`
 
-- [ ] **Step 3: Viết script `scripts/import_pte_bank_to_db.py`**
+- [x] **Step 3: Viết script `scripts/import_pte_bank_to_db.py`**
 
 - Định nghĩa ánh xạ:
   * "Read Aloud" $\rightarrow$ `RA` (prep: 35s, resp: 40s)
@@ -513,13 +513,13 @@ Kỳ vọng: FAIL với `ModuleNotFoundError`
 - Chèn idempotently (nếu code đã tồn tại thì bỏ qua hoặc cập nhật) vào bảng `academic_questions`.
 - In báo cáo tổng kết số lượng câu hỏi đã nạp theo từng dạng bài.
 
-- [ ] **Step 4: Chạy test và chạy thử nghiệm import**
+- [x] **Step 4: Chạy test và chạy thử nghiệm import**
 
 Chạy test: `python -m pytest services/api/tests/test_pte_import.py -v` (Kỳ vọng: PASS)
 Chạy script: `python scripts/import_pte_bank_to_db.py`
 Kỳ vọng: Nạp thành công hơn 600 câu hỏi vào cơ sở dữ liệu.
 
-- [ ] **Step 5: Commit task 5**
+- [x] **Step 5: Commit task 5**
 
 ```bash
 git add scripts/import_pte_bank_to_db.py services/api/tests/test_pte_import.py
