@@ -20,6 +20,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
+import { teacherService } from '@/services';
 
 interface Workstation {
   id: number;
@@ -79,6 +80,52 @@ function ProctorContent() {
   const [isLocking, setIsLocking] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [confirmModal, setConfirmModal] = useState(false);
+  const [loadingRealData, setLoadingRealData] = useState(false);
+
+  useEffect(() => {
+    if (!slotId) return;
+
+    let isMounted = true;
+    const fetchRoom = async () => {
+      try {
+        setLoadingRealData(true);
+        const data = await teacherService.getProctorRoom(slotId);
+        if (!isMounted || !data?.candidates || data.candidates.length === 0) return;
+
+        const mapped: Workstation[] = data.candidates.map((cand, idx) => {
+          const num = (idx + 1).toString().padStart(2, '0');
+          let st: Workstation['status'] = 'READY';
+          if (cand.status === 'COMPLETED' || cand.status === 'SUBMITTED') st = 'SUBMITTED';
+          else if (cand.status === 'IN_PROGRESS') st = 'RECORDING';
+          else if (cand.status === 'DEVICE_CHECK') st = 'DEVICE_CHECK';
+
+          return {
+            id: idx + 1,
+            stationCode: `PC-${roomName}-${num}`,
+            studentId: cand.username || `SV${num}`,
+            studentName: cand.name || `Thí sinh ${num}`,
+            status: st,
+            currentQuestion: st === 'SUBMITTED' ? 3 : st === 'RECORDING' ? 2 : 1,
+            totalQuestions: 3,
+            audioUploadProgress: st === 'SUBMITTED' ? 100 : st === 'RECORDING' ? 60 : 0,
+            noiseLevel: '-45 dBFS (Tốt)',
+            lastActive: cand.started_at ? 'Đang thi' : 'Chờ vào',
+          };
+        });
+
+        setWorkstations(mapped);
+      } catch (err) {
+        console.warn('Cannot fetch real room candidates, fallback to lab preview', err);
+      } finally {
+        if (isMounted) setLoadingRealData(false);
+      }
+    };
+
+    fetchRoom();
+    return () => {
+      isMounted = false;
+    };
+  }, [slotId, roomName]);
 
   // Statistics
   const submittedCount = workstations.filter(w => w.status === 'SUBMITTED').length;

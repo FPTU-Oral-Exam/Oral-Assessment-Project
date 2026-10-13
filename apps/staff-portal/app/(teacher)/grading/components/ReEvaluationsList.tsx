@@ -7,7 +7,7 @@ import { teacherService } from '@/services';
 interface ReEvalItem {
   id: string;
   attempt_id: string;
-  session_id?: string;
+  session_id?: string | null;
   student_name: string;
   teacher_1_name: string;
   teacher_2_name: string;
