@@ -10,6 +10,8 @@ import {
   Database,
   Radio,
   ArrowRight,
+  Calendar,
+  GraduationCap,
 } from 'lucide-react';
 
 export default async function DashboardPage() {
@@ -192,24 +194,40 @@ export default async function DashboardPage() {
                       <FileCheck2 className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-purple-600">Quản lý Học kỳ & Ca thi</h3>
-                      <p className="text-xs text-slate-500">Tạo kỳ học, xếp ca thi & mã đề</p>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-purple-600">Quản lý Học kỳ</h3>
+                      <p className="text-xs text-slate-500">Tổ chức kỳ học & môn thi</p>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-purple-600 transition-all" />
                 </Link>
 
                 <Link
-                  href="/results"
+                  href="/schedule"
+                  className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600">Lịch thi & Ca thi FAP</h3>
+                      <p className="text-xs text-slate-500">Import Excel FAP, tạo ca & sinh đề ATA</p>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-blue-600 transition-all" />
+                </Link>
+
+                <Link
+                  href="/students"
                   className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40 transition-all group"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                      <Award className="w-5 h-5" />
+                      <GraduationCap className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600">Phê duyệt kết quả</h3>
-                      <p className="text-xs text-slate-500">Khóa sổ điểm & Xuất file FAP</p>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600">Danh sách Thí sinh</h3>
+                      <p className="text-xs text-slate-500">Theo dõi thông tin sinh viên các ca</p>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 group-hover:text-emerald-600 transition-all" />

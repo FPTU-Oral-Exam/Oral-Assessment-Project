@@ -661,23 +661,14 @@ export default function ScheduleClient() {
                             </Link>
                           )}
                           {isExaminer && (
-                            <>
-                              <Link
-                                href={`/results/${slot.id}`}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
-                                title="Xem bảng điểm & nghe audio"
-                              >
-                                <span>Kết quả</span>
-                                <ArrowRight className="w-3 h-3" />
-                              </Link>
-                              <Link
-                                href={`/courses/${slot.course_id}/exams?examId=${slot.exam_id}`}
-                                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
-                                title="Quản lý ca thi của môn"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </Link>
-                            </>
+                            <Link
+                              href={`/courses/${slot.course_id}/exams?examId=${slot.exam_id}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+                              title="Quản lý chi tiết ca thi của môn"
+                            >
+                              <span>Chi tiết ca</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Link>
                           )}
                         </div>
                       </td>

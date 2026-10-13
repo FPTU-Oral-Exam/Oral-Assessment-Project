@@ -247,9 +247,9 @@ export default function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleQuickLogin('examiner', 'Examiner@123456')}
+                  onClick={() => handleQuickLogin('examiner1', 'Admin@123456')}
                   className="px-2.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold border border-amber-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                  title="Cán bộ Khảo thí: /semester, /exams, /schedule, /students, /results"
+                  title="Cán bộ Khảo thí: /semester, /exams, /schedule, /students"
                 >
                   <span>⚖️ Khảo thí</span>
                 </button>

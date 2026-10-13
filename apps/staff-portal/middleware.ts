@@ -36,8 +36,6 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/exams/,
     /^\/schedule/,
     /^\/students/,
-    /^\/results/,
-    /^\/proctor/,
   ],
   TEACHER: [
     /^\/dashboard/,

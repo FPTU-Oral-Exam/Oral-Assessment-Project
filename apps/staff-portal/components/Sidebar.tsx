@@ -45,7 +45,6 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/semester', label: 'Quản lý học kỳ', icon: Calendar },
     { href: '/schedule', label: 'Lịch thi & Ca thi', icon: Calendar },
     { href: '/students', label: 'Danh sách thí sinh', icon: GraduationCap },
-    { href: '/results', label: 'Phê duyệt kết quả', icon: CheckCircle },
   ],
   TEACHER: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
