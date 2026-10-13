@@ -131,17 +131,27 @@ export interface ReEvaluationRequest {
   blind_marking?: boolean;
 }
 
+export interface BatchStudentDetail {
+  student_id?: string;
+  roll_number: string;
+  full_name: string;
+  class_code?: string;
+  room: string;
+  slot_id?: string;
+  eligibility_status?: string;
+}
+
 export interface BatchStudentsResponse {
   batch_id: string;
   name: string;
+  total_assigned?: number;
+  students?: BatchStudentDetail[];
   rooms: {
     room: string;
     slot_id: string;
-    students: {
-      student_id: string;
-      roll_number: string;
-      full_name: string;
-    }[];
+    teacher?: { id: string; name: string; username: string } | null;
+    assigned_count?: number;
+    students: BatchStudentDetail[];
   }[];
 }
 

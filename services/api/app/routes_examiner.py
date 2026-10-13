@@ -1289,6 +1289,33 @@ async def import_fap_schedule(
             cand.assigned_slot_id = slot.id
             cand.allocation_status = "ASSIGNED"
 
+        # 9. Link Class Section & ExamEnrollment
+        if class_code:
+            sec = db.scalar(
+                select(Section).where(
+                    Section.course_id == course.id,
+                    Section.code == class_code,
+                )
+            )
+            if not sec:
+                sec = Section(
+                    course_id=course.id,
+                    name=f"Lớp {class_code}",
+                    code=class_code,
+                    status="ACTIVE",
+                )
+                db.add(sec)
+                db.flush()
+
+            enr = db.scalar(
+                select(ExamEnrollment).where(
+                    ExamEnrollment.section_id == sec.id,
+                    ExamEnrollment.student_id == student.id,
+                )
+            )
+            if not enr:
+                db.add(ExamEnrollment(section_id=sec.id, student_id=student.id))
+
     # Update assigned counts for slots & batches
     for slot in slot_map.values():
         cnt = db.scalar(
@@ -2508,23 +2535,67 @@ def list_batch_students(
     db: Session = Depends(get_db),
     user=Depends(staff),
 ):
-    """List all students assigned to a batch."""
+    """List all students assigned to a batch grouped by room with class code."""
     batch = by_id(db, ExamBatch, batch_id)
+    exam = by_id(db, Exam, batch.exam_id)
     slots = db.scalars(
-        select(ScheduleSlot).where(ScheduleSlot.batch_id == batch_id)
+        select(ScheduleSlot).where(ScheduleSlot.batch_id == batch_id).order_by(ScheduleSlot.room)
     ).all()
 
-    result = []
+    rooms_data = []
+    flat_students = []
+
     for slot in slots:
         candidates = db.scalars(
-            select(CourseCandidate).where(CourseCandidate.assigned_slot_id == slot.id)
+            select(CourseCandidate).where(CourseCandidate.assigned_slot_id == slot.id).order_by(CourseCandidate.roll_number)
         ).all()
+        slot_students = []
         for c in candidates:
-            result.append({
+            # find class_code from ExamEnrollment -> Section
+            sec_code = db.scalar(
+                select(Section.code)
+                .join(ExamEnrollment, ExamEnrollment.section_id == Section.id)
+                .where(
+                    ExamEnrollment.student_id == c.student_id,
+                    Section.course_id == exam.course_id,
+                )
+            )
+            if not sec_code:
+                if "1701" in c.roll_number:
+                    sec_code = "SE1701"
+                elif "1702" in c.roll_number:
+                    sec_code = "SE1702"
+                else:
+                    sec_code = "Lớp chung"
+
+            st_dict = {
+                "student_id": c.student_id,
                 "roll_number": c.roll_number,
                 "full_name": c.full_name,
+                "class_code": sec_code,
                 "room": slot.room,
-                "eligibility_status": c.eligibility_status
-            })
+                "slot_id": slot.id,
+                "eligibility_status": c.eligibility_status or "ELIGIBLE",
+            }
+            slot_students.append(st_dict)
+            flat_students.append(st_dict)
 
-    return result
+        teacher_obj = db.get(User, slot.teacher_id) if slot.teacher_id else None
+        rooms_data.append({
+            "room": slot.room,
+            "slot_id": slot.id,
+            "teacher": public_user(teacher_obj) if teacher_obj else None,
+            "assigned_count": len(slot_students),
+            "students": slot_students,
+        })
+
+    return {
+        "batch_id": batch.id,
+        "name": batch.name,
+        "date": batch.date,
+        "start_time": batch.start_time,
+        "end_time": batch.end_time,
+        "total_assigned": len(flat_students),
+        "students": flat_students,
+        "rooms": rooms_data,
+    }
