@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  Users,
   Loader2,
   Check,
   CalendarDays,
@@ -12,18 +11,14 @@ import {
 import { toast } from 'sonner';
 
 import ExamsTab from './exams/ExamListClient';
-import CandidatesTab from './candidates/CandidatesClient';
 import { examinerService } from '@/services';
 import type { CourseDetail } from '@/services/examiner.service';
-
-type TabType = 'exams' | 'candidates';
 
 export default function CourseDetailClient({ courseId }: { courseId: string }) {
   const router = useRouter();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('exams');
 
   const fetchCourse = useCallback(async () => {
     try {
@@ -68,11 +63,6 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
     );
   }
 
-  const tabs = [
-    { id: 'exams' as TabType, label: 'Quản lý kỳ thi', icon: CalendarDays },
-    { id: 'candidates' as TabType, label: 'Danh sách sinh viên', icon: Users },
-  ];
-
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
@@ -113,30 +103,19 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
         </div>
       </div>
 
-      {/* Tab Navigation (Chỉ 2 tab: Danh sách sinh viên & Quản lý kỳ thi) */}
+      {/* Section Indicator (Quản lý kỳ thi) */}
       <div className="border-b border-slate-200">
-        <nav className="flex space-x-2 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 py-3 px-5 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              }`}
-            >
-              <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-blue-600' : 'text-slate-400'}`} />
-              {tab.label}
-            </button>
-          ))}
+        <nav className="flex space-x-2">
+          <div className="flex items-center gap-2 py-3 px-5 text-sm font-semibold border-b-2 border-blue-600 text-blue-600">
+            <CalendarDays className="w-4 h-4 text-blue-600" />
+            Quản lý kỳ thi
+          </div>
         </nav>
       </div>
 
-      {/* Tab Content */}
+      {/* Content */}
       <div>
-        {activeTab === 'exams' && <ExamsTab courseId={courseId} />}
-        {activeTab === 'candidates' && <CandidatesTab courseId={courseId} />}
+        <ExamsTab courseId={courseId} />
       </div>
     </div>
   );

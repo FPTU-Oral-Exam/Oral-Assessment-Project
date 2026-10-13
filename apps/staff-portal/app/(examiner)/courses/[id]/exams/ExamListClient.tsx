@@ -435,7 +435,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                         </span>
                         <span>•</span>
                         <span>
-                          Số câu hỏi: <strong className="text-slate-700">{exam.question_count} câu</strong>
+                          Đề thi: <strong className="text-slate-700">Theo ma trận Blueprint</strong>
                         </span>
                         <span>•</span>
                         <span>
@@ -722,38 +722,10 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Thời lượng (phút) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={examForm.time_limit}
-                    onChange={(e) =>
-                      setExamForm({ ...examForm, time_limit: parseInt(e.target.value, 10) || 30 })
-                    }
-                    min={5}
-                    max={180}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Số câu hỏi <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={examForm.question_count}
-                    onChange={(e) =>
-                      setExamForm({ ...examForm, question_count: parseInt(e.target.value, 10) || 3 })
-                    }
-                    min={1}
-                    max={20}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+              <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3.5 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-xs text-blue-800 leading-relaxed">
+                  <span className="font-semibold">Cấu trúc đề thi & câu hỏi:</span> Hệ thống sẽ tự động cấu hình và chọn câu hỏi theo đúng <span className="font-semibold">ma trận đề thi (Blueprint)</span> đã được phê duyệt của môn học.
                 </div>
               </div>
 

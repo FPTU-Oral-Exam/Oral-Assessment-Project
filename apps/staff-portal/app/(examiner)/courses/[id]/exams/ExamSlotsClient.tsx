@@ -1148,34 +1148,10 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="time_limit" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Thời lượng (phút)
-                  </label>
-                  <input
-                    type="number"
-                    id="time_limit"
-                    min={5}
-                    max={180}
-                    value={examFormData.time_limit}
-                    onChange={(e) => setExamFormData({ ...examFormData, time_limit: parseInt(e.target.value, 10) || 30 })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="question_count" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Số câu hỏi
-                  </label>
-                  <input
-                    type="number"
-                    id="question_count"
-                    min={1}
-                    max={20}
-                    value={examFormData.question_count}
-                    onChange={(e) => setExamFormData({ ...examFormData, question_count: parseInt(e.target.value, 10) || 3 })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-xs text-blue-800 leading-relaxed">
+                  <span className="font-semibold">Cấu trúc đề thi & câu hỏi:</span> Hệ thống sẽ tự động cấu hình và chọn câu hỏi theo đúng <span className="font-semibold">ma trận đề thi (Blueprint)</span> đã được phê duyệt của môn học.
                 </div>
               </div>
 
