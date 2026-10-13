@@ -630,6 +630,67 @@ def delete_enrollment(
 # ScheduleSlot endpoints
 # ─────────────────────────────────────────────────────────────────
 
+@router.get("/examiner/schedule/all-slots")
+def list_all_schedule_slots(
+    semester_id: str = None,
+    course_id: str = None,
+    status: str = None,
+    db: Session = Depends(get_db),
+    user=Depends(staff),
+):
+    """Fetch all schedule slots with exam, course, semester, and teacher details in a single query."""
+    stmt = (
+        select(ScheduleSlot, Exam, Course, Semester)
+        .join(Exam, Exam.id == ScheduleSlot.exam_id)
+        .join(Course, Course.id == Exam.course_id)
+        .outerjoin(Semester, Semester.id == Course.semester_id)
+    )
+    if semester_id:
+        stmt = stmt.where(Course.semester_id == semester_id)
+    if course_id:
+        stmt = stmt.where(Course.id == course_id)
+    if status:
+        stmt = stmt.where(ScheduleSlot.status == status)
+
+    stmt = stmt.order_by(ScheduleSlot.date.desc(), ScheduleSlot.start_time.asc(), ScheduleSlot.slot_number.asc())
+    rows = db.execute(stmt).all()
+
+    # Pre-count assignments per slot in one query
+    assignment_counts = dict(
+        db.execute(
+            select(SlotAssignment.slot_id, func.count(SlotAssignment.id))
+            .group_by(SlotAssignment.slot_id)
+        ).all()
+    )
+
+    result = []
+    for slot, exam, course, semester in rows:
+        teacher = db.get(User, slot.teacher_id) if slot.teacher_id else None
+        variant = db.get(ExamVariant, slot.exam_variant_id) if slot.exam_variant_id else None
+
+        result.append({
+            "id": slot.id,
+            "slot_number": slot.slot_number,
+            "room": slot.room,
+            "date": slot.date,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+            "status": slot.status or "PENDING",
+            "grade_locked": bool(slot.grade_locked),
+            "student_count": assignment_counts.get(slot.id, 0),
+            "max_students": slot.max_students or 30,
+            "teacher": public_user(teacher) if teacher else None,
+            "exam_id": exam.id,
+            "exam_name": exam.name,
+            "course_id": course.id,
+            "course_name": course.name,
+            "course_code": course.code,
+            "semester_name": semester.name if semester else "Toàn trường",
+            "exam_variant_name": variant.name if variant else None,
+        })
+    return result
+
+
 @router.get("/examiner/exams/{exam_id}/slots")
 def list_slots(exam_id: str, db: Session = Depends(get_db), user=Depends(staff)):
     slots = db.scalars(

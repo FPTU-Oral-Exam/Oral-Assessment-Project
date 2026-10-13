@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -118,83 +118,31 @@ export default function ScheduleClient() {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>('');
 
+  const hasFetchedRef = useRef(false);
+
   const fetchScheduleData = useCallback(async () => {
     try {
       setError(null);
 
-      // Fetch parallel
-      const [semRes, courseRes, examRes] = await Promise.all([
+      // Fetch all required data in parallel (single round-trip batch)
+      const [semRes, courseRes, examRes, slotsRes] = await Promise.all([
         fetch('/api/examiner/semesters', { credentials: 'include' }),
         fetch('/api/examiner/courses', { credentials: 'include' }),
         fetch('/api/examiner/exams', { credentials: 'include' }),
+        fetch('/api/examiner/schedule/all-slots', { credentials: 'include' }),
       ]);
 
-      const [semData, courseData, examData] = await Promise.all([
+      const [semData, courseData, examData, slotsData] = await Promise.all([
         semRes.ok ? semRes.json() : [],
         courseRes.ok ? courseRes.json() : [],
         examRes.ok ? examRes.json() : [],
+        slotsRes.ok ? slotsRes.json() : [],
       ]);
 
-      const semList: Semester[] = Array.isArray(semData) ? semData : [];
-      const courseList: Course[] = Array.isArray(courseData) ? courseData : [];
-      const examList: ExamInfo[] = Array.isArray(examData) ? examData : [];
-
-      setSemesters(semList);
-      setCourses(courseList);
-      setExams(examList);
-
-      const courseMap = new Map(courseList.map((c) => [c.id, c]));
-      const semMap = new Map(semList.map((s) => [s.id, s]));
-
-      // Fetch slots for all exams
-      const allSlots: ScheduleSlotItem[] = [];
-
-      await Promise.all(
-        examList.map(async (exam) => {
-          try {
-            const slotRes = await fetch(`/api/examiner/exams/${exam.id}/slots`, { credentials: 'include' });
-            if (!slotRes.ok) return;
-            const slotData = await slotRes.json();
-            if (!Array.isArray(slotData)) return;
-
-            const course = courseMap.get(exam.course_id);
-            const sem = course?.semester_id ? semMap.get(course.semester_id) : null;
-
-            slotData.forEach((s: any) => {
-              allSlots.push({
-                id: s.id,
-                slot_number: s.slot_number,
-                room: s.room,
-                date: s.date,
-                start_time: s.start_time,
-                end_time: s.end_time,
-                status: s.status || 'PENDING',
-                grade_locked: !!s.grade_locked,
-                student_count: s.student_count || 0,
-                max_students: s.max_students || 30,
-                teacher: s.teacher || null,
-                exam_id: exam.id,
-                exam_name: exam.name,
-                course_id: exam.course_id,
-                course_name: course?.name || 'Môn học',
-                course_code: course?.code || 'N/A',
-                semester_name: sem?.name || 'Toàn trường',
-                exam_variant_name: s.exam_variant?.name || null,
-              });
-            });
-          } catch {
-            // ignore individual exam error
-          }
-        })
-      );
-
-      // Sort by date desc, then start_time, then slot_number
-      allSlots.sort((a, b) => {
-        if (b.date !== a.date) return b.date - a.date;
-        return a.start_time.localeCompare(b.start_time) || a.slot_number - b.slot_number;
-      });
-
-      setSlots(allSlots);
+      setSemesters(Array.isArray(semData) ? semData : []);
+      setCourses(Array.isArray(courseData) ? courseData : []);
+      setExams(Array.isArray(examData) ? examData : []);
+      setSlots(Array.isArray(slotsData) ? slotsData : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể tải lịch thi điều phối');
       toast.error('Lỗi khi tải lịch thi điều phối');
@@ -205,6 +153,8 @@ export default function ScheduleClient() {
   }, []);
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     fetchScheduleData();
   }, [fetchScheduleData]);
 
