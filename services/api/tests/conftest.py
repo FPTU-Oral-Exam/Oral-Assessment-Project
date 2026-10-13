@@ -58,6 +58,7 @@ def env(monkeypatch):
             ("teacher", "TEACHER"),
             ("student", "STUDENT"),
             ("examiner", "EXAMINER"),
+            ("academy", "ACADEMY"),
             # Legacy role names for backward compatibility
             ("admin", "SYSTEM_ADMIN"),
             ("reviewer", "EXAMINER"),
@@ -81,6 +82,7 @@ def env(monkeypatch):
         ("student", "student"),       # same
         ("reviewer", "reviewer"),     # old: login with "reviewer", role EXAMINER
         ("examiner", "examiner"),     # new: login with "examiner", role EXAMINER
+        ("academy", "academy"),       # new: login with "academy", role ACADEMY
         ("system_admin", "system_admin"),  # new: login with "system_admin", role SYSTEM_ADMIN
         ("outsider", "outsider"),     # same
     ]

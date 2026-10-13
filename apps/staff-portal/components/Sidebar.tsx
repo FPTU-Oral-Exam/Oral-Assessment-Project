@@ -16,6 +16,8 @@ import {
   Award,
   Radio,
   Sparkles,
+  Layers,
+  Sliders,
 } from 'lucide-react';
 
 const menuItems: Record<string, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
@@ -24,10 +26,17 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/users', label: 'Quản lý người dùng', icon: Users },
     { href: '/settings', label: 'Cấu hình hệ thống', icon: Settings },
     { href: '/audit', label: 'Nhật ký kiểm toán', icon: FileText },
+    { href: '/item-bank', label: 'Ngân hàng Đề & Câu hỏi', icon: Layers },
+    { href: '/question-types', label: 'Cấu hình Dạng bài', icon: Sliders },
+    { href: '/exam-matrix', label: 'Ma trận Đề & Ra đề', icon: ClipboardList },
   ],
 
   ACADEMY: [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/item-bank', label: 'Ngân hàng Đề & Câu hỏi', icon: Layers },
+    { href: '/question-types', label: 'Cấu hình Dạng bài', icon: Sliders },
+    { href: '/exam-matrix', label: 'Ma trận Đề & Ra đề', icon: ClipboardList },
+    { href: '/rubrics', label: 'Tiêu chuẩn Rubrics', icon: Award },
     { href: '/courses', label: 'Môn học & Học thuật', icon: BookOpen },
   ],
 
@@ -103,7 +112,7 @@ export default function Sidebar() {
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs font-medium text-slate-300">
             {user.roles.includes('SYSTEM_ADMIN')
-              ? 'Quản trị hệ thống'
+              ? 'Quản trị hệ thống (Toàn quyền)'
               : user.roles.includes('ACADEMY')
               ? 'Ban Học thuật'
               : user.roles.includes('EXAMINER')

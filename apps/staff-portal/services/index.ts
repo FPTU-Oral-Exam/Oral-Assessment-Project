@@ -13,6 +13,7 @@ export { authService } from './auth.service';
 export { adminService } from './admin.service';
 export { examinerService } from './examiner.service';
 export { teacherService } from './teacher.service';
+export { academyService } from './academy.service';
 
 // Re-export types thường dùng
 export type {
@@ -62,3 +63,9 @@ export type {
   SemesterGroup,
   AssignedCourse,
 } from './teacher.service';
+
+export type {
+  QuestionFilterParams,
+  CreateQuestionPayload,
+  CreateMatrixPayload,
+} from './academy.service';

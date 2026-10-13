@@ -102,7 +102,7 @@ export default async function DashboardPage() {
         {/* Quick Links Column */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <h2 className="text-base font-bold text-slate-900">
-            Thao tác nhanh cho {isAcademy ? 'Ban Học thuật' : isExaminer ? 'Khảo thí' : isTeacher ? 'Giảng viên' : 'Quản trị viên'}
+            Thao tác nhanh cho {isAdmin ? 'Quản trị viên (Toàn quyền)' : isAcademy ? 'Ban Học thuật' : isExaminer ? 'Khảo thí' : 'Giảng viên'}
           </h2>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -126,7 +126,7 @@ export default async function DashboardPage() {
               </>
             )}
 
-            {(isTeacher && !isAcademy) && (
+            {((isTeacher && !isAcademy) || isAdmin) && (
               <>
                 <Link
                   href="/grading"

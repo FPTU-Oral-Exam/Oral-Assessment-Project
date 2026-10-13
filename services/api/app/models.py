@@ -2,7 +2,7 @@ import time
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, JSON, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -123,10 +123,12 @@ class Chunk(Entity, Base):
 
 class Rubric(Entity, Base):
     __tablename__ = "rubrics"
-    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"))
+    course_id: Mapped[str | None] = mapped_column(ForeignKey("courses.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, default="")
     version: Mapped[int] = mapped_column(Integer, default=1)
     criteria: Mapped[list] = mapped_column(JSON(none_as_null=True))
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 class Exam(Entity, Base):
@@ -392,4 +394,54 @@ class QuestionItem(Entity, Base):
     author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     usage_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     deleted_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+# === Ban Học thuật (Academy) Models ===
+
+class AcademicQuestion(Entity, Base):
+    __tablename__ = "academic_questions"
+    code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    skill: Mapped[str] = mapped_column(String(30), default="SPEAKING")
+    type: Mapped[str] = mapped_column(String(20), index=True)  # RA, RS, GD, DI, SI, RL
+    title: Mapped[str] = mapped_column(String(250))
+    prompt: Mapped[str] = mapped_column(Text)
+    media_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    audio_script: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prep_time: Mapped[int] = mapped_column(Integer, default=30)
+    response_time: Mapped[int] = mapped_column(Integer, default=40)
+    difficulty: Mapped[str] = mapped_column(String(20), default="MEDIUM")  # EASY, MEDIUM, HARD
+    status: Mapped[str] = mapped_column(String(20), default="APPROVED")  # DRAFT, APPROVED, IN_USE
+    is_predicted: Mapped[bool] = mapped_column(Boolean, default=False)
+    usage_count: Mapped[int] = mapped_column(Integer, default=0)
+    tags: Mapped[list] = mapped_column(JSON(none_as_null=True), default=list)
+    sample_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    key_points: Mapped[list] = mapped_column(JSON(none_as_null=True), default=list)
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    deleted_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class AcademicMatrix(Entity, Base):
+    __tablename__ = "academic_matrices"
+    code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, default="")
+    rubric_id: Mapped[str | None] = mapped_column(ForeignKey("rubrics.id", ondelete="SET NULL"), nullable=True)
+    rules: Mapped[list] = mapped_column(JSON(none_as_null=True), default=list)
+    difficulty_ratio: Mapped[dict] = mapped_column(JSON(none_as_null=True), default=dict)
+    deleted_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class QuestionTypeConfigModel(Entity, Base):
+    __tablename__ = "question_type_configs"
+    type: Mapped[str] = mapped_column(String(20), unique=True, index=True)  # RA, RS, GD, DI, SI, RL
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(Text, default="")
+    default_prep_time: Mapped[int] = mapped_column(Integer, default=30)
+    default_response_time: Mapped[int] = mapped_column(Integer, default=40)
+    audio_instruction_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_score: Mapped[float] = mapped_column(Float, default=10.0)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
 
