@@ -201,7 +201,7 @@ git commit -m "feat(academy): add models and pydantic schemas for academic quest
   + `DELETE /api/academy/questions/{id}`
   + `POST /api/academy/questions/{id}/approve`
 
-- [ ] **Step 1: Viết test cho Questions Endpoints**
+- [x] **Step 1: Viết test cho Questions Endpoints**
 
 Bổ sung test trong `services/api/tests/test_academy_routes.py`:
 ```python
@@ -246,12 +246,12 @@ def test_create_and_list_questions(client, academy_token):
     assert any(item["id"] == q_id for item in items)
 ```
 
-- [ ] **Step 2: Chạy test để xác nhận test fails**
+- [x] **Step 2: Chạy test để xác nhận test fails**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_create_and_list_questions -v`
 Kỳ vọng: FAIL với 404 Not Found (router chưa mount)
 
-- [ ] **Step 3: Triển khai Questions Endpoints trong `routes_academy.py`**
+- [x] **Step 3: Triển khai Questions Endpoints trong `routes_academy.py`**
 
 Tạo `services/api/app/routes_academy.py` với APIRouter:
 - `router = APIRouter(prefix="/academy", tags=["Academy"])`
@@ -259,12 +259,12 @@ Tạo `services/api/app/routes_academy.py` với APIRouter:
 - Endpoint `GET /questions` hỗ trợ filters (`type`, `skill`, `difficulty`, `status`, `is_predicted`, `search`).
 - Endpoint `POST /questions`, `GET /questions/{id}`, `PUT /questions/{id}`, `DELETE /questions/{id}` (soft-delete đánh dấu `deleted_at`), `POST /questions/{id}/approve` (chuyển status thành `APPROVED`).
 
-- [ ] **Step 4: Chạy test để xác nhận test passes**
+- [x] **Step 4: Chạy test để xác nhận test passes**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_create_and_list_questions -v`
 Kỳ vọng: PASS
 
-- [ ] **Step 5: Commit task 2**
+- [x] **Step 5: Commit task 2**
 
 ```bash
 git add services/api/app/routes_academy.py services/api/tests/test_academy_routes.py
@@ -387,73 +387,15 @@ git commit -m "feat(academy): implement blueprint matrices, stock health validat
   + `GET /api/academy/question-types`
   + `PUT /api/academy/question-types/{type}`
 
-- [ ] **Step 1: Viết test cho Rubrics & Question Types**
+- [x] **Step 1: Viết test cho Rubrics & Question Types**
 
-Bổ sung test trong `services/api/tests/test_academy_routes.py`:
-```python
-def test_rubrics_and_question_types(client, academy_token):
-    # Rubric Invariant: Sum of weights must equal 100
-    rubric_payload = {
-        "name": "PTE Speaking Official Rubric",
-        "description": "5 standard dimensions",
-        "course_id": None,
-        "criteria": [
-            {"name": "Content", "max_score": 10.0, "weight": 30.0, "description": "Topic relevance"},
-            {"name": "Pronunciation", "max_score": 10.0, "weight": 25.0, "description": "Phoneme clarity"},
-            {"name": "Fluency", "max_score": 10.0, "weight": 25.0, "description": "Rhythm and speech rate"},
-            {"name": "Vocabulary", "max_score": 10.0, "weight": 20.0, "description": "Lexical richness"},
-        ],
-    }
-    resp = client.post(
-        "/api/academy/rubrics",
-        json=rubric_payload,
-        headers={"Authorization": f"Bearer {academy_token}"},
-    )
-    assert resp.status_code == 201
-    r_id = resp.json()["id"]
+- [x] **Step 2: Chạy test để xác nhận test fails**
 
-    # Invalid Rubric: Sum != 100 should fail with 422
-    bad_payload = {**rubric_payload, "name": "Bad Rubric", "criteria": [{"name": "A", "max_score": 10, "weight": 80}]}
-    resp_bad = client.post(
-        "/api/academy/rubrics",
-        json=bad_payload,
-        headers={"Authorization": f"Bearer {academy_token}"},
-    )
-    assert resp_bad.status_code in (400, 422)
+- [x] **Step 3: Triển khai Rubrics & Question Types logic trong `routes_academy.py` và mount vào `main.py`**
 
-    # Question Types
-    qt_resp = client.get("/api/academy/question-types")
-    assert qt_resp.status_code == 200
-    assert len(qt_resp.json()) == 6
-```
+- [x] **Step 4: Chạy test để xác nhận test passes**
 
-- [ ] **Step 2: Chạy test để xác nhận test fails**
-
-Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_rubrics_and_question_types -v`
-Kỳ vọng: FAIL
-
-- [ ] **Step 3: Triển khai Rubrics & Question Types logic trong `routes_academy.py` và mount vào `main.py`**
-
-- Kiểm tra tổng trọng số rubric:
-  ```python
-  total_weight = sum(c.weight for c in body.criteria)
-  if abs(total_weight - 100.0) > 0.01:
-      fail(400, "INVALID_RUBRIC_WEIGHT", f"Tổng trọng số các tiêu chí phải bằng 100% (hiện tại: {total_weight}%)")
-  ```
-- Khởi tạo 6 dạng bài mặc định (RA, RS, GD, DI, SI, RL) nếu bảng `question_type_configs` trống.
-- Đăng ký router trong `services/api/app/main.py`:
-  ```python
-  from . import routes_academy
-  ...
-  app.include_router(routes_academy.router, tags=["Academy"])
-  ```
-
-- [ ] **Step 4: Chạy test để xác nhận test passes**
-
-Chạy: `python -m pytest services/api/tests/test_academy_routes.py -v`
-Kỳ vọng: PASS toàn bộ test suite (100% pass)
-
-- [ ] **Step 5: Commit task 4**
+- [x] **Step 5: Commit task 4**
 
 ```bash
 git add services/api/app/routes_academy.py services/api/app/main.py services/api/tests/test_academy_routes.py
@@ -539,44 +481,15 @@ git commit -m "feat(data): add CLI script to import PTE speaking bank questions 
 - Consumes: Backend API `/api/academy/...`
 - Produces: State thật được đồng bộ giữa Staff Portal và PostgreSQL
 
-- [ ] **Step 1: Viết test cho `academy.service.ts`**
+- [x] **Step 1: Viết test cho `academy.service.ts`**
 
-Tạo test Vitest `apps/staff-portal/tests/academic-service.test.ts`:
-```typescript
-import { describe, it, expect, vi } from 'vitest';
-import { academyService } from '../services/academy.service';
-import { apiClient } from '../lib/api-client';
+- [x] **Step 2: Chạy test để xác minh**
 
-describe('AcademyService', () => {
-  it('calls correct URL with filter params', async () => {
-    const spy = vi.spyOn(apiClient, 'get').mockResolvedValueOnce([]);
-    await academyService.getQuestions({ type: 'RA', difficulty: 'MEDIUM' });
-    expect(spy).toHaveBeenCalledWith('/api/academy/questions?type=RA&difficulty=MEDIUM');
-  });
-});
-```
+- [x] **Step 3: Cập nhật `academy.service.ts` & `AcademicContext.tsx`**
 
-- [ ] **Step 2: Chạy test để xác minh**
+- [x] **Step 4: Kiểm tra build & Typecheck Frontend**
 
-Chạy: `npm.cmd test -w apps/staff-portal -- academic-service.test.ts`
-Kỳ vọng: PASS hoặc kiểm tra tương thích.
-
-- [ ] **Step 3: Cập nhật `academy.service.ts` & `AcademicContext.tsx`**
-
-- Trong `academy.service.ts`:
-  * Xử lý chính xác định dạng trả về từ backend (chuẩn hóa `items` và `total`).
-  * Bổ sung endpoint cho quy chuẩn 6 dạng bài `getQuestionTypeConfigs()` và `updateQuestionTypeConfig()`.
-- Trong `AcademicContext.tsx`:
-  * Khi `AcademicProvider` mount, gọi `academyService.getQuestions()`, `academyService.getMatrices()`, `academyService.getRubrics()`.
-  * Nếu backend trả về dữ liệu rỗng, fallback sang dữ liệu khởi tạo ban đầu để đảm bảo UI không bao giờ bị trắng trang.
-  * Khi người dùng thêm/sửa/xóa câu hỏi trên modal, gọi trực tiếp API `academyService` và cập nhật local state.
-
-- [ ] **Step 4: Kiểm tra build & Typecheck Frontend**
-
-Chạy: `npm.cmd run typecheck -w apps/staff-portal`
-Kỳ vọng: 0 lỗi typecheck.
-
-- [ ] **Step 5: Commit task 6**
+- [x] **Step 5: Commit task 6**
 
 ```bash
 git add apps/staff-portal/services/academy.service.ts apps/staff-portal/context/AcademicContext.tsx apps/staff-portal/tests/academic-service.test.ts

@@ -409,4 +409,74 @@ class TestAcademicMatrices:
         self.test_matrix_crud_and_stock_health(env)
 
 
+class TestAcademicQuestions:
+    """Test Suite for Task 2: Question Bank CRUD & Approval."""
+
+    def test_create_and_list_questions(self, env):
+        clients, _ = env
+        academy = clients["academy"]
+        student = clients["student"]
+
+        # 1. Non-academy user forbidden (403)
+        res_forbidden = student.get("/api/academy/questions")
+        assert res_forbidden.status_code == 403
+
+        # 2. Create question (201)
+        payload = {
+            "code": "RA-TEST-99",
+            "skill": "SPEAKING",
+            "type": "RA",
+            "title": "Quantum Physics Passage",
+            "prompt": "Quantum mechanics explores atomic behavior.",
+            "prep_time": 35,
+            "response_time": 40,
+            "difficulty": "MEDIUM",
+            "status": "DRAFT",
+            "tags": ["Physics", "Science"],
+            "is_predicted": True,
+        }
+        resp = academy.post("/api/academy/questions", json=payload)
+        assert resp.status_code == 201, f"Create failed: {resp.text}"
+        created = resp.json()
+        assert created["code"] == "RA-TEST-99"
+        assert created["status"] == "DRAFT"
+        q_id = created["id"]
+
+        # 3. Get Details (200)
+        resp_get = academy.get(f"/api/academy/questions/{q_id}")
+        assert resp_get.status_code == 200
+        assert resp_get.json()["id"] == q_id
+        assert resp_get.json()["title"] == "Quantum Physics Passage"
+
+        # 4. List with Filter (200)
+        resp_list = academy.get("/api/academy/questions?type=RA&difficulty=MEDIUM")
+        assert resp_list.status_code == 200
+        items = resp_list.json()
+        assert any(item["id"] == q_id for item in items)
+
+        # 5. Update Question (200)
+        resp_update = academy.put(
+            f"/api/academy/questions/{q_id}",
+            json={"title": "Updated Quantum Physics Passage", "difficulty": "HARD"},
+        )
+        assert resp_update.status_code == 200
+        assert resp_update.json()["title"] == "Updated Quantum Physics Passage"
+        assert resp_update.json()["difficulty"] == "HARD"
+
+        # 6. Approve Question (200)
+        resp_approve = academy.post(f"/api/academy/questions/{q_id}/approve", json={})
+        assert resp_approve.status_code == 200
+        assert resp_approve.json()["status"] == "APPROVED"
+
+        # 7. Delete Question (soft delete) (200)
+        resp_delete = academy.delete(f"/api/academy/questions/{q_id}")
+        assert resp_delete.status_code == 200
+        assert resp_delete.json().get("ok") is True
+
+        # Verify not in active list
+        resp_list_after = academy.get("/api/academy/questions?type=RA")
+        assert not any(item["id"] == q_id for item in resp_list_after.json())
+
+
+
 

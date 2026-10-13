@@ -1,9 +1,9 @@
 import time
 import uuid
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .db import get_db
@@ -12,6 +12,9 @@ from .schemas_academy import (
     AcademicMatrixIn,
     AcademicMatrixOut,
     AcademicMatrixUpdate,
+    AcademicQuestionIn,
+    AcademicQuestionOut,
+    AcademicQuestionUpdate,
     ExamMatrixRule,
     GeneratedSampleExamOut,
     QuestionTypeConfigIn,
@@ -30,8 +33,174 @@ router = APIRouter(prefix="/academy", tags=["Academy"])
 
 
 # ============================================================================
+# 0. NGÂN HÀNG CÂU HỎI (QUESTION BANK) — TASK 2
+# ============================================================================
+
+def _to_question_out(q: AcademicQuestion) -> AcademicQuestionOut:
+    return AcademicQuestionOut(
+        id=q.id,
+        code=q.code,
+        skill=q.skill,
+        type=q.type,
+        title=q.title,
+        prompt=q.prompt,
+        media_url=q.media_url,
+        audio_script=q.audio_script,
+        prep_time=q.prep_time,
+        response_time=q.response_time,
+        difficulty=q.difficulty,
+        status=q.status,
+        is_predicted=bool(q.is_predicted),
+        usage_count=q.usage_count or 0,
+        tags=q.tags or [],
+        sample_answer=q.sample_answer,
+        key_points=q.key_points or [],
+        created_at=q.created_at,
+        updated_at=getattr(q, "updated_at", q.created_at) or q.created_at,
+    )
+
+
+@router.get("/questions", response_model=List[AcademicQuestionOut])
+def list_questions(
+    type: Optional[str] = None,
+    skill: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    status: Optional[str] = None,
+    is_predicted: Optional[bool] = None,
+    search: Optional[str] = None,
+    limit: int = 500,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user=Depends(academy),
+):
+    stmt = select(AcademicQuestion).where(AcademicQuestion.deleted_at.is_(None))
+    if type:
+        stmt = stmt.where(AcademicQuestion.type == type.upper())
+    if skill:
+        stmt = stmt.where(AcademicQuestion.skill == skill.upper())
+    if difficulty:
+        stmt = stmt.where(AcademicQuestion.difficulty == difficulty.upper())
+    if status:
+        stmt = stmt.where(AcademicQuestion.status == status.upper())
+    if is_predicted is not None:
+        stmt = stmt.where(AcademicQuestion.is_predicted == is_predicted)
+    if search:
+        search_pattern = f"%{search.strip()}%"
+        stmt = stmt.where(
+            or_(
+                AcademicQuestion.code.ilike(search_pattern),
+                AcademicQuestion.title.ilike(search_pattern),
+                AcademicQuestion.prompt.ilike(search_pattern),
+            )
+        )
+    stmt = stmt.order_by(AcademicQuestion.created_at.desc()).offset(offset).limit(limit)
+    rows = db.scalars(stmt).all()
+    return [_to_question_out(q) for q in rows]
+
+
+@router.post("/questions", status_code=201, response_model=AcademicQuestionOut)
+def create_question(body: AcademicQuestionIn, db: Session = Depends(get_db), user=Depends(academy)):
+    existing = db.scalar(
+        select(AcademicQuestion.id).where(
+            AcademicQuestion.code == body.code,
+            AcademicQuestion.deleted_at.is_(None),
+        )
+    )
+    if existing:
+        fail(409, "CODE_EXISTS", f"Mã câu hỏi '{body.code}' đã tồn tại")
+
+    now = time.time()
+    row = AcademicQuestion(
+        code=body.code,
+        skill=body.skill.upper(),
+        type=body.type.upper(),
+        title=body.title,
+        prompt=body.prompt,
+        media_url=body.media_url,
+        audio_script=body.audio_script,
+        prep_time=body.prep_time,
+        response_time=body.response_time,
+        difficulty=body.difficulty.upper(),
+        status=body.status.upper(),
+        is_predicted=body.is_predicted,
+        tags=body.tags or [],
+        sample_answer=body.sample_answer,
+        key_points=body.key_points or [],
+        author_id=user.id if user else None,
+        updated_at=now,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _to_question_out(row)
+
+
+@router.get("/questions/{key}", response_model=AcademicQuestionOut)
+def get_question(key: str, db: Session = Depends(get_db), user=Depends(academy)):
+    row = by_id(db, AcademicQuestion, key)
+    if row.deleted_at is not None:
+        fail(404, "NOT_FOUND", "Câu hỏi đã bị xóa")
+    return _to_question_out(row)
+
+
+@router.put("/questions/{key}", response_model=AcademicQuestionOut)
+def update_question(key: str, body: AcademicQuestionUpdate, db: Session = Depends(get_db), user=Depends(academy)):
+    row = by_id(db, AcademicQuestion, key)
+    if row.deleted_at is not None:
+        fail(404, "NOT_FOUND", "Câu hỏi đã bị xóa")
+
+    payload = body.model_dump(exclude_unset=True)
+    if "code" in payload and payload["code"] != row.code:
+        conflict = db.scalar(
+            select(AcademicQuestion.id).where(
+                AcademicQuestion.code == payload["code"],
+                AcademicQuestion.id != row.id,
+                AcademicQuestion.deleted_at.is_(None),
+            )
+        )
+        if conflict:
+            fail(409, "CODE_EXISTS", f"Mã câu hỏi '{payload['code']}' đã tồn tại")
+        row.code = payload["code"]
+
+    for field, val in payload.items():
+        if field == "code":
+            continue
+        if field in ("skill", "type", "difficulty", "status") and isinstance(val, str):
+            val = val.upper()
+        setattr(row, field, val)
+
+    row.updated_at = time.time()
+    db.commit()
+    db.refresh(row)
+    return _to_question_out(row)
+
+
+@router.delete("/questions/{key}")
+def delete_question(key: str, db: Session = Depends(get_db), user=Depends(academy)):
+    row = by_id(db, AcademicQuestion, key)
+    if row.deleted_at is not None:
+        fail(404, "NOT_FOUND", "Câu hỏi đã bị xóa")
+    row.deleted_at = time.time()
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/questions/{key}/approve", response_model=AcademicQuestionOut)
+def approve_question(key: str, db: Session = Depends(get_db), user=Depends(academy)):
+    row = by_id(db, AcademicQuestion, key)
+    if row.deleted_at is not None:
+        fail(404, "NOT_FOUND", "Câu hỏi đã bị xóa")
+    row.status = "APPROVED"
+    row.updated_at = time.time()
+    db.commit()
+    db.refresh(row)
+    return _to_question_out(row)
+
+
+# ============================================================================
 # 1. MA TRẬN ĐỀ THI (EXAM BLUEPRINT MATRIX & STOCK HEALTH) — TASK 3
 # ============================================================================
+
 
 @router.get("/matrices", response_model=List[AcademicMatrixOut])
 def list_matrices(db: Session = Depends(get_db), user=Depends(academy)):
