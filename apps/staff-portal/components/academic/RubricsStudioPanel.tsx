@@ -38,7 +38,7 @@ export default function RubricsStudioPanel() {
   const totalWeight = criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0);
   const isWeightValid = totalWeight === 100;
 
-  const handleWeightSliderChange = (id: string | undefined, newWeight: number) => {
+  const handleWeightChange = (id: string | undefined, newWeight: number) => {
     if (!id) return;
     setCriteria((prev) =>
       prev.map((c) => (c.id === id ? { ...c, weight: newWeight } : c))
@@ -253,22 +253,20 @@ export default function RubricsStudioPanel() {
               </div>
             </div>
 
-            {/* Quick Weight Slider */}
-            <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <span className="text-xs font-semibold text-slate-600 w-28">
-                Kéo chỉnh trọng số:
+            {/* Quick Weight Input */}
+            <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <span className="text-xs font-semibold text-slate-600">
+                Trọng số:
               </span>
               <input
-                type="range"
+                type="number"
                 min={0}
                 max={100}
                 value={crit.weight}
-                onChange={(e) => handleWeightSliderChange(crit.id, Number(e.target.value))}
-                className="flex-1 accent-blue-600 cursor-pointer"
+                onChange={(e) => handleWeightChange(crit.id, Number(e.target.value))}
+                className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-mono font-bold text-slate-900 text-center focus:outline-none focus:border-blue-500"
               />
-              <span className="font-mono text-xs font-bold text-slate-900 w-12 text-right">
-                {crit.weight}%
-              </span>
+              <span className="text-sm font-bold text-slate-700">%</span>
             </div>
 
             {/* Band Descriptors Grid */}
