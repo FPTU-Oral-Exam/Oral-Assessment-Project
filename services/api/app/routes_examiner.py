@@ -2,7 +2,7 @@ import csv
 import io
 import random
 import time
-from datetime import datetime
+from datetime import datetime, date, time as dtime
 from uuid import uuid4
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -1062,15 +1062,15 @@ async def import_fap_schedule(
                     return idx
         return -1
 
-    idx_slot = find_col_idx("ca_thi", "ca", "slot")
-    idx_date = find_col_idx("ngay_thi", "ngay", "date")
-    idx_start = find_col_idx("gio_bat_dau", "start_time", "gio_bd", "start")
-    idx_end = find_col_idx("gio_ket_thuc", "end_time", "gio_kt", "end")
-    idx_room = find_col_idx("phong_thi", "phong", "room")
-    idx_teacher = find_col_idx("giang_vien", "gv", "teacher", "proctor", "email_gv")
-    idx_mssv = find_col_idx("mssv", "roll_number", "roll", "ma_sv", "student_id")
-    idx_name = find_col_idx("ho_ten", "full_name", "ten_sv", "name")
-    idx_class = find_col_idx("lop_hoc", "lop", "class", "section", "ma_lop")
+    idx_slot = find_col_idx("ca_thi", "ca", "slot", "đợt", "dot")
+    idx_date = find_col_idx("ngay_thi", "ngay", "date", "ngày")
+    idx_start = find_col_idx("gio_bat_dau", "start_time", "gio_bd", "start", "bắt_đầu", "bat_dau")
+    idx_end = find_col_idx("gio_ket_thuc", "end_time", "gio_kt", "end", "kết_thúc", "ket_thuc")
+    idx_room = find_col_idx("phong_thi", "phong", "room", "phòng")
+    idx_teacher = find_col_idx("giang_vien", "gv", "teacher", "proctor", "email_gv", "giảng_viên")
+    idx_mssv = find_col_idx("mssv", "roll_number", "roll", "ma_sv", "student_id", "mã_sv")
+    idx_name = find_col_idx("ho_ten", "full_name", "ten_sv", "name", "họ_tên", "họ_và_tên")
+    idx_class = find_col_idx("lop_hoc", "lop", "class", "section", "ma_lop", "lớp")
 
     if idx_mssv < 0:
         fail(400, "INVALID_FORMAT", "File không có cột MSSV / RollNumber")
@@ -1083,6 +1083,7 @@ async def import_fap_schedule(
     assigned_teachers = set()
     errors = []
     slot_map = {}
+    batch_map = {}
 
     for r_idx, r in enumerate(data_rows, start=2):
         if not r or all(cell is None or str(cell).strip() == "" for cell in r):
@@ -1108,6 +1109,8 @@ async def import_fap_schedule(
         if date_val is not None:
             if isinstance(date_val, datetime):
                 date_ts = date_val.timestamp()
+            elif isinstance(date_val, date):
+                date_ts = datetime.combine(date_val, dtime.min).timestamp()
             else:
                 date_str = str(date_val).strip()
                 for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
@@ -1117,12 +1120,21 @@ async def import_fap_schedule(
                     except ValueError:
                         pass
 
-        start_time = get_val(idx_start, "08:00")
-        if len(start_time) == 8:
-            start_time = start_time[:5]
-        end_time = get_val(idx_end, "09:30")
-        if len(end_time) == 8:
-            end_time = end_time[:5]
+        start_val = r[idx_start] if (idx_start >= 0 and idx_start < len(r)) else None
+        if isinstance(start_val, dtime):
+            start_time = start_val.strftime("%H:%M")
+        else:
+            start_time = get_val(idx_start, "08:00")
+            if len(start_time) == 8:
+                start_time = start_time[:5]
+
+        end_val = r[idx_end] if (idx_end >= 0 and idx_end < len(r)) else None
+        if isinstance(end_val, dtime):
+            end_time = end_val.strftime("%H:%M")
+        else:
+            end_time = get_val(idx_end, "09:30")
+            if len(end_time) == 8:
+                end_time = end_time[:5]
 
         room = get_val(idx_room, "Phòng 1")
         teacher_id_str = get_val(idx_teacher, "")
@@ -1158,7 +1170,41 @@ async def import_fap_schedule(
                     db.flush()
                 teacher_cache[clean_t] = slot_teacher
 
-        # 4. Find or Create ScheduleSlot for (slot_number, room)
+        # 4. Resolve or Create ExamBatch (Ca thi)
+        batch_key = slot_num
+        if batch_key not in batch_map:
+            existing_batch = db.scalar(
+                select(ExamBatch).where(
+                    ExamBatch.exam_id == exam.id,
+                    ExamBatch.name == f"Ca {slot_num}",
+                )
+            )
+            if not existing_batch:
+                assigned_tid = slot_teacher.id if slot_teacher else user.id
+                existing_batch = ExamBatch(
+                    exam_id=exam.id,
+                    name=f"Ca {slot_num}",
+                    date=date_ts,
+                    start_time=start_time,
+                    end_time=end_time,
+                    max_students_per_room=40,
+                    assigned_teacher_id=assigned_tid,
+                    total_assigned=0,
+                    status="SCHEDULED",
+                )
+                db.add(existing_batch)
+                db.flush()
+            else:
+                existing_batch.date = date_ts
+                existing_batch.start_time = start_time
+                existing_batch.end_time = end_time
+                if slot_teacher:
+                    existing_batch.assigned_teacher_id = slot_teacher.id
+            batch_map[batch_key] = existing_batch
+
+        batch = batch_map[batch_key]
+
+        # 5. Find or Create ScheduleSlot for (slot_number, room)
         slot_key = (slot_num, room)
         if slot_key not in slot_map:
             existing_slot = db.scalar(
@@ -1171,6 +1217,7 @@ async def import_fap_schedule(
             if not existing_slot:
                 new_slot = ScheduleSlot(
                     exam_id=exam.id,
+                    batch_id=batch.id,
                     slot_number=slot_num,
                     date=date_ts,
                     start_time=start_time,
@@ -1185,6 +1232,8 @@ async def import_fap_schedule(
                 slot_map[slot_key] = new_slot
                 created_slots += 1
             else:
+                if not existing_slot.batch_id:
+                    existing_slot.batch_id = batch.id
                 if slot_teacher and not existing_slot.teacher_id:
                     existing_slot.teacher_id = slot_teacher.id
                     existing_slot.status = "READY"
@@ -1195,7 +1244,7 @@ async def import_fap_schedule(
         if slot_teacher:
             assigned_teachers.add(slot_teacher.id)
 
-        # 5. Resolve Student
+        # 6. Resolve Student
         student = db.scalar(select(User).where(User.username == mssv))
         if not student:
             student = User(
@@ -1209,7 +1258,7 @@ async def import_fap_schedule(
             db.add(student)
             db.flush()
 
-        # 6. Assign Student to Slot
+        # 7. Assign Student to Slot
         existing_assign = db.scalar(
             select(SlotAssignment).where(
                 SlotAssignment.slot_id == slot.id,
@@ -1220,7 +1269,7 @@ async def import_fap_schedule(
             db.add(SlotAssignment(slot_id=slot.id, student_id=student.id))
             assigned_students += 1
 
-        # 7. Update CourseCandidate
+        # 8. Update CourseCandidate
         cand = db.scalar(
             select(CourseCandidate).where(
                 CourseCandidate.course_id == course.id,
@@ -1240,12 +1289,20 @@ async def import_fap_schedule(
             cand.assigned_slot_id = slot.id
             cand.allocation_status = "ASSIGNED"
 
-    # Update assigned counts for slots
+    # Update assigned counts for slots & batches
     for slot in slot_map.values():
         cnt = db.scalar(
             select(func.count()).select_from(SlotAssignment).where(SlotAssignment.slot_id == slot.id)
         ) or 0
         slot.assigned_students_count = cnt
+
+    for b in batch_map.values():
+        b_cnt = db.scalar(
+            select(func.count()).select_from(SlotAssignment)
+            .join(ScheduleSlot, ScheduleSlot.id == SlotAssignment.slot_id)
+            .where(ScheduleSlot.batch_id == b.id)
+        ) or 0
+        b.total_assigned = b_cnt
 
     db.add(Audit(
         user_id=user.id,

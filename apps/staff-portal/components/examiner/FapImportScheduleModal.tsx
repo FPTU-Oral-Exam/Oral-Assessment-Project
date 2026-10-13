@@ -90,17 +90,18 @@ export default function FapImportScheduleModal({
   };
 
   const handleDownloadTemplate = () => {
-    window.open('/api/examiner/fap-sample-template', '_blank');
+    window.open('/demo_import_ca_thi_sinh_vien.xlsx', '_blank');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCourse) {
+    const targetCourse = selectedCourse || defaultCourseId;
+    if (!targetCourse) {
       toast.error('Vui lòng chọn Môn thi');
       return;
     }
     if (!file) {
-      toast.error('Vui lòng chọn file Excel / CSV từ FAP');
+      toast.error('Vui lòng chọn file Excel / CSV');
       return;
     }
 
@@ -108,10 +109,10 @@ export default function FapImportScheduleModal({
       setIsSubmitting(true);
       const formData = new FormData();
       formData.append('semester_id', selectedSemester || (semesters[0]?.id ?? ''));
-      formData.append('course_id', selectedCourse);
+      formData.append('course_id', targetCourse);
 
       // Prioritize defaultExamId or find matching exam for this course
-      const targetExamId = defaultExamId || exams.find((ex) => ex.course_id === selectedCourse)?.id;
+      const targetExamId = defaultExamId || exams.find((ex) => ex.course_id === targetCourse)?.id;
       if (targetExamId) {
         formData.append('exam_id', targetExamId);
       }
@@ -126,7 +127,7 @@ export default function FapImportScheduleModal({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail || data.message || 'Lỗi khi import file FAP');
+        throw new Error(data.detail || data.message || 'Lỗi khi import file Excel');
       }
 
       setImportResult({
@@ -141,7 +142,7 @@ export default function FapImportScheduleModal({
       );
       onSuccess();
     } catch (err: any) {
-      toast.error(err.message || 'Không thể import file phân ca từ FAP');
+      toast.error(err.message || 'Không thể import file phân ca');
     } finally {
       setIsSubmitting(false);
     }
@@ -159,9 +160,9 @@ export default function FapImportScheduleModal({
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Import Lịch & Phân Ca Thi từ FAP</h2>
+              <h2 className="text-base font-bold text-slate-900">Import Ca Thi & Danh Sách Sinh Viên</h2>
               <p className="text-xs text-slate-500">
-                Tự động tạo ca thi, phòng thi, gán giảng viên coi kiêm chấm thi & nạp sinh viên
+                Tự động tạo ca thi, phòng thi, gán giảng viên & phân bổ danh sách thí sinh
               </p>
             </div>
           </div>
@@ -179,70 +180,71 @@ export default function FapImportScheduleModal({
           <div className="p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
             <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-blue-950">Quy trình đồng bộ FAP:</p>
+              <p className="font-semibold text-blue-950">Định dạng file Excel:</p>
               <p className="text-slate-600 mt-0.5 leading-relaxed">
-                FAP quản lý các lớp học phần (`SE1701`, `SE1702`...) và gom sinh viên chia theo từng ca thi, phòng thi
-                và chỉ định Giảng viên (người coi thi kiêm chấm điểm).
+                File Excel chứa danh sách thí sinh kèm thông tin ca thi: <span className="font-medium">Ca_Thi, Ngay_Thi, Gio_Bat_Dau, Gio_Ket_Thuc, Phong_Thi, Giang_Vien_Email, MSSV, Ho_Ten, Lop_Hoc</span>.
               </p>
             </div>
           </div>
 
-          {/* Select Semester & Course */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Kỳ thi / Học kỳ</label>
-              <select
-                value={selectedSemester}
-                onChange={(e) => {
-                  setSelectedSemester(e.target.value);
-                  setSelectedCourse('');
-                }}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">-- Chọn Kỳ thi (Tùy chọn) --</option>
-                {semesters.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Môn thi <span className="text-rose-500">*</span>
-              </label>
-              <select
-                required
-                value={selectedCourse}
-                onChange={(e) => setSelectedCourse(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">-- Chọn Môn thi tổ chức --</option>
-                {availableCourses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    [{c.code}] {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Download Template Banner */}
-          <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+          {/* Download Demo Template Banner */}
+          <div className="flex items-center justify-between p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl">
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-slate-800">Chưa có file mẫu chuẩn FAP?</span>
-              <p className="text-[11px] text-slate-500">Tải file Excel mẫu gồm đầy đủ 9 cột chuẩn của trường</p>
+              <span className="text-xs font-bold text-emerald-900">Chưa có file mẫu Excel?</span>
+              <p className="text-[11px] text-emerald-700">Tải file Excel mẫu demo có sẵn dữ liệu ca thi & thí sinh</p>
             </div>
-            <button
-              type="button"
-              onClick={handleDownloadTemplate}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition shadow-2xs"
+            <a
+              href="/demo_import_ca_thi_sinh_vien.xlsx"
+              download="demo_import_ca_thi_sinh_vien.xlsx"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 transition shadow-2xs"
             >
-              <Download className="w-3.5 h-3.5 text-blue-600" />
-              <span>Tải file mẫu</span>
-            </button>
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Tải file demo</span>
+            </a>
           </div>
+
+          {/* Select Semester & Course if not preselected */}
+          {!defaultCourseId && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Kỳ thi / Học kỳ</label>
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => {
+                    setSelectedSemester(e.target.value);
+                    setSelectedCourse('');
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">-- Chọn Kỳ thi (Tùy chọn) --</option>
+                  {semesters.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Môn thi <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={selectedCourse}
+                  onChange={(e) => setSelectedCourse(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">-- Chọn Môn thi tổ chức --</option>
+                  {availableCourses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      [{c.code}] {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* File Upload Box */}
           <div>

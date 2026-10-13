@@ -20,8 +20,13 @@ import {
   GraduationCap,
   Sparkles,
   FileText,
+  UploadCloud,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+import FapImportScheduleModal from '@/components/examiner/FapImportScheduleModal';
 
 import { examinerService, adminService } from '@/services';
 import type { Exam, ExamBatch, BatchStudent } from '@oralai/shared';
@@ -76,6 +81,17 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     time_limit: 30,
     question_count: 3,
   });
+
+  // Modal: Import Schedule from Excel
+  const [importModalExam, setImportModalExam] = useState<Exam | null>(null);
+  const [semesters, setSemesters] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/examiner/semesters', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => setSemesters(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   // Modal: Create Batch for specific Exam
   const [batchModalExam, setBatchModalExam] = useState<Exam | null>(null);
@@ -444,7 +460,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                       </div>
                     </div>
 
-                    {/* Action Buttons: Chi tiết kỳ thi & Generate Variants (ATA) */}
+                    {/* Action Buttons: Chi tiết kỳ thi & Import ca thi từ Excel */}
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <button
                         onClick={() => router.push(`/courses/${courseId}/exams?examId=${exam.id}`)}
@@ -456,21 +472,12 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                       </button>
 
                       <button
-                        onClick={() => handleGenerateVariants(exam)}
-                        disabled={generatingExamId === exam.id || batches.length === 0}
-                        className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
-                        title={
-                          batches.length === 0
-                            ? 'Cần tạo ít nhất 1 ca thi trước khi sinh mã đề'
-                            : 'Sinh mã đề song song từ Ngân hàng đề thi (ATA) cho từng ca thi'
-                        }
+                        onClick={() => setImportModalExam(exam)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
+                        title="Import ca thi, phòng thi và danh sách sinh viên từ file Excel"
                       >
-                        {generatingExamId === exam.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-4 h-4" />
-                        )}
-                        Sinh mã đề (ATA)
+                        <FileSpreadsheet className="w-4 h-4" />
+                        Import ca thi (Excel)
                       </button>
                     </div>
                   </div>
@@ -478,16 +485,29 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
                 {/* Nested Batches Section */}
                 <div className="p-5 sm:p-6 bg-slate-50/40">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-slate-400" />
                       Danh sách ca thi & phòng thi ({batches.length})
                     </h4>
-                    {batches.length > 0 && (
-                      <span className="text-xs text-slate-500">
-                        Nhấp vào ca thi để xem chi tiết danh sách thí sinh từng phòng
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <a
+                        href="/demo_import_ca_thi_sinh_vien.xlsx"
+                        download="demo_import_ca_thi_sinh_vien.xlsx"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition"
+                        title="Tải file Excel mẫu demo có sẵn danh sách sinh viên"
+                      >
+                        <Download className="w-3.5 h-3.5 text-blue-600" />
+                        Tải file mẫu demo
+                      </a>
+                      <button
+                        onClick={() => setImportModalExam(exam)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-2xs transition"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        Import từ Excel
+                      </button>
+                    </div>
                   </div>
 
                   {isLoadingBatches && (
@@ -499,18 +519,28 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
                   {!isLoadingBatches && batches.length === 0 && (
                     <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center bg-white/60">
-                      <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <FileSpreadsheet className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                       <p className="text-sm font-semibold text-slate-700">Chưa có ca thi nào cho kỳ thi này</p>
-                      <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                        Bấm nút &quot;Thêm ca thi / đợt thi&quot; ở trên để thiết lập phòng và phân bổ thí sinh tự động.
+                      <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                        Hệ thống hỗ trợ import tự động ca thi, phòng thi, giảng viên và danh sách sinh viên trực tiếp từ file Excel.
                       </p>
-                      <button
-                        onClick={() => openBatchModal(exam)}
-                        className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-lg transition"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Tạo ca thi ngay
-                      </button>
+                      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                        <button
+                          onClick={() => setImportModalExam(exam)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition"
+                        >
+                          <UploadCloud className="w-4 h-4" />
+                          Import ca thi từ Excel
+                        </button>
+                        <a
+                          href="/demo_import_ca_thi_sinh_vien.xlsx"
+                          download="demo_import_ca_thi_sinh_vien.xlsx"
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs transition"
+                        >
+                          <Download className="w-4 h-4 text-blue-600" />
+                          Tải file Excel mẫu demo
+                        </a>
+                      </div>
                     </div>
                   )}
 
@@ -933,6 +963,26 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal 3: Import Schedule from Excel */}
+      {importModalExam && (
+        <FapImportScheduleModal
+          isOpen={!!importModalExam}
+          onClose={() => setImportModalExam(null)}
+          onSuccess={() => {
+            if (importModalExam) {
+              fetchBatches(importModalExam.id);
+            }
+            fetchExams();
+            setImportModalExam(null);
+          }}
+          semesters={semesters}
+          courses={[{ id: courseId, name: '', code: '' }]}
+          exams={exams.map((e) => ({ id: e.id, name: e.name, course_id: courseId }))}
+          defaultCourseId={courseId}
+          defaultExamId={importModalExam.id}
+        />
       )}
     </div>
   );
