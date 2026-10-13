@@ -299,6 +299,7 @@ class ScheduleSlot(Entity, Base):
     max_students: Mapped[int] = mapped_column(Integer)
     assigned_students_count: Mapped[int] = mapped_column(Integer, default=0)
     exam_variant_id: Mapped[str | None] = mapped_column(ForeignKey("exam_variants.id"))
+    teacher_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # Giám thị coi thi kiêm Chấm thi
     status: Mapped[str] = mapped_column(String(20), default="PENDING")  # PENDING, READY, IN_PROGRESS, COMPLETED
     grade_locked: Mapped[bool] = mapped_column(default=False)
 

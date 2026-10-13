@@ -20,8 +20,17 @@ import {
   Download,
   BarChart3,
   ExternalLink,
+  UploadCloud,
+  Sparkles,
+  PlusCircle,
+  GraduationCap,
+  Calendar,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+import FapImportScheduleModal from '@/components/examiner/FapImportScheduleModal';
+import ManualSlotCreateModal from '@/components/examiner/ManualSlotCreateModal';
 
 interface CourseInfo {
   id: string;
@@ -29,6 +38,7 @@ interface CourseInfo {
   code: string;
   description?: string;
   status: string;
+  semester_id?: string;
 }
 
 interface ExamInfo {
@@ -57,6 +67,7 @@ interface Slot {
   status: 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED';
   grade_locked: boolean;
   student_count: number;
+  teacher?: { id: string; name: string; username: string } | null;
   exam_variant: ExamVariant | null;
 }
 
@@ -104,6 +115,15 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showCreateExamModal, setShowCreateExamModal] = useState(false);
+  const [showFapModal, setShowFapModal] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [semesters, setSemesters] = useState<any[]>([]);
+  const [generatingVariants, setGeneratingVariants] = useState(false);
+
+  // Viewing Slot Students
+  const [viewingSlotStudents, setViewingSlotStudents] = useState<Slot | null>(null);
+  const [slotStudentsList, setSlotStudentsList] = useState<any[]>([]);
+  const [loadingSlotStudents, setLoadingSlotStudents] = useState(false);
 
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -193,16 +213,77 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
     }
   }, []);
 
+  const fetchSemesters = useCallback(async () => {
+    try {
+      const res = await fetch('/api/examiner/semesters', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setSemesters(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // Semesters list is optional
+    }
+  }, []);
+
   useEffect(() => {
     fetchCourseAndExams();
     fetchTeachers();
-  }, [fetchCourseAndExams, fetchTeachers]);
+    fetchSemesters();
+  }, [fetchCourseAndExams, fetchTeachers, fetchSemesters]);
 
   useEffect(() => {
     if (selectedExamId) {
       fetchSlots(selectedExamId);
     }
   }, [selectedExamId, fetchSlots]);
+
+  // Handler: Generate Parallel ATA Variants
+  const handleGenerateVariants = async () => {
+    if (!selectedExamId) {
+      toast.error('Vui lòng chọn đề thi trước khi sinh mã đề');
+      return;
+    }
+    setGeneratingVariants(true);
+    try {
+      const res = await fetch(`/api/examiner/exams/${selectedExamId}/generate-variants`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || data.message || 'Sinh mã đề song song thất bại');
+      }
+      toast.success(
+        `Đã sinh thành công ${data.variants_count || 'các'} mã đề song song từ Ngân hàng đề thi (ATA) cho các ca thi!`,
+        { duration: 5000 }
+      );
+      fetchSlots(selectedExamId);
+    } catch (err: any) {
+      toast.error(err.message || 'Sinh mã đề thất bại');
+    } finally {
+      setGeneratingVariants(false);
+    }
+  };
+
+  // Handler: Open Slot Students Modal
+  const openSlotStudentsModal = async (slot: Slot) => {
+    setViewingSlotStudents(slot);
+    setLoadingSlotStudents(true);
+    try {
+      const res = await fetch(`/api/examiner/slots/${slot.id}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setSlotStudentsList(data.students || []);
+      } else {
+        setSlotStudentsList([]);
+      }
+    } catch {
+      toast.error('Không thể tải danh sách thí sinh trong ca thi');
+      setSlotStudentsList([]);
+    } finally {
+      setLoadingSlotStudents(false);
+    }
+  };
 
   // Handler: Create Exam
   const handleCreateExam = async (e: React.FormEvent) => {
@@ -398,83 +479,115 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
       <div className="flex items-center justify-between">
         <Link
           href={`/courses/${courseId}`}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Quay lại Môn học {course?.code ? `(${course.code})` : ''}
-        </Link>
-        <Link
-          href="/results"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg transition"
-        >
-          <BarChart3 className="w-3.5 h-3.5" />
-          Bảng điều khiển kết quả
+          Quay lại Quản lý Kỳ thi {course?.code ? `(${course.code})` : ''}
         </Link>
       </div>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-mono text-xs font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <span className="font-mono text-xs font-bold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-md">
               {course?.code || 'COURSE'}
             </span>
             <span className="text-xs text-slate-400">•</span>
-            <span className="text-xs text-slate-600 font-medium">{course?.name}</span>
+            <span className="text-xs text-slate-600 font-semibold">{course?.name}</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Quản lý Ca thi (Exam Slots)</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Tạo ca thi hàng loạt, tự động chia đều sinh viên theo MSSV, giao đề cho giảng viên và khóa sổ điểm.
+
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-slate-900">
+              Chi tiết Kỳ thi: {selectedExam?.name || 'Kỳ thi'}
+            </h1>
+            {selectedExam && (
+              <span
+                className={`px-2.5 py-0.5 text-xs font-bold rounded-full border ${
+                  selectedExam.status === 'PUBLISHED'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}
+              >
+                {selectedExam.status === 'PUBLISHED' ? 'Đã công bố' : 'Bản nháp'}
+              </span>
+            )}
+          </div>
+
+          <p className="text-sm text-slate-500 mt-1 max-w-2xl">
+            {selectedExam?.description || 'Quản lý lịch ca thi, phòng thi, phân bổ sinh viên và giảng viên chấm kiêm coi thi.'}
           </p>
 
-          {/* Exam Selector */}
-          {exams.length > 0 && (
-            <div className="mt-4 flex items-center gap-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Đề thi:</span>
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedExamId}
-                  onChange={(e) => setSelectedExamId(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {exams.map((exam) => (
-                    <option key={exam.id} value={exam.id}>
-                      {exam.name} ({exam.question_count} câu, {exam.time_limit}p)
-                    </option>
-                  ))}
-                </select>
-                {selectedExam && (
-                  <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full border ${
-                    selectedExam.status === 'PUBLISHED'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                  }`}>
-                    {selectedExam.status === 'PUBLISHED' ? 'Đã công bố' : 'Bản nháp'}
-                  </span>
-                )}
-              </div>
+          {/* Stats Bar */}
+          {selectedExam && (
+            <div className="flex flex-wrap items-center gap-3 mt-3.5 text-xs text-slate-600">
+              <span className="inline-flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                Thời lượng: <strong className="text-slate-800">{selectedExam.time_limit} phút</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg">
+                <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                Số câu hỏi: <strong className="text-slate-800">{selectedExam.question_count} câu</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg">
+                <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                Tổng ca thi: <strong className="text-blue-900">{slots.length} ca</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg">
+                <Users className="w-3.5 h-3.5 text-emerald-500" />
+                Tổng thí sinh: <strong className="text-emerald-900">{slots.reduce((sum, s) => sum + (s.student_count || 0), 0)} SV</strong>
+              </span>
+            </div>
+          )}
+
+          {/* Exam Selector (if more than 1 exam) */}
+          {exams.length > 1 && (
+            <div className="mt-3.5 flex items-center gap-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Chuyển kỳ thi:</span>
+              <select
+                value={selectedExamId}
+                onChange={(e) => setSelectedExamId(e.target.value)}
+                className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {exams.map((exam) => (
+                  <option key={exam.id} value={exam.id}>
+                    {exam.name} ({exam.question_count} câu, {exam.time_limit}p)
+                  </option>
+                ))}
+              </select>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {exams.length > 0 ? (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-xs transition"
-            >
-              <Plus className="w-4 h-4" />
-              Tạo nhiều ca thi
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowCreateExamModal(true)}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-xs transition"
-            >
-              <Plus className="w-4 h-4" />
-              Tạo đề thi mới
-            </button>
-          )}
+        {/* Action Toolbar: Import FAP, Tạo ca thủ công, Sinh đề ATA */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            onClick={() => setShowFapModal(true)}
+            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-xs transition"
+            title="Import ca thi, phòng thi, sinh viên và giảng viên coi kiêm chấm thi từ FAP"
+          >
+            <UploadCloud className="w-4 h-4" />
+            Import Lịch từ FAP
+          </button>
+
+          <button
+            onClick={() => setShowManualModal(true)}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-xs transition"
+            title="Nhập tay ca thi, phòng thi, giảng viên và sinh viên"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Tạo ca thi thủ công
+          </button>
+
+          <button
+            onClick={handleGenerateVariants}
+            disabled={generatingVariants || slots.length === 0}
+            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl shadow-xs transition"
+            title={slots.length === 0 ? "Cần có ít nhất 1 ca thi để sinh đề" : "Sinh mã đề song song từ Ngân hàng đề thi cho các ca thi"}
+          >
+            {generatingVariants ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Sinh đề (ATA)
+          </button>
         </div>
       </div>
 
@@ -516,21 +629,30 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
 
       {/* Empty State 2: Exam has no Slots */}
       {!error && exams.length > 0 && slots.length === 0 && !loadingSlots && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-          <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Clock className="w-8 h-8 text-slate-400" />
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <FileSpreadsheet className="w-8 h-8" />
           </div>
-          <h3 className="text-lg font-bold text-slate-700">Chưa có ca thi nào</h3>
-          <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-            Hệ thống sẽ tự động lấy toàn bộ sinh viên đã đăng ký trong môn học và phân chia đều vào các ca thi theo thứ tự MSSV.
+          <h3 className="text-xl font-bold text-slate-800">Chưa có ca thi nào cho kỳ thi này</h3>
+          <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto leading-relaxed">
+            Bạn có thể <strong>Import lịch thi từ FAP</strong> (đã chia ca, phòng, sinh viên và giảng viên coi kiêm chấm) hoặc <strong>Tạo ca thi thủ công</strong> để bắt đầu tổ chức thi.
           </p>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="mt-6 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition"
-          >
-            <Plus className="w-4 h-4" />
-            Tạo ca thi đầu tiên
-          </button>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => setShowFapModal(true)}
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-xs transition"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Import Lịch từ FAP
+            </button>
+            <button
+              onClick={() => setShowManualModal(true)}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-xs transition"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Tạo ca thi thủ công
+            </button>
+          </div>
         </div>
       )}
 
@@ -597,6 +719,7 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
                         {slot.start_time} - {slot.end_time}
                       </span>
                     </div>
+
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -606,15 +729,31 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
                         {slot.room}
                       </span>
                     </div>
+
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500 flex items-center gap-1.5">
+                        <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
+                        Giám thị & Chấm thi
+                      </span>
+                      <span className="font-semibold text-slate-800">
+                        {slot.teacher ? slot.teacher.name : <span className="text-amber-600 font-normal">Chưa gán GV</span>}
+                      </span>
+                    </div>
+
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5 text-slate-400" />
                         Sĩ số ca thi
                       </span>
-                      <span className="font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-md">
-                        {slot.student_count} SV
-                      </span>
+                      <button
+                        onClick={() => openSlotStudentsModal(slot)}
+                        className="font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-md transition-colors"
+                        title="Xem danh sách thí sinh trong ca thi này"
+                      >
+                        {slot.student_count} SV (Xem DS)
+                      </button>
                     </div>
+
                     {slot.exam_variant && (
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-slate-500 flex items-center gap-1.5">
@@ -632,15 +771,24 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
                 {/* Card Actions */}
                 <div className="space-y-2">
                   <div className="flex gap-2">
-                    {slot.status === 'PENDING' && (
-                      <button
-                        onClick={() => openAssignModal(slot)}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold py-2 rounded-xl transition shadow-xs"
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        Giao đề
-                      </button>
-                    )}
+                    <button
+                      onClick={() => openSlotStudentsModal(slot)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold py-2 rounded-xl transition"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      DS Thí sinh
+                    </button>
+
+                    <button
+                      onClick={() => openAssignModal(slot)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold py-2 rounded-xl transition shadow-xs"
+                    >
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      {slot.teacher ? 'Đổi GV' : 'Gán GV'}
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleLockToggle(slot.id, !slot.grade_locked)}
                       className={`flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-xl transition ${
@@ -661,23 +809,14 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
                         </>
                       )}
                     </button>
-                  </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => router.push(`/results/${slot.id}`)}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold py-2 rounded-xl transition"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Chi tiết & Phúc khảo
-                    </button>
                     <button
                       onClick={() => handleExportFAP(slot.id, slot.slot_number)}
                       title="Tải bảng điểm Excel chuẩn FAP"
-                      className="inline-flex items-center justify-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-xl transition"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-xl transition"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      FAP
+                      Xuất FAP
                     </button>
                   </div>
                 </div>
@@ -1009,34 +1148,10 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="time_limit" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Thời lượng (phút)
-                  </label>
-                  <input
-                    type="number"
-                    id="time_limit"
-                    min={5}
-                    max={180}
-                    value={examFormData.time_limit}
-                    onChange={(e) => setExamFormData({ ...examFormData, time_limit: parseInt(e.target.value, 10) || 30 })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="question_count" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Số câu hỏi
-                  </label>
-                  <input
-                    type="number"
-                    id="question_count"
-                    min={1}
-                    max={20}
-                    value={examFormData.question_count}
-                    onChange={(e) => setExamFormData({ ...examFormData, question_count: parseInt(e.target.value, 10) || 3 })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-xs text-blue-800 leading-relaxed">
+                  <span className="font-semibold">Cấu trúc đề thi & câu hỏi:</span> Hệ thống sẽ tự động cấu hình và chọn câu hỏi theo đúng <span className="font-semibold">ma trận đề thi (Blueprint)</span> đã được phê duyệt của môn học.
                 </div>
               </div>
 
@@ -1062,6 +1177,123 @@ export default function ExamSlotsClient({ courseId, initialExamId }: ExamSlotsCl
           </div>
         </div>
       )}
+
+      {/* Modal 4: Slot Students List Modal */}
+      {viewingSlotStudents && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-xs"
+            onClick={() => setViewingSlotStudents(null)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 border border-slate-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 bg-slate-50/70">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Danh sách thí sinh Ca {viewingSlotStudents.slot_number}
+                  </h2>
+                  <span className="font-mono text-xs font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                    Phòng {viewingSlotStudents.room}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {formatDate(viewingSlotStudents.date)} ({viewingSlotStudents.start_time} - {viewingSlotStudents.end_time})
+                  {viewingSlotStudents.teacher && ` • Giám thị: ${viewingSlotStudents.teacher.name}`}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewingSlotStudents(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-200/70 text-slate-500 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto flex-1">
+              {loadingSlotStudents ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                  <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+                  <p className="text-xs text-slate-400">Đang tải danh sách thí sinh...</p>
+                </div>
+              ) : slotStudentsList.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-slate-600">Ca thi chưa có thí sinh nào</p>
+                  <p className="text-xs text-slate-400 mt-1">Import file FAP để tự động xếp thí sinh vào ca này.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                      <tr>
+                        <th className="px-4 py-3 text-center w-12">STT</th>
+                        <th className="px-4 py-3">MSSV</th>
+                        <th className="px-4 py-3">Họ và tên</th>
+                        <th className="px-4 py-3">Email</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {slotStudentsList.map((st, idx) => (
+                        <tr key={st.id || idx} className="hover:bg-slate-50/70">
+                          <td className="px-4 py-2.5 text-center text-slate-400 font-mono">{idx + 1}</td>
+                          <td className="px-4 py-2.5 font-mono font-bold text-blue-600">{st.username}</td>
+                          <td className="px-4 py-2.5 font-medium text-slate-900">{st.name}</td>
+                          <td className="px-4 py-2.5 text-slate-500">{st.email || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600">
+                Tổng cộng: <strong className="text-slate-900">{slotStudentsList.length} thí sinh</strong>
+              </span>
+              <button
+                onClick={() => setViewingSlotStudents(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold rounded-xl transition"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 5: FAP Import Modal */}
+      <FapImportScheduleModal
+        isOpen={showFapModal}
+        onClose={() => setShowFapModal(false)}
+        onSuccess={() => {
+          setShowFapModal(false);
+          if (selectedExamId) fetchSlots(selectedExamId);
+        }}
+        semesters={semesters}
+        courses={course ? [course] : []}
+        exams={exams.map((e) => ({ id: e.id, name: e.name, course_id: courseId }))}
+        defaultCourseId={courseId}
+        defaultExamId={selectedExamId}
+      />
+
+      {/* Modal 6: Manual Slot Create Modal */}
+      <ManualSlotCreateModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        onSuccess={() => {
+          setShowManualModal(false);
+          if (selectedExamId) fetchSlots(selectedExamId);
+        }}
+        semesters={semesters}
+        courses={course ? [course] : []}
+        exams={exams.map((e) => ({ id: e.id, name: e.name, course_id: courseId }))}
+        defaultCourseId={courseId}
+        defaultExamId={selectedExamId}
+      />
     </div>
   );
 }

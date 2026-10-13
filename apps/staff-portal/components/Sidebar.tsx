@@ -40,9 +40,7 @@ const menuItems: Record<string, { href: string; label: string; icon: React.Compo
   EXAMINER: [
     { href: '/semester', label: 'Quản lý học kỳ', icon: Calendar },
     { href: '/schedule', label: 'Lịch thi & Ca thi', icon: Calendar },
-    { href: '/proctor', label: 'Coi thi & Giám sát', icon: Radio },
     { href: '/students', label: 'Danh sách thí sinh', icon: GraduationCap },
-    { href: '/results', label: 'Phê duyệt kết quả', icon: CheckCircle },
   ],
   TEACHER: [
     { href: '/schedule', label: 'Lịch coi thi được gán', icon: Calendar },

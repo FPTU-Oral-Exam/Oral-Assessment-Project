@@ -207,3 +207,26 @@ class GlobalCandidateListResponse(BaseModel):
     unassigned_count: int
     candidates: List[GlobalCandidateItem]
 
+
+# === Manual Slot & FAP Schedule Ingestion ===
+
+class ManualSlotCreateIn(BaseModel):
+    exam_id: str
+    slot_number: int = Field(..., ge=1)
+    date: float  # Unix timestamp
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    room: str = Field(..., min_length=1, max_length=50)
+    max_students: int = Field(default=30, ge=1, le=200)
+    teacher_id: Optional[str] = None  # Giám thị coi thi kiêm Chấm thi
+    student_rolls: Optional[List[str]] = None
+
+
+class FapImportSummary(BaseModel):
+    created_slots: int
+    updated_slots: int
+    assigned_students: int
+    assigned_teachers: int
+    errors: List[str] = []
+    slots_summary: List[dict] = []
+

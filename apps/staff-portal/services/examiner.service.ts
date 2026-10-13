@@ -131,17 +131,27 @@ export interface ReEvaluationRequest {
   blind_marking?: boolean;
 }
 
+export interface BatchStudentDetail {
+  student_id?: string;
+  roll_number: string;
+  full_name: string;
+  class_code?: string;
+  room: string;
+  slot_id?: string;
+  eligibility_status?: string;
+}
+
 export interface BatchStudentsResponse {
   batch_id: string;
   name: string;
+  total_assigned?: number;
+  students?: BatchStudentDetail[];
   rooms: {
     room: string;
     slot_id: string;
-    students: {
-      student_id: string;
-      roll_number: string;
-      full_name: string;
-    }[];
+    teacher?: { id: string; name: string; username: string } | null;
+    assigned_count?: number;
+    students: BatchStudentDetail[];
   }[];
 }
 
@@ -304,6 +314,13 @@ export const examinerService = {
    */
   generateVariants: (examId: string): Promise<GenerateVariantsResponse> => {
     return apiClient.post<GenerateVariantsResponse>(`/examiner/exams/${examId}/generate-variants`);
+  },
+
+  /**
+   * Sinh mã đề ATA cho một ca thi đơn lẻ
+   */
+  generateVariantForSlot: (slotId: string): Promise<{ success: boolean; slot_id: string; variant_id: string; variant_name: string; questions_count: number; slot_status: string }> => {
+    return apiClient.post(`/examiner/slots/${slotId}/generate-variant`);
   },
 
   // -------------------------------------------------------------------------

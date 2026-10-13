@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   BookOpen,
@@ -19,8 +20,13 @@ import {
   GraduationCap,
   Sparkles,
   FileText,
+  UploadCloud,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+import FapImportScheduleModal from '@/components/examiner/FapImportScheduleModal';
 
 import { examinerService, adminService } from '@/services';
 import type { Exam, ExamBatch, BatchStudent } from '@oralai/shared';
@@ -52,6 +58,7 @@ interface BatchFormData {
 }
 
 export default function ExamListClient({ courseId }: { courseId: string }) {
+  const router = useRouter();
   const [exams, setExams] = useState<Exam[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [batchesByExam, setBatchesByExam] = useState<Record<string, ExamBatch[]>>({});
@@ -61,7 +68,8 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
   // Expanded batch students
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
-  const [studentsByBatch, setStudentsByBatch] = useState<Record<string, BatchStudent[]>>({});
+  const [selectedRoomByBatch, setSelectedRoomByBatch] = useState<Record<string, string | null>>({});
+  const [studentsByBatch, setStudentsByBatch] = useState<Record<string, any[]>>({});
   const [loadingStudents, setLoadingStudents] = useState<string | null>(null);
   const [generatingExamId, setGeneratingExamId] = useState<string | null>(null);
 
@@ -74,6 +82,17 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     time_limit: 30,
     question_count: 3,
   });
+
+  // Modal: Import Schedule from Excel
+  const [importModalExam, setImportModalExam] = useState<Exam | null>(null);
+  const [semesters, setSemesters] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/examiner/semesters', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => setSemesters(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   // Modal: Create Batch for specific Exam
   const [batchModalExam, setBatchModalExam] = useState<Exam | null>(null);
@@ -145,29 +164,39 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     fetchTeachers();
   }, [fetchExams, fetchTeachers]);
 
-  // Toggle batch students accordion
-  const toggleBatchStudents = async (batchId: string) => {
-    if (expandedBatchId === batchId) {
-      setExpandedBatchId(null);
-      return;
+  // Toggle batch students accordion (supports clicking specific room)
+  const toggleBatchStudents = async (batchId: string, targetRoom?: string) => {
+    if (targetRoom !== undefined) {
+      setSelectedRoomByBatch((prev) => ({
+        ...prev,
+        [batchId]: prev[batchId] === targetRoom ? null : targetRoom,
+      }));
+      setExpandedBatchId(batchId);
+    } else {
+      if (expandedBatchId === batchId) {
+        setExpandedBatchId(null);
+        return;
+      }
+      setExpandedBatchId(batchId);
     }
-    setExpandedBatchId(batchId);
 
     if (!studentsByBatch[batchId]) {
       setLoadingStudents(batchId);
       try {
-        const data = await examinerService.getBatchStudents(batchId);
-        // Flatten students from all rooms
-        const allStudents: BatchStudent[] = [];
-        if (data.rooms) {
+        const data: any = await examinerService.getBatchStudents(batchId);
+        let allStudents: any[] = [];
+        if (Array.isArray(data)) {
+          allStudents = data;
+        } else if (Array.isArray(data?.students)) {
+          allStudents = data.students;
+        } else if (Array.isArray(data?.rooms)) {
           data.rooms.forEach((room: any) => {
-            if (room.students) {
+            if (Array.isArray(room.students)) {
               room.students.forEach((st: any) => {
                 allStudents.push({
-                  roll_number: st.roll_number,
-                  full_name: st.full_name,
-                  room: room.room,
-                  eligibility_status: 'ELIGIBLE',
+                  ...st,
+                  room: st.room || room.room,
+                  eligibility_status: st.eligibility_status || 'ELIGIBLE',
                 });
               });
             }
@@ -190,13 +219,13 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     e.preventDefault();
     setCreatingExam(true);
     try {
-      await examinerService.createExam(courseId, {
+      const created = await examinerService.createExam(courseId, {
         name: examForm.name,
         description: examForm.description,
         time_limit: examForm.time_limit,
         question_count: examForm.question_count,
       });
-      toast.success('Đã tạo kỳ thi thành công');
+      toast.success('Đã tạo kỳ thi thành công! Đang chuyển đến chi tiết kỳ thi...');
       setShowExamModal(false);
       setExamForm({
         name: 'Thi Vấn Đáp Cuối Kỳ',
@@ -204,7 +233,11 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
         time_limit: 30,
         question_count: 3,
       });
-      fetchExams();
+      if (created?.id) {
+        router.push(`/courses/${courseId}/exams?examId=${created.id}`);
+      } else {
+        fetchExams();
+      }
     } catch (err) {
       const msg = parseApiError(err, {
         EXAM_NAME_EXISTS: `Tên kỳ thi "${examForm.name.trim()}" đã tồn tại trong môn học này! Vui lòng đặt tên khác.`,
@@ -400,7 +433,13 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                         <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-md bg-blue-100 text-blue-800">
                           {exam.exam_type || 'FINAL'}
                         </span>
-                        <h3 className="text-xl font-bold text-slate-900">{exam.name}</h3>
+                        <h3
+                          onClick={() => router.push(`/courses/${courseId}/exams?examId=${exam.id}`)}
+                          className="text-xl font-bold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors"
+                          title="Bấm để xem chi tiết kỳ thi và import ca thi"
+                        >
+                          {exam.name}
+                        </h3>
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                             exam.status === 'PUBLISHED'
@@ -423,7 +462,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                         </span>
                         <span>•</span>
                         <span>
-                          Số câu hỏi: <strong className="text-slate-700">{exam.question_count} câu</strong>
+                          Đề thi: <strong className="text-slate-700">Theo ma trận Blueprint</strong>
                         </span>
                         <span>•</span>
                         <span>
@@ -432,32 +471,24 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                       </div>
                     </div>
 
-                    {/* Action Buttons: Generate Variants (ATA) & Create Batch */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    {/* Action Buttons: Chi tiết kỳ thi & Import ca thi từ Excel */}
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <button
-                        onClick={() => handleGenerateVariants(exam)}
-                        disabled={generatingExamId === exam.id || batches.length === 0}
-                        className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
-                        title={
-                          batches.length === 0
-                            ? 'Cần tạo ít nhất 1 ca thi trước khi sinh mã đề'
-                            : 'Sinh mã đề song song từ Ngân hàng đề thi (ATA) cho từng ca thi'
-                        }
+                        onClick={() => router.push(`/courses/${courseId}/exams?examId=${exam.id}`)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
                       >
-                        {generatingExamId === exam.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-4 h-4" />
-                        )}
-                        Sinh mã đề song song (ATA)
+                        <Calendar className="w-4 h-4" />
+                        Chi tiết kỳ thi
+                        <ChevronRight className="w-4 h-4" />
                       </button>
 
                       <button
-                        onClick={() => openBatchModal(exam)}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
+                        onClick={() => setImportModalExam(exam)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
+                        title="Import ca thi, phòng thi và danh sách sinh viên từ file Excel"
                       >
-                        <Plus className="w-4 h-4" />
-                        Thêm ca thi / đợt thi
+                        <FileSpreadsheet className="w-4 h-4" />
+                        Import ca thi (Excel)
                       </button>
                     </div>
                   </div>
@@ -465,16 +496,29 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
                 {/* Nested Batches Section */}
                 <div className="p-5 sm:p-6 bg-slate-50/40">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-slate-400" />
                       Danh sách ca thi & phòng thi ({batches.length})
                     </h4>
-                    {batches.length > 0 && (
-                      <span className="text-xs text-slate-500">
-                        Nhấp vào ca thi để xem chi tiết danh sách thí sinh từng phòng
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <a
+                        href="/demo_import_ca_thi_sinh_vien.xlsx"
+                        download="demo_import_ca_thi_sinh_vien.xlsx"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition"
+                        title="Tải file Excel mẫu demo có sẵn danh sách sinh viên"
+                      >
+                        <Download className="w-3.5 h-3.5 text-blue-600" />
+                        Tải file mẫu demo
+                      </a>
+                      <button
+                        onClick={() => setImportModalExam(exam)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-2xs transition"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        Import từ Excel
+                      </button>
+                    </div>
                   </div>
 
                   {isLoadingBatches && (
@@ -486,18 +530,28 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
                   {!isLoadingBatches && batches.length === 0 && (
                     <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center bg-white/60">
-                      <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <FileSpreadsheet className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                       <p className="text-sm font-semibold text-slate-700">Chưa có ca thi nào cho kỳ thi này</p>
-                      <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                        Bấm nút &quot;Thêm ca thi / đợt thi&quot; ở trên để thiết lập phòng và phân bổ thí sinh tự động.
+                      <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                        Hệ thống hỗ trợ import tự động ca thi, phòng thi, giảng viên và danh sách sinh viên trực tiếp từ file Excel.
                       </p>
-                      <button
-                        onClick={() => openBatchModal(exam)}
-                        className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-lg transition"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Tạo ca thi ngay
-                      </button>
+                      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                        <button
+                          onClick={() => setImportModalExam(exam)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition"
+                        >
+                          <UploadCloud className="w-4 h-4" />
+                          Import ca thi từ Excel
+                        </button>
+                        <a
+                          href="/demo_import_ca_thi_sinh_vien.xlsx"
+                          download="demo_import_ca_thi_sinh_vien.xlsx"
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs transition"
+                        >
+                          <Download className="w-4 h-4 text-blue-600" />
+                          Tải file Excel mẫu demo
+                        </a>
+                      </div>
                     </div>
                   )}
 
@@ -555,20 +609,35 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
 
                               {/* Rooms & Total Students */}
                               <div className="flex flex-wrap items-center gap-2">
-                                {batch.rooms?.map((r: any) => (
-                                  <span
-                                    key={r.room}
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold"
-                                  >
-                                    <Building className="w-3 h-3 text-slate-400" />
-                                    <span>{r.room}: <strong className="text-blue-700">{r.assigned_count}</strong> SV</span>
-                                    {r.variant_name && (
-                                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 border border-purple-200 font-bold ml-0.5">
-                                        {r.variant_name}
-                                      </span>
-                                    )}
-                                  </span>
-                                ))}
+                                {batch.rooms?.map((r: any) => {
+                                  const isSelected = selectedRoomByBatch[batch.batch_id] === r.room;
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={r.room}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleBatchStudents(batch.batch_id, isSelected ? undefined : r.room);
+                                      }}
+                                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                                        isSelected
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                                          : 'bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border-slate-200'
+                                      }`}
+                                      title={`Bấm để xem danh sách lớp và sinh viên phòng ${r.room}`}
+                                    >
+                                      <Building className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-slate-400'}`} />
+                                      <span>Phòng {r.room}: <strong className={isSelected ? 'text-white' : 'text-blue-700'}>{r.assigned_count}</strong> SV</span>
+                                      {r.variant_name && (
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ml-0.5 ${
+                                          isSelected ? 'bg-blue-800 text-white' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                                        }`}>
+                                          {r.variant_name}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold ml-1">
                                   <Users className="w-3 h-3 text-emerald-600" />
                                   Tổng: {batch.total_assigned} SV
@@ -580,71 +649,138 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                             {isExpanded && (
                               <div className="border-t border-slate-200 p-4 bg-slate-50/50">
                                 {isLoadingThisStudents && (
-                                  <div className="flex items-center justify-center py-6 gap-2 text-xs text-slate-400">
+                                  <div className="flex items-center justify-center py-8 gap-2 text-xs text-slate-400">
                                     <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                                     Đang tải danh sách thí sinh...
                                   </div>
                                 )}
 
                                 {!isLoadingThisStudents && students.length === 0 && (
-                                  <p className="text-xs text-slate-400 text-center py-4">
+                                  <p className="text-xs text-slate-400 text-center py-6">
                                     Chưa có dữ liệu thí sinh trong ca thi này.
                                   </p>
                                 )}
 
-                                {!isLoadingThisStudents && students.length > 0 && (
-                                  <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs font-bold text-slate-700">
-                                        Danh sách phân bổ chi tiết ({students.length} thí sinh)
-                                      </span>
-                                    </div>
-                                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                                      <table className="w-full text-left text-xs">
-                                        <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                                          <tr>
-                                            <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
-                                              MSSV
-                                            </th>
-                                            <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
-                                              Họ và tên
-                                            </th>
-                                            <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
-                                              Phòng thi
-                                            </th>
-                                            <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
-                                              Trạng thái
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                          {students.map((st) => (
-                                            <tr key={st.roll_number} className="hover:bg-slate-50/60">
-                                              <td className="px-3.5 py-2 font-mono font-bold text-slate-800">
-                                                {st.roll_number}
-                                              </td>
-                                              <td className="px-3.5 py-2 font-semibold text-slate-900">
-                                                {st.full_name}
-                                              </td>
-                                              <td className="px-3.5 py-2">
-                                                <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-800">
-                                                  <Building className="w-3 h-3 text-blue-500" />
-                                                  {st.room}
-                                                </span>
-                                              </td>
-                                              <td className="px-3.5 py-2">
-                                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                                  Đủ điều kiện
-                                                </span>
-                                              </td>
+                                {!isLoadingThisStudents && students.length > 0 && (() => {
+                                  const selectedRoom = selectedRoomByBatch[batch.batch_id];
+                                  const displayStudents = selectedRoom
+                                    ? students.filter((s: any) => s.room === selectedRoom)
+                                    : students;
+                                  const uniqueClasses = Array.from(new Set(displayStudents.map((s: any) => s.class_code).filter(Boolean)));
+
+                                  return (
+                                    <div className="space-y-3">
+                                      {/* Filter Bar: Room Buttons & Class Info */}
+                                      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedRoomByBatch((prev) => ({ ...prev, [batch.batch_id]: null }))}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                                              !selectedRoom
+                                                ? 'bg-blue-600 text-white shadow-xs'
+                                                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                                            }`}
+                                          >
+                                            Tất cả các phòng ({students.length} SV)
+                                          </button>
+                                          {batch.rooms?.map((r: any) => {
+                                            const isCurrSelected = selectedRoom === r.room;
+                                            return (
+                                              <button
+                                                type="button"
+                                                key={r.room}
+                                                onClick={() => setSelectedRoomByBatch((prev) => ({ ...prev, [batch.batch_id]: r.room }))}
+                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                                                  isCurrSelected
+                                                    ? 'bg-blue-600 text-white shadow-xs'
+                                                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200'
+                                                }`}
+                                              >
+                                                <Building className={`w-3.5 h-3.5 ${isCurrSelected ? 'text-white' : 'text-slate-400'}`} />
+                                                <span>Phòng {r.room} ({r.assigned_count} SV)</span>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+
+                                        {uniqueClasses.length > 0 && (
+                                          <div className="flex items-center gap-1.5 text-xs">
+                                            <span className="font-semibold text-slate-500">Lớp sinh viên:</span>
+                                            {uniqueClasses.map((cl) => (
+                                              <span
+                                                key={cl}
+                                                className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-amber-50 text-amber-800 border border-amber-200"
+                                              >
+                                                {cl}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Students Table */}
+                                      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+                                        <table className="w-full text-left text-xs">
+                                          <thead className="bg-slate-50/80 text-slate-600 border-b border-slate-200">
+                                            <tr>
+                                              <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px] w-12 text-center">
+                                                STT
+                                              </th>
+                                              <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
+                                                MSSV
+                                              </th>
+                                              <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
+                                                Họ và tên
+                                              </th>
+                                              <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
+                                                Lớp học
+                                              </th>
+                                              <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
+                                                Phòng thi
+                                              </th>
+                                              <th className="px-3.5 py-2.5 font-bold uppercase tracking-wider text-[11px]">
+                                                Trạng thái
+                                              </th>
                                             </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100">
+                                            {displayStudents.map((st: any, idx: number) => (
+                                              <tr key={st.roll_number} className="hover:bg-slate-50/70 transition-colors">
+                                                <td className="px-3.5 py-2 text-center font-medium text-slate-400">
+                                                  {idx + 1}
+                                                </td>
+                                                <td className="px-3.5 py-2 font-mono font-bold text-blue-700">
+                                                  {st.roll_number}
+                                                </td>
+                                                <td className="px-3.5 py-2 font-semibold text-slate-900">
+                                                  {st.full_name}
+                                                </td>
+                                                <td className="px-3.5 py-2">
+                                                  <span className="inline-flex items-center px-2 py-0.5 rounded font-mono font-bold text-xs bg-amber-50 text-amber-800 border border-amber-200">
+                                                    {st.class_code || 'Chung'}
+                                                  </span>
+                                                </td>
+                                                <td className="px-3.5 py-2">
+                                                  <span className="inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-100">
+                                                    <Building className="w-3 h-3 text-blue-500" />
+                                                    Phòng {st.room}
+                                                  </span>
+                                                </td>
+                                                <td className="px-3.5 py-2">
+                                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                    Đủ điều kiện
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  );
+                                })()}
                               </div>
                             )}
                           </div>
@@ -709,38 +845,10 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Thời lượng (phút) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={examForm.time_limit}
-                    onChange={(e) =>
-                      setExamForm({ ...examForm, time_limit: parseInt(e.target.value, 10) || 30 })
-                    }
-                    min={5}
-                    max={180}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Số câu hỏi <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={examForm.question_count}
-                    onChange={(e) =>
-                      setExamForm({ ...examForm, question_count: parseInt(e.target.value, 10) || 3 })
-                    }
-                    min={1}
-                    max={20}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+              <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3.5 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-xs text-blue-800 leading-relaxed">
+                  <span className="font-semibold">Cấu trúc đề thi & câu hỏi:</span> Hệ thống sẽ tự động cấu hình và chọn câu hỏi theo đúng <span className="font-semibold">ma trận đề thi (Blueprint)</span> đã được phê duyệt của môn học.
                 </div>
               </div>
 
@@ -948,6 +1056,26 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal 3: Import Schedule from Excel */}
+      {importModalExam && (
+        <FapImportScheduleModal
+          isOpen={!!importModalExam}
+          onClose={() => setImportModalExam(null)}
+          onSuccess={() => {
+            if (importModalExam) {
+              fetchBatches(importModalExam.id);
+            }
+            fetchExams();
+            setImportModalExam(null);
+          }}
+          semesters={semesters}
+          courses={[{ id: courseId, name: '', code: '' }]}
+          exams={exams.map((e) => ({ id: e.id, name: e.name, course_id: courseId }))}
+          defaultCourseId={courseId}
+          defaultExamId={importModalExam.id}
+        />
       )}
     </div>
   );
