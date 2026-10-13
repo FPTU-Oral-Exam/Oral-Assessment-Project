@@ -22,7 +22,6 @@ const rolePermissions: Record<string, RegExp[]> = {
   ],
   ACADEMY: [
     /^\/dashboard/,
-    /^\/courses/,
     /^\/rubrics/,
     /^\/item-bank/,
     /^\/question-types/,
@@ -40,7 +39,6 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/proctor/,
   ],
   TEACHER: [
-    /^\/dashboard/,
     /^\/schedule/,
     /^\/grading/,
     /^\/proctor/,
@@ -79,13 +77,19 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Redirect root path to dashboard
-  if (path === '/' || path === '') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  const roles = user.roles || (user.role ? [user.role] : []);
+
+  // Redirect root path or /dashboard for TEACHER
+  if (path === '/' || path === '' || path === '/dashboard') {
+    if (roles.length === 1 && roles[0] === 'TEACHER') {
+      return NextResponse.redirect(new URL('/schedule', request.url));
+    }
+    if (path === '/' || path === '') {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
   }
 
   // Check role permissions
-  const roles = user.roles || (user.role ? [user.role] : []);
   const hasAccess = roles.some((role: string) => {
     const patterns = rolePermissions[role] || [];
     return patterns.some(pattern => pattern.test(path));

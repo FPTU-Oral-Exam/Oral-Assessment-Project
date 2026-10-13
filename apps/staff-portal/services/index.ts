@@ -45,6 +45,15 @@ export type {
 } from './examiner.service';
 
 export type {
+  TeacherScheduleSlot,
+  ProctorRoomDetail,
+  CandidateRosterItem,
+  GradingSessionDetail,
+  ResultDetail,
+  AttemptItemDetail,
+  ScoreOverrideRequest,
+  RegradeTranscriptRequest,
+  ReEvaluationItem,
   CourseWorkspace,
   Rubric,
   RubricCriterion,
@@ -56,10 +65,6 @@ export type {
   UpdateTopicRequest,
   RagSearchResponse,
   ExamBlueprintRequest,
-  ResultDetail,
-  ScoreOverrideRequest,
-  RegradeTranscriptRequest,
-  ReEvaluationItem,
   SemesterGroup,
   AssignedCourse,
 } from './teacher.service';
