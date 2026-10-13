@@ -23,9 +23,15 @@ import {
   FileText,
   Radio,
   ExternalLink,
+  UploadCloud,
+  PlusCircle,
+  GraduationCap,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/hooks/useUser';
+import FapImportScheduleModal from '@/components/examiner/FapImportScheduleModal';
+import ManualSlotCreateModal from '@/components/examiner/ManualSlotCreateModal';
 
 interface Semester {
   id: string;
@@ -50,6 +56,13 @@ interface ExamInfo {
   slot_count?: number;
 }
 
+interface TeacherInfo {
+  id: string;
+  name: string;
+  username: string;
+  email?: string;
+}
+
 interface ScheduleSlotItem {
   id: string;
   slot_number: number;
@@ -60,6 +73,8 @@ interface ScheduleSlotItem {
   status: 'PENDING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED';
   grade_locked: boolean;
   student_count: number;
+  max_students?: number;
+  teacher?: TeacherInfo | null;
   exam_id: string;
   exam_name: string;
   course_id: string;
@@ -89,6 +104,10 @@ export default function ScheduleClient() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Modals
+  const [showFapModal, setShowFapModal] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -150,6 +169,8 @@ export default function ScheduleClient() {
                 status: s.status || 'PENDING',
                 grade_locked: !!s.grade_locked,
                 student_count: s.student_count || 0,
+                max_students: s.max_students || 30,
+                teacher: s.teacher || null,
                 exam_id: exam.id,
                 exam_name: exam.name,
                 course_id: exam.course_id,
@@ -198,43 +219,47 @@ export default function ScheduleClient() {
       if (searchTerm) {
         const query = searchTerm.toLowerCase();
         const matchRoom = slot.room.toLowerCase().includes(query);
-        const matchCourse = slot.course_name.toLowerCase().includes(query) || slot.course_code.toLowerCase().includes(query);
+        const matchCourseName = slot.course_name.toLowerCase().includes(query);
+        const matchCourseCode = slot.course_code.toLowerCase().includes(query);
         const matchExam = slot.exam_name.toLowerCase().includes(query);
-        if (!matchRoom && !matchCourse && !matchExam) return false;
+        const matchTeacher = slot.teacher?.name.toLowerCase().includes(query) || false;
+        if (!matchRoom && !matchCourseName && !matchCourseCode && !matchExam && !matchTeacher) {
+          return false;
+        }
       }
 
-      // Semester
-      if (selectedSemester && slot.semester_name !== selectedSemester) {
-        return false;
+      // Semester filter
+      if (selectedSemester && slot.semester_name) {
+        const sem = semesters.find((s) => s.id === selectedSemester);
+        if (sem && slot.semester_name !== sem.name) return false;
       }
 
-      // Course
+      // Course filter
       if (selectedCourse && slot.course_id !== selectedCourse) {
         return false;
       }
 
-      // Status
+      // Status filter
       if (selectedStatus && slot.status !== selectedStatus) {
         return false;
       }
 
-      // Date
-      if (selectedDate) {
+      // Date filter
+      if (selectedDate && slot.date) {
         const slotDateStr = new Date(slot.date * 1000).toISOString().split('T')[0];
         if (slotDateStr !== selectedDate) return false;
       }
 
       return true;
     });
-  }, [slots, searchTerm, selectedSemester, selectedCourse, selectedStatus, selectedDate]);
+  }, [slots, searchTerm, selectedSemester, selectedCourse, selectedStatus, selectedDate, semesters]);
 
-  // Metrics
+  // Aggregate Metrics
   const metrics = useMemo(() => {
     const totalSlots = slots.length;
     const totalStudents = slots.reduce((acc, s) => acc + s.student_count, 0);
     const readySlots = slots.filter((s) => s.status === 'READY' || s.status === 'PENDING').length;
     const completedSlots = slots.filter((s) => s.status === 'COMPLETED').length;
-
     return { totalSlots, totalStudents, readySlots, completedSlots };
   }, [slots]);
 
@@ -250,27 +275,50 @@ export default function ScheduleClient() {
             <div>
               <h1 className="text-xl font-bold text-slate-900">Lịch thi vấn đáp & Điều phối Ca thi</h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Theo dõi, quản lý khung giờ, phòng thi và thí sinh trên toàn hệ thống
+                Đồng bộ ca thi từ FAP FPT hoặc tạo ca thủ công, chỉ định Giảng viên coi & chấm thi
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center flex-wrap gap-2.5">
           <button
             onClick={handleRefresh}
             disabled={refreshing || loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-all disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-all disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
             <span>Làm mới</span>
           </button>
+
+          {/* Import FAP Button */}
+          {isExaminer && (
+            <button
+              onClick={() => setShowFapModal(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              <span>Import Lịch FAP</span>
+            </button>
+          )}
+
+          {/* Create Manual Slot Button */}
+          {isExaminer && (
+            <button
+              onClick={() => setShowManualModal(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Tạo Ca thi mới</span>
+            </button>
+          )}
+
           <Link
             href="/courses"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span>Quản lý Môn học</span>
+            <span>Môn học</span>
           </Link>
         </div>
       </div>
@@ -326,7 +374,7 @@ export default function ScheduleClient() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Tìm theo phòng thi, mã môn, tên môn hoặc đề thi..."
+              placeholder="Tìm theo phòng thi, mã môn, tên môn, đề thi hoặc giảng viên..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -360,8 +408,24 @@ export default function ScheduleClient() {
             >
               <option value="">Tất cả học kỳ</option>
               {semesters.map((s) => (
-                <option key={s.id} value={s.name}>
+                <option key={s.id} value={s.id}>
                   {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Course Filter */}
+          <div className="w-full md:w-48">
+            <select
+              value={selectedCourse}
+              onChange={(e) => setSelectedCourse(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Tất cả môn học</option>
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  [{c.code}] {c.name}
                 </option>
               ))}
             </select>
@@ -383,19 +447,19 @@ export default function ScheduleClient() {
           </div>
         </div>
 
-        {/* Clear Filter Tag */}
-        {(searchTerm || selectedDate || selectedSemester || selectedStatus || selectedCourse) && (
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
-            <span>Đang lọc: <strong>{filteredSlots.length}</strong> kết quả</span>
+        {/* Clear Filters Button */}
+        {(searchTerm || selectedSemester || selectedCourse || selectedStatus || selectedDate) && (
+          <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+            <span>Tìm thấy {filteredSlots.length} ca thi phù hợp</span>
             <button
               onClick={() => {
                 setSearchTerm('');
-                setSelectedDate('');
                 setSelectedSemester('');
-                setSelectedStatus('');
                 setSelectedCourse('');
+                setSelectedStatus('');
+                setSelectedDate('');
               }}
-              className="text-blue-600 hover:text-blue-800 font-semibold underline text-xs ml-auto"
+              className="text-blue-600 hover:text-blue-700 font-semibold"
             >
               Xóa bộ lọc
             </button>
@@ -422,21 +486,32 @@ export default function ScheduleClient() {
             </button>
           </div>
         ) : filteredSlots.length === 0 ? (
-          <div className="py-16 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-              <CalendarIcon className="w-6 h-6" />
+          <div className="py-16 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+              <CalendarIcon className="w-7 h-7" />
             </div>
-            <h3 className="text-base font-bold text-slate-700">Chưa có ca thi nào</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Chưa có ca thi nào được tạo hoặc không có kết quả phù hợp với bộ lọc hiện tại.
-            </p>
-            <Link
-              href="/courses"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition"
-            >
-              <span>Vào Quản lý Môn học để tạo Ca thi</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div>
+              <h3 className="text-base font-bold text-slate-800">Chưa có ca thi nào</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                Bạn có thể nạp nhanh danh sách ca thi từ hệ thống FAP hoặc bấm tạo ca thủ công
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setShowFapModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Import Lịch từ FAP</span>
+              </button>
+              <button
+                onClick={() => setShowManualModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Tạo Ca thi thủ công</span>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -446,6 +521,7 @@ export default function ScheduleClient() {
                   <th className="py-3 px-4">Ca thi / Phòng</th>
                   <th className="py-3 px-4">Ngày thi & Giờ thi</th>
                   <th className="py-3 px-4">Môn học & Kỳ thi</th>
+                  <th className="py-3 px-4">Giảng viên (Coi & Chấm)</th>
                   <th className="py-3 px-4 text-center">Thí sinh</th>
                   <th className="py-3 px-4 text-center">Trạng thái</th>
                   <th className="py-3 px-4 text-center">Khóa điểm</th>
@@ -510,14 +586,33 @@ export default function ScheduleClient() {
                             <span className="font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-semibold">
                               {slot.course_code}
                             </span>
-                            <span className="truncate max-w-[220px]" title={slot.course_name}>
+                            <span className="truncate max-w-[180px]" title={slot.course_name}>
                               {slot.course_name}
                             </span>
                           </div>
-                          <div className="text-[11px] text-slate-500 truncate max-w-[220px]" title={slot.exam_name}>
+                          <div className="text-[11px] text-slate-500 truncate max-w-[180px]" title={slot.exam_name}>
                             {slot.exam_name}
                           </div>
                         </div>
+                      </td>
+
+                      {/* Teacher (Proctor & Grader) */}
+                      <td className="py-3.5 px-4">
+                        {slot.teacher ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-[10px] flex-shrink-0">
+                              {slot.teacher.name.charAt(0)}
+                            </div>
+                            <div className="truncate max-w-[160px]">
+                              <div className="font-semibold text-slate-800 truncate" title={slot.teacher.name}>
+                                {slot.teacher.name}
+                              </div>
+                              <div className="text-[10px] text-purple-600 font-medium">Coi thi & Chấm điểm</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">Chưa phân công</span>
+                        )}
                       </td>
 
                       {/* Student count */}
@@ -571,7 +666,7 @@ export default function ScheduleClient() {
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
                                 title="Xem bảng điểm & nghe audio"
                               >
-                                <span>Xem kết quả</span>
+                                <span>Kết quả</span>
                                 <ArrowRight className="w-3 h-3" />
                               </Link>
                               <Link
@@ -593,6 +688,29 @@ export default function ScheduleClient() {
           </div>
         )}
       </div>
+
+      {/* Modals */}
+      <FapImportScheduleModal
+        isOpen={showFapModal}
+        onClose={() => setShowFapModal(false)}
+        onSuccess={() => {
+          fetchScheduleData();
+        }}
+        semesters={semesters}
+        courses={courses}
+        exams={exams}
+      />
+
+      <ManualSlotCreateModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        onSuccess={() => {
+          fetchScheduleData();
+        }}
+        semesters={semesters}
+        courses={courses}
+        exams={exams}
+      />
     </div>
   );
 }

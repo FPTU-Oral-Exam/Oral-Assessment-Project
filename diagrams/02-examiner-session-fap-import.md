@@ -1,8 +1,8 @@
-# SƠ ĐỒ HOẠT ĐỘNG: GIAI ĐOẠN 2 — KHẢO THÍ TỔ CHỨC CA THI & IMPORT FAP
-## Examiner Session Setup & FAP Ingestion
+# SƠ ĐỒ HOẠT ĐỘNG: GIAI ĐOẠN 2 — KHẢO THÍ TỔ CHỨC CA THI & IMPORT FAP / NHẬP TAY
+## Examiner Session Setup & FAP Ingestion / Manual Entry
 
 ### 1. Mục tiêu
-Cán bộ Khảo thí (`EXAMINER`) tiếp nhận Ma trận đề đã được Ban Học thuật công bố, lập các ca thi cho môn học và **Import trực tiếp danh sách sinh viên đã được hệ thống FAP của Trường FPT xếp lịch sẵn** (gồm MSSV, Mật khẩu thi, Phòng thi, Số ghế).
+Cán bộ Khảo thí (`EXAMINER`) thiết lập các ca thi cho môn học (môn học có thể có nhiều lớp học phần như SE1701, SE1702...). Hệ thống FAP của Trường FPT đã xếp lịch, gom sinh viên các lớp vào các ca thi, phân phòng thi và chỉ định Giảng viên coi thi kiêm chấm thi. Khảo thí có 2 phương thức nạp dữ liệu: **Import file Excel FAP** hoặc **Nhập tay thủ công (Manual Form)**.
 
 ---
 
@@ -13,27 +13,27 @@ Cán bộ Khảo thí (`EXAMINER`) tiếp nhận Ma trận đề đã được B
 flowchart TD
     START([Bắt đầu tổ chức ca thi]) --> E1[Cán bộ Khảo thí đăng nhập Staff Portal]
     
-    E1 --> E2[Chọn Học kỳ & Môn thi cần mở ca]
-    E2 --> E3[Chọn Exam Blueprint đã Publish của môn]
+    E1 --> E2[Chọn Kỳ thi Semester & Môn thi Course\nMôn gồm nhiều lớp học phần: SE1701, SE1702...]
+    E2 --> E3[FAP tổng hợp SV từ các lớp -> Xếp Ca thi, Phòng thi\n& Phân bổ Giảng viên: Coi thi kiêm Chấm điểm]
     
-    E3 --> E4[Tạo Ca thi mới Exam Session:\n- Tên ca thi, Ngày thi, Giờ bắt đầu - Giờ kết thúc\n- Hệ thống tự sinh mã Session Code]
+    E3 --> MODE{Chọn phương thức\nnạp ca thi?}
     
-    E4 --> E5[Phân công Giám thị coi thi Session Teachers]
-    E5 --> E6[Khai báo Phòng thi Session Rooms]
+    %% Nhánh A: Import FAP
+    MODE -- "Cách 1: Import Excel FAP" --> FAP1[Tải lên File Excel/CSV xuất từ FAP\nCác cột: Ca, Ngày, Giờ, Phòng, Email GV, MSSV, Họ tên, Lớp]
+    FAP1 --> FAP2{Kiểm tra tính hợp lệ\ncủa File FAP?}
+    FAP2 -- "File sai format" --> FAP_ERR[Báo lỗi chi tiết dòng sai\nYêu cầu chuẩn hóa lại file]
+    FAP_ERR --> FAP1
+    FAP2 -- "Hợp lệ" --> FAP3[Hệ thống tự động bóc tách:\n- Tạo Ca thi ScheduleSlot kèm Phòng thi\n- Gán Giảng viên: Coi thi & Chấm điểm\n- Nạp Thí sinh vào SlotAssignment]
     
-    E6 --> E7[Tải lên File Excel / CSV xuất từ FAP của FPT]
-    E7 --> E8{Kiểm tra tính hợp lệ\ncủa File FAP?}
+    %% Nhánh B: Nhập tay
+    MODE -- "Cách 2: Nhập tay thủ công" --> MAN1[Mở form Tạo Ca thi thủ công:\n- Nhập Ca thi, Ngày thi, Giờ bắt đầu - Giờ kết thúc\n- Nhập Phòng thi Room\n- Chọn Giảng viên: Giám thị kiêm Chấm điểm\n- Chọn/Thêm danh sách Thí sinh dự thi]
+    MAN1 --> MAN2[Lưu bản ghi Ca thi & Danh sách SV]
     
-    E8 -- "File sai định dạng / Thiếu cột" --> E8_ERR[Báo lỗi chi tiết từng dòng\nYêu cầu chuẩn hóa lại file FAP]
-    E8_ERR --> E7
+    %% Merge
+    FAP3 --> READY[Kiểm tra chống trùng lịch & Chốt Ca thi READY\nSẵn sàng kích hoạt sinh đề ATA]
+    MAN2 --> READY
     
-    E8 -- "Đúng định dạng" --> E9[Hệ thống phân giải dữ liệu từng thí sinh:\n- MSSV Roll Number\n- Họ và tên Full Name\n- Mật khẩu Password\n- Phòng thi Room\n- Số ghế Seat]
-    
-    E9 --> E10[Kiểm tra trùng lịch thi của thí sinh]
-    E10 --> E11[Tạo danh sách Session Candidates chính thức]
-    E11 --> E12[Chuyển trạng thái Ca thi thành READY\nSẵn sàng kích hoạt sinh đề]
-    
-    E12 --> END_NODE([Hoàn thành Giai đoạn 2\nSẵn sàng chuyển sang ATA Engine sinh đề])
+    READY --> END_NODE([Hoàn thành Giai đoạn 2\nSẵn sàng chuyển sang ATA Engine sinh đề])
 ```
 
 ---

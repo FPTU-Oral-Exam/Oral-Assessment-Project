@@ -1,14 +1,17 @@
+import csv
 import io
 import random
+import time
+from datetime import datetime
+from uuid import uuid4
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
-
-from . import schemas as s
 from .db import get_db
-from datetime import datetime
-from uuid import uuid4
+from . import schemas as s
 from . import schemas_examiner as ex
 from .models import (
     Audit,
@@ -636,10 +639,11 @@ def list_slots(exam_id: str, db: Session = Depends(get_db), user=Depends(staff))
     ).all()
     return [
         {
-            **data(s, "slot_number", "date", "start_time", "end_time", "room", "status", "grade_locked"),
+            **data(s, "slot_number", "date", "start_time", "end_time", "room", "status", "grade_locked", "max_students"),
             "student_count": db.scalar(
                 select(func.count()).select_from(SlotAssignment).where(SlotAssignment.slot_id == s.id)
             ) or 0,
+            "teacher": public_user(db.get(User, s.teacher_id)) if s.teacher_id else None,
             "exam_variant": data(db.get(ExamVariant, s.exam_variant_id), "name", "status")
             if s.exam_variant_id
             else None,
@@ -719,12 +723,27 @@ def create_slots(exam_id: str, body: s.CreateSlotsIn, db: Session = Depends(get_
 
 @router.get("/examiner/slots/{slot_id}")
 def get_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(staff)):
-    """Get slot details including exam_id."""
+    """Get slot details including exam_id, assigned teacher, and students."""
     slot = by_id(db, ScheduleSlot, slot_id)
 
     student_count = db.scalar(
         select(func.count()).select_from(SlotAssignment).where(SlotAssignment.slot_id == slot_id)
     ) or 0
+
+    teacher = db.get(User, slot.teacher_id) if slot.teacher_id else None
+
+    # Get assigned students
+    assignments = db.execute(
+        select(SlotAssignment, User)
+        .join(User, User.id == SlotAssignment.student_id)
+        .where(SlotAssignment.slot_id == slot_id)
+        .order_by(User.username)
+    ).all()
+
+    students = [
+        {"id": u.id, "username": u.username, "name": u.name, "email": u.email}
+        for _, u in assignments
+    ]
 
     return {
         "id": slot.id,
@@ -738,6 +757,8 @@ def get_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(staff)):
         "status": slot.status,
         "grade_locked": slot.grade_locked,
         "student_count": student_count,
+        "teacher": public_user(teacher) if teacher else None,
+        "students": students,
     }
 
 
@@ -760,7 +781,7 @@ def unlock_slot(slot_id: str, db: Session = Depends(get_db), user=Depends(examin
 
 
 # ─────────────────────────────────────────────────────────────────
-# Teacher assignment endpoint
+# Teacher assignment & Manual Slot endpoints
 # ─────────────────────────────────────────────────────────────────
 
 @router.post("/examiner/slots/{slot_id}/assign-teacher")
@@ -771,13 +792,14 @@ def assign_teacher_to_slot(
     db: Session = Depends(get_db),
     user=Depends(examiner),
 ):
-    """Assign a teacher to create exam variant for this slot."""
+    """Assign a teacher to proctor and grade this slot."""
     row = by_id(db, ScheduleSlot, slot_id, lock=True)
     teacher = by_id(db, User, teacher_id)
 
     if teacher.role not in {"TEACHER", "EXAMINER"}:
-        fail(422, "NOT_TEACHER", "Chi giao cho giang vien")
+        fail(422, "NOT_TEACHER", "Chỉ phân công cho Giảng viên hoặc Khảo thí")
 
+    row.teacher_id = teacher.id
     row.status = "READY"
     db.add(Audit(
         user_id=user.id,
@@ -787,6 +809,462 @@ def assign_teacher_to_slot(
     db.commit()
 
     return {"status": "ASSIGNED", "slot_status": row.status, "teacher": public_user(teacher)}
+
+
+@router.get("/examiner/teachers")
+def list_available_teachers(db: Session = Depends(get_db), user=Depends(staff)):
+    """List teachers and examiners available for proctoring and grading."""
+    teachers = db.scalars(
+        select(User)
+        .where(
+            User.role.in_(["TEACHER", "EXAMINER"]),
+            User.status == "ACTIVE",
+        )
+        .order_by(User.name)
+    ).all()
+    return [
+        {
+            "id": t.id,
+            "username": t.username,
+            "name": t.name,
+            "email": t.email,
+            "role": t.role,
+        }
+        for t in teachers
+    ]
+
+
+@router.post("/examiner/slots/manual", status_code=201)
+def create_manual_slot(
+    body: ex.ManualSlotCreateIn,
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Manually create a slot with room, teacher (proctor & grader), and optional student list."""
+    exam = by_id(db, Exam, body.exam_id)
+
+    teacher = None
+    if body.teacher_id:
+        teacher = by_id(db, User, body.teacher_id)
+        if teacher.role not in {"TEACHER", "EXAMINER"}:
+            fail(422, "INVALID_TEACHER", "Người được gán phải là Giảng viên hoặc Khảo thí")
+
+    slot = ScheduleSlot(
+        exam_id=body.exam_id,
+        slot_number=body.slot_number,
+        date=body.date,
+        start_time=body.start_time,
+        end_time=body.end_time,
+        room=body.room.strip(),
+        max_students=body.max_students,
+        teacher_id=teacher.id if teacher else None,
+        status="READY" if teacher else "PENDING",
+    )
+    db.add(slot)
+    db.flush()
+
+    assigned_count = 0
+    if body.student_rolls:
+        default_pwd = hasher.hash("fpt@123")
+        for roll in body.student_rolls:
+            roll_clean = str(roll).strip().upper()
+            if not roll_clean:
+                continue
+            student = db.scalar(select(User).where(User.username == roll_clean))
+            if not student:
+                student = User(
+                    username=roll_clean,
+                    name=roll_clean,
+                    email=f"{roll_clean.lower()}@fpt.edu.vn",
+                    role="STUDENT",
+                    status="ACTIVE",
+                    password_hash=default_pwd,
+                )
+                db.add(student)
+                db.flush()
+
+            existing_assign = db.scalar(
+                select(SlotAssignment).where(
+                    SlotAssignment.slot_id == slot.id,
+                    SlotAssignment.student_id == student.id,
+                )
+            )
+            if not existing_assign:
+                db.add(SlotAssignment(slot_id=slot.id, student_id=student.id))
+                assigned_count += 1
+
+            cand = db.scalar(
+                select(CourseCandidate).where(
+                    CourseCandidate.course_id == exam.course_id,
+                    CourseCandidate.roll_number == roll_clean,
+                )
+            )
+            if not cand:
+                db.add(CourseCandidate(
+                    course_id=exam.course_id,
+                    student_id=student.id,
+                    roll_number=roll_clean,
+                    full_name=student.name,
+                    allocation_status="ASSIGNED",
+                    assigned_slot_id=slot.id,
+                ))
+            else:
+                cand.assigned_slot_id = slot.id
+                cand.allocation_status = "ASSIGNED"
+
+    slot.assigned_students_count = assigned_count
+    db.add(Audit(
+        user_id=user.id,
+        event="MANUAL_SLOT_CREATED",
+        details={
+            "exam_id": body.exam_id,
+            "slot_id": slot.id,
+            "room": slot.room,
+            "teacher_id": slot.teacher_id,
+            "student_count": assigned_count,
+        },
+    ))
+    db.commit()
+
+    return {
+        "id": slot.id,
+        "slot_number": slot.slot_number,
+        "room": slot.room,
+        "date": slot.date,
+        "start_time": slot.start_time,
+        "end_time": slot.end_time,
+        "teacher": public_user(teacher) if teacher else None,
+        "student_count": assigned_count,
+        "status": slot.status,
+    }
+
+
+@router.post("/examiner/fap-import-schedule")
+async def import_fap_schedule(
+    semester_id: str = Form(...),
+    course_id: str = Form(...),
+    exam_id: str = Form(default=None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user=Depends(examiner),
+):
+    """Import class sessions, rooms, proctor-grader teachers, and students from FAP Excel/CSV."""
+    course = by_id(db, Course, course_id)
+
+    # 1. Resolve or create Exam for this course
+    exam = None
+    if exam_id and exam_id.strip():
+        exam = by_id(db, Exam, exam_id.strip())
+    else:
+        exam = db.scalar(
+            select(Exam)
+            .where(Exam.course_id == course_id, Exam.deleted_at.is_(None))
+            .order_by(Exam.created_at.desc())
+        )
+        if not exam:
+            exam = Exam(
+                course_id=course.id,
+                name=f"Thi vấn đáp {course.name}",
+                description=f"Kỳ thi vấn đáp điều phối từ FAP",
+                status="DRAFT",
+                time_limit=15,
+                question_count=6,
+            )
+            db.add(exam)
+            db.flush()
+
+    content = await file.read()
+    filename = file.filename.lower() if file.filename else "file.xlsx"
+
+    # 2. Parse File rows
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        ws = wb.active
+        raw_rows = list(ws.iter_rows(values_only=True))
+        if not raw_rows:
+            fail(400, "EMPTY_FILE", "File Excel trống")
+        headers = [str(h or "").strip().lower() for h in raw_rows[0]]
+        data_rows = raw_rows[1:]
+    else:
+        text_content = content.decode("utf-8-sig", errors="ignore")
+        reader = csv.reader(io.StringIO(text_content))
+        all_lines = list(reader)
+        if not all_lines:
+            fail(400, "EMPTY_FILE", "File CSV trống")
+        headers = [h.strip().lower() for h in all_lines[0]]
+        data_rows = all_lines[1:]
+
+    def find_col_idx(*keywords):
+        for idx, h in enumerate(headers):
+            for kw in keywords:
+                if kw in h:
+                    return idx
+        return -1
+
+    idx_slot = find_col_idx("ca_thi", "ca", "slot")
+    idx_date = find_col_idx("ngay_thi", "ngay", "date")
+    idx_start = find_col_idx("gio_bat_dau", "start_time", "gio_bd", "start")
+    idx_end = find_col_idx("gio_ket_thuc", "end_time", "gio_kt", "end")
+    idx_room = find_col_idx("phong_thi", "phong", "room")
+    idx_teacher = find_col_idx("giang_vien", "gv", "teacher", "proctor", "email_gv")
+    idx_mssv = find_col_idx("mssv", "roll_number", "roll", "ma_sv", "student_id")
+    idx_name = find_col_idx("ho_ten", "full_name", "ten_sv", "name")
+    idx_class = find_col_idx("lop_hoc", "lop", "class", "section", "ma_lop")
+
+    if idx_mssv < 0:
+        fail(400, "INVALID_FORMAT", "File không có cột MSSV / RollNumber")
+
+    default_pwd = hasher.hash("fpt@123")
+    teacher_cache = {}
+    created_slots = 0
+    updated_slots = 0
+    assigned_students = 0
+    assigned_teachers = set()
+    errors = []
+    slot_map = {}
+
+    for r_idx, r in enumerate(data_rows, start=2):
+        if not r or all(cell is None or str(cell).strip() == "" for cell in r):
+            continue
+
+        def get_val(idx, default=""):
+            if idx >= 0 and idx < len(r) and r[idx] is not None:
+                return str(r[idx]).strip()
+            return default
+
+        mssv = get_val(idx_mssv, "").upper()
+        if not mssv:
+            continue
+
+        slot_num_str = get_val(idx_slot, "1")
+        try:
+            slot_num = int(float(slot_num_str))
+        except (ValueError, TypeError):
+            slot_num = 1
+
+        date_val = r[idx_date] if (idx_date >= 0 and idx_date < len(r)) else None
+        date_ts = time.time()
+        if date_val is not None:
+            if isinstance(date_val, datetime):
+                date_ts = date_val.timestamp()
+            else:
+                date_str = str(date_val).strip()
+                for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+                    try:
+                        date_ts = datetime.strptime(date_str, fmt).timestamp()
+                        break
+                    except ValueError:
+                        pass
+
+        start_time = get_val(idx_start, "08:00")
+        if len(start_time) == 8:
+            start_time = start_time[:5]
+        end_time = get_val(idx_end, "09:30")
+        if len(end_time) == 8:
+            end_time = end_time[:5]
+
+        room = get_val(idx_room, "Phòng 1")
+        teacher_id_str = get_val(idx_teacher, "")
+        full_name = get_val(idx_name, mssv)
+        class_code = get_val(idx_class, "")
+
+        # 3. Resolve Teacher (Proctor & Grader)
+        slot_teacher = None
+        if teacher_id_str:
+            clean_t = teacher_id_str.lower()
+            if clean_t in teacher_cache:
+                slot_teacher = teacher_cache[clean_t]
+            else:
+                slot_teacher = db.scalar(
+                    select(User).where(
+                        or_(
+                            User.email.ilike(clean_t),
+                            User.username.ilike(clean_t),
+                        )
+                    )
+                )
+                if not slot_teacher:
+                    t_username = clean_t.split("@")[0].upper()
+                    slot_teacher = User(
+                        username=t_username,
+                        name=f"GV {t_username}",
+                        email=teacher_id_str,
+                        role="TEACHER",
+                        status="ACTIVE",
+                        password_hash=default_pwd,
+                    )
+                    db.add(slot_teacher)
+                    db.flush()
+                teacher_cache[clean_t] = slot_teacher
+
+        # 4. Find or Create ScheduleSlot for (slot_number, room)
+        slot_key = (slot_num, room)
+        if slot_key not in slot_map:
+            existing_slot = db.scalar(
+                select(ScheduleSlot).where(
+                    ScheduleSlot.exam_id == exam.id,
+                    ScheduleSlot.slot_number == slot_num,
+                    ScheduleSlot.room == room,
+                )
+            )
+            if not existing_slot:
+                new_slot = ScheduleSlot(
+                    exam_id=exam.id,
+                    slot_number=slot_num,
+                    date=date_ts,
+                    start_time=start_time,
+                    end_time=end_time,
+                    room=room,
+                    max_students=40,
+                    teacher_id=slot_teacher.id if slot_teacher else None,
+                    status="READY" if slot_teacher else "PENDING",
+                )
+                db.add(new_slot)
+                db.flush()
+                slot_map[slot_key] = new_slot
+                created_slots += 1
+            else:
+                if slot_teacher and not existing_slot.teacher_id:
+                    existing_slot.teacher_id = slot_teacher.id
+                    existing_slot.status = "READY"
+                slot_map[slot_key] = existing_slot
+                updated_slots += 1
+
+        slot = slot_map[slot_key]
+        if slot_teacher:
+            assigned_teachers.add(slot_teacher.id)
+
+        # 5. Resolve Student
+        student = db.scalar(select(User).where(User.username == mssv))
+        if not student:
+            student = User(
+                username=mssv,
+                name=full_name,
+                email=f"{mssv.lower()}@fpt.edu.vn",
+                role="STUDENT",
+                status="ACTIVE",
+                password_hash=default_pwd,
+            )
+            db.add(student)
+            db.flush()
+
+        # 6. Assign Student to Slot
+        existing_assign = db.scalar(
+            select(SlotAssignment).where(
+                SlotAssignment.slot_id == slot.id,
+                SlotAssignment.student_id == student.id,
+            )
+        )
+        if not existing_assign:
+            db.add(SlotAssignment(slot_id=slot.id, student_id=student.id))
+            assigned_students += 1
+
+        # 7. Update CourseCandidate
+        cand = db.scalar(
+            select(CourseCandidate).where(
+                CourseCandidate.course_id == course.id,
+                CourseCandidate.roll_number == mssv,
+            )
+        )
+        if not cand:
+            db.add(CourseCandidate(
+                course_id=course.id,
+                student_id=student.id,
+                roll_number=mssv,
+                full_name=full_name,
+                allocation_status="ASSIGNED",
+                assigned_slot_id=slot.id,
+            ))
+        else:
+            cand.assigned_slot_id = slot.id
+            cand.allocation_status = "ASSIGNED"
+
+    # Update assigned counts for slots
+    for slot in slot_map.values():
+        cnt = db.scalar(
+            select(func.count()).select_from(SlotAssignment).where(SlotAssignment.slot_id == slot.id)
+        ) or 0
+        slot.assigned_students_count = cnt
+
+    db.add(Audit(
+        user_id=user.id,
+        event="FAP_SCHEDULE_IMPORTED",
+        details={
+            "course_id": course_id,
+            "exam_id": exam.id,
+            "created_slots": created_slots,
+            "assigned_students": assigned_students,
+            "teachers_assigned": len(assigned_teachers),
+        },
+    ))
+    db.commit()
+
+    return {
+        "success": True,
+        "exam_id": exam.id,
+        "created_slots": created_slots,
+        "updated_slots": updated_slots,
+        "assigned_students": assigned_students,
+        "assigned_teachers_count": len(assigned_teachers),
+        "total_slots": len(slot_map),
+        "errors": errors,
+    }
+
+
+@router.get("/examiner/fap-sample-template")
+def download_fap_sample_template():
+    """Download sample Excel template formatted for FAP schedule import."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "FAP_Exam_Schedule"
+
+    headers = [
+        "Ca_Thi",
+        "Ngay_Thi",
+        "Gio_Bat_Dau",
+        "Gio_Ket_Thuc",
+        "Phong_Thi",
+        "Giang_Vien_Email",
+        "MSSV",
+        "Ho_Ten",
+        "Lop_Hoc",
+    ]
+    ws.append(headers)
+
+    header_fill = PatternFill(start_color="1E40AF", end_color="1E40AF", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    for col_num in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    sample_rows = [
+        [1, "2026-10-25", "08:00", "09:30", "BE-301", "teacher1@fpt.edu.vn", "SE170001", "Nguyễn Văn An", "SE1701"],
+        [1, "2026-10-25", "08:00", "09:30", "BE-301", "teacher1@fpt.edu.vn", "SE170002", "Trần Thị Bình", "SE1701"],
+        [1, "2026-10-25", "08:00", "09:30", "BE-302", "teacher2@fpt.edu.vn", "SE170003", "Lê Hoàng Cường", "SE1702"],
+        [2, "2026-10-25", "10:00", "11:30", "BE-301", "teacher1@fpt.edu.vn", "SE170004", "Phạm Đức Dũng", "SE1701"],
+        [2, "2026-10-25", "10:00", "11:30", "BE-302", "teacher2@fpt.edu.vn", "SE170005", "Hoàng Yến Giang", "SE1702"],
+        [2, "2026-10-25", "10:00", "11:30", "BE-302", "teacher2@fpt.edu.vn", "SE170006", "Vũ Mai Hoa", "SE1702"],
+    ]
+    for r in sample_rows:
+        ws.append(r)
+
+    # Auto-adjust column widths
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = openpyxl.utils.get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=mau_phan_ca_fap.xlsx"},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────
