@@ -32,7 +32,6 @@ import { EditTranscriptModal } from './components/EditTranscriptModal';
 import { ScoreOverrideModal } from './components/ScoreOverrideModal';
 import { RequestReEvalModal } from './components/RequestReEvalModal';
 import { ReEvaluationsList } from './components/ReEvaluationsList';
-import { EnhancedMetricsPanel } from './components/EnhancedMetricsPanel';
 import { teacherService } from '@/services';
 
 type ResultStatus = 'PENDING' | 'REVIEW_REQUIRED' | 'APPROVED' | 'REJECTED';
@@ -150,22 +149,39 @@ interface SessionDetail {
 }
 
 function PipelineProgressStepper({ stage, stageLabel }: { stage?: string; stageLabel?: string }) {
+  const isAllDone = stage === 'GRADED' || stage === 'COMPLETED' || stage === 'REVIEW_REQUIRED';
   const steps = [
-    { key: 'SUBMITTED', label: '1. Nhận âm thanh', isDone: ['TRANSCRIBING', 'ANALYZING', 'GRADING', 'GRADED'].includes(stage || '') },
-    { key: 'TRANSCRIBING', label: '2. Whisper STT', isDone: ['ANALYZING', 'GRADING', 'GRADED'].includes(stage || ''), isCurrent: stage === 'TRANSCRIBING' },
-    { key: 'ANALYZING', label: '3. Phân tích âm học', isDone: ['GRADING', 'GRADED'].includes(stage || ''), isCurrent: stage === 'ANALYZING' },
-    { key: 'GRADING', label: '4. AI Chấm Rubric', isDone: stage === 'GRADED', isCurrent: stage === 'GRADING' },
+    { key: 'SUBMITTED', label: '1. Nhận âm thanh', isDone: isAllDone || ['TRANSCRIBING', 'ANALYZING', 'GRADING'].includes(stage || '') },
+    { key: 'TRANSCRIBING', label: '2. Whisper STT', isDone: isAllDone || ['ANALYZING', 'GRADING'].includes(stage || ''), isCurrent: !isAllDone && stage === 'TRANSCRIBING' },
+    { key: 'ANALYZING', label: '3. Phân tích âm học', isDone: isAllDone || ['GRADING'].includes(stage || ''), isCurrent: !isAllDone && stage === 'ANALYZING' },
+    { key: 'GRADING', label: '4. AI Chấm Rubric', isDone: isAllDone, isCurrent: !isAllDone && stage === 'GRADING' },
   ];
 
   return (
-    <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-xl border border-blue-200/80 space-y-2.5">
-      <div className="flex items-center justify-between text-xs font-bold text-blue-900">
+    <div className={`p-3.5 rounded-xl border space-y-2.5 transition-all ${
+      isAllDone 
+        ? 'bg-gradient-to-r from-emerald-50 to-teal-50/60 border-emerald-200' 
+        : 'bg-gradient-to-r from-blue-50 to-indigo-50/60 border-blue-200/80'
+    }`}>
+      <div className="flex items-center justify-between text-xs font-bold">
         <span className="flex items-center gap-2">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-          <span>Tiến độ Worker AI: <strong className="text-blue-700">{stageLabel || 'Đang xử lý...'}</strong></span>
+          {isAllDone ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          ) : (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+          )}
+          <span className={isAllDone ? 'text-emerald-900' : 'text-blue-900'}>
+            Tiến độ Worker AI: <strong className={isAllDone ? 'text-emerald-700 font-bold' : 'text-blue-700'}>
+              {stageLabel || (isAllDone ? 'Hoàn tất AI chấm điểm — Sẵn sàng thẩm định' : 'Đang xử lý...')}
+            </strong>
+          </span>
         </span>
-        <span className="text-[10px] font-semibold bg-white border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full shadow-2xs">
-          Thời gian thực
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs ${
+          isAllDone 
+            ? 'bg-emerald-100/80 border-emerald-200 text-emerald-800' 
+            : 'bg-white border-blue-200 text-blue-700'
+        }`}>
+          {isAllDone ? 'Hoàn tất 100%' : 'Thời gian thực'}
         </span>
       </div>
 
@@ -601,7 +617,7 @@ export default function GradingPage() {
         exam_name: data.exam_name || data.course_name || 'Bài thi vấn đáp',
         student_name: data.student_name || 'Chưa có tên',
         final_score: data.final_score ?? data.ai_score ?? null,
-        status: data.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
+        status: data.status || 'IN_PROGRESS',
         progress: data.progress || null,
         attempts: mappedAttempts,
       };
@@ -927,15 +943,15 @@ export default function GradingPage() {
                 </div>
                 <PipelineProgressStepper
                   stage={
-                    selectedSession.status === 'COMPLETED' || selectedSession.status === 'REVIEW_REQUIRED'
+                    selectedSession.status === 'COMPLETED' || selectedSession.status === 'REVIEW_REQUIRED' || selectedSession.final_score !== null
                       ? 'GRADED'
                       : selectedSession.progress?.current_stage || selectedSession.status
                   }
                   stageLabel={
                     selectedSession.status === 'COMPLETED'
                       ? 'Đã hoàn thành toàn bộ quy trình chấm'
-                      : selectedSession.status === 'REVIEW_REQUIRED'
-                      ? 'Hoàn thành AI chấm — Chờ Giảng viên duyệt'
+                      : selectedSession.status === 'REVIEW_REQUIRED' || selectedSession.final_score !== null
+                      ? 'Hoàn tất AI chấm điểm — Sẵn sàng thẩm định'
                       : selectedSession.progress?.stage_label || 'Đang xử lý...'
                   }
                 />
@@ -1123,20 +1139,6 @@ export default function GradingPage() {
                         </div>
                       </div>
 
-                      {/* Enhanced Metrics Panel (NEW v2) */}
-                      {att.assessment?.enhanced_metrics && (
-                        <div className="pt-2 border-t border-slate-200/80">
-                          <EnhancedMetricsPanel
-                            metrics={att.assessment.enhanced_metrics}
-                            overallScore={att.assessment?.score ?? undefined}
-                            studentAudioUrl={audioEvidence ? `/api/evidence/${audioEvidence.id}/content` : undefined}
-                            realAudioUrl={
-                              (att.question as any)?.audio_url ||
-                              (att.sequence === 2 ? '/audio/pte_rs_prompt.wav' : '/audio/pte_ra_prompt.wav')
-                            }
-                          />
-                        </div>
-                      )}
 
                       {/* Reasoning Summary if available */}
                       {att.assessment?.reasoning_summary && (

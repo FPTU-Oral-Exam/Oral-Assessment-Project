@@ -337,6 +337,8 @@ def list_results(
                 "student_name": student.name,
                 "student_id": student.id,
                 "exam_id": exam.id,
+                "final_score": session.final_score,
+                "ai_score": session.final_score,
                 **allowance(db, exam, student.id),
             }
         )
@@ -364,11 +366,14 @@ def get_result_detail(session_id: str, db: Session = Depends(get_db), user=Depen
     session_progress = calculate_session_progress(db, session) if session.status == "SUBMITTED" else None
 
     return history_row(session) | {
+        "final_score": session.final_score,
+        "ai_score": session.final_score,
         "progress": session_progress,
         "exam_id": exam.id,
         "student_id": session.student_id,
         **allowance(db, exam, session.student_id),
         "history": [history_row(row) for row in sessions_for(db, exam.id, session.student_id)],
+
         "exam_name": exam.name,
         "snapshot": exam.snapshot,
         "student_name": student.name,
