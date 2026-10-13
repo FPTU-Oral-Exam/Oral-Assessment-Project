@@ -123,10 +123,12 @@ class Chunk(Entity, Base):
 
 class Rubric(Entity, Base):
     __tablename__ = "rubrics"
-    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"))
+    course_id: Mapped[str | None] = mapped_column(ForeignKey("courses.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, default="")
     version: Mapped[int] = mapped_column(Integer, default=1)
     criteria: Mapped[list] = mapped_column(JSON(none_as_null=True))
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 class Exam(Entity, Base):

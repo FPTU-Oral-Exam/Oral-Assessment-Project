@@ -7,13 +7,19 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import AcademicMatrix, AcademicQuestion
+from .models import AcademicMatrix, AcademicQuestion, QuestionTypeConfigModel, Rubric
 from .schemas_academy import (
     AcademicMatrixIn,
     AcademicMatrixOut,
     AcademicMatrixUpdate,
     ExamMatrixRule,
     GeneratedSampleExamOut,
+    QuestionTypeConfigIn,
+    QuestionTypeConfigOut,
+    RubricCriterion,
+    RubricIn,
+    RubricOut,
+    RubricUpdate,
     SampleExamQuestionOut,
     StockHealthItem,
     StockHealthOut,
@@ -269,4 +275,215 @@ def matrix_generate_sample(key: str, db: Session = Depends(get_db), user=Depends
         total_questions=len(questions_out),
         total_duration_seconds=total_duration,
         questions=questions_out,
+    )
+
+
+# ============================================================================
+# 2. TIÊU CHUẨN RUBRICS (RUBRICS STUDIO) — TASK 4
+# ============================================================================
+
+@router.get("/rubrics", response_model=List[RubricOut])
+def list_rubrics(db: Session = Depends(get_db), user=Depends(academy)):
+    stmt = select(Rubric).order_by(Rubric.created_at.desc())
+    rows = db.scalars(stmt).all()
+    return [
+        RubricOut(
+            id=r.id,
+            name=r.name,
+            description=getattr(r, "description", "") or "",
+            course_id=r.course_id,
+            criteria=[RubricCriterion(**c) if isinstance(c, dict) else c for c in (r.criteria or [])],
+            version=r.version,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+        )
+        for r in rows
+    ]
+
+
+@router.post("/rubrics", status_code=201, response_model=RubricOut)
+def create_rubric(body: RubricIn, db: Session = Depends(get_db), user=Depends(academy)):
+    # === Rubric Invariant: Sum of weights must equal 100% ===
+    total_weight = sum(c.weight for c in body.criteria)
+    if abs(total_weight - 100.0) > 0.01:
+        fail(
+            400,
+            "INVALID_RUBRIC_WEIGHT",
+            f"Tổng trọng số các tiêu chí phải bằng 100% (hiện tại: {total_weight}%)",
+        )
+
+    criteria_data = [c.model_dump() for c in body.criteria]
+    row = Rubric(
+        name=body.name,
+        description=body.description or "",
+        course_id=body.course_id,
+        criteria=criteria_data,
+        version=1,
+        updated_at=time.time(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return RubricOut(
+        id=row.id,
+        name=row.name,
+        description=getattr(row, "description", "") or "",
+        course_id=row.course_id,
+        criteria=[RubricCriterion(**c) for c in (row.criteria or [])],
+        version=row.version,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.get("/rubrics/{key}", response_model=RubricOut)
+def get_rubric(key: str, db: Session = Depends(get_db), user=Depends(academy)):
+    row = by_id(db, Rubric, key)
+    return RubricOut(
+        id=row.id,
+        name=row.name,
+        description=getattr(row, "description", "") or "",
+        course_id=row.course_id,
+        criteria=[RubricCriterion(**c) if isinstance(c, dict) else c for c in (row.criteria or [])],
+        version=row.version,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.put("/rubrics/{key}", response_model=RubricOut)
+def update_rubric(key: str, body: RubricUpdate, db: Session = Depends(get_db), user=Depends(academy)):
+    row = by_id(db, Rubric, key)
+
+    # === Rubric Invariant: Check on criteria update ===
+    if body.criteria is not None:
+        total_weight = sum(c.weight for c in body.criteria)
+        if abs(total_weight - 100.0) > 0.01:
+            fail(
+                400,
+                "INVALID_RUBRIC_WEIGHT",
+                f"Tổng trọng số các tiêu chí phải bằng 100% (hiện tại: {total_weight}%)",
+            )
+        row.criteria = [c.model_dump() for c in body.criteria]
+        row.version = (row.version or 1) + 1
+
+    if body.name is not None:
+        row.name = body.name
+    if body.description is not None:
+        row.description = body.description
+    if body.course_id is not None:
+        row.course_id = body.course_id
+
+    row.updated_at = time.time()
+    db.commit()
+    db.refresh(row)
+    return RubricOut(
+        id=row.id,
+        name=row.name,
+        description=getattr(row, "description", "") or "",
+        course_id=row.course_id,
+        criteria=[RubricCriterion(**c) if isinstance(c, dict) else c for c in (row.criteria or [])],
+        version=row.version,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.delete("/rubrics/{key}")
+def delete_rubric(key: str, db: Session = Depends(get_db), user=Depends(academy)):
+    row = by_id(db, Rubric, key)
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
+# ============================================================================
+# 3. QUY CHUẨN DẠNG BÀI (QUESTION TYPE CONFIGS) — TASK 4
+# ============================================================================
+
+# Default 6 question types
+_QUESTION_TYPE_DEFAULTS = [
+    {"type": "RA", "name": "Read Aloud", "description": "Read the passage aloud with correct pronunciation and intonation.", "default_prep_time": 35, "default_response_time": 40, "max_score": 10.0},
+    {"type": "RS", "name": "Repeat Sentence", "description": "Repeat the sentence exactly as heard.", "default_prep_time": 3, "default_response_time": 15, "max_score": 10.0},
+    {"type": "GD", "name": "Summarize Group Discussion", "description": "Summarize the group discussion within 60 seconds.", "default_prep_time": 10, "default_response_time": 60, "max_score": 10.0},
+    {"type": "DI", "name": "Describe Image", "description": "Describe the image in detail within 40 seconds.", "default_prep_time": 25, "default_response_time": 40, "max_score": 10.0},
+    {"type": "SI", "name": "Respond to a Situation", "description": "Respond appropriately to the given situation.", "default_prep_time": 20, "default_response_time": 40, "max_score": 10.0},
+    {"type": "RL", "name": "Re-tell Lecture", "description": "Re-tell the lecture content within 40 seconds.", "default_prep_time": 10, "default_response_time": 40, "max_score": 10.0},
+]
+
+
+def _ensure_default_question_types(db: Session) -> None:
+    """Khởi tạo 6 dạng bài mặc định nếu bảng question_type_configs trống."""
+    existing_count = db.query(QuestionTypeConfigModel).count()
+    if existing_count == 0:
+        for defaults in _QUESTION_TYPE_DEFAULTS:
+            db.add(QuestionTypeConfigModel(**defaults, updated_at=time.time()))
+        db.commit()
+
+
+@router.get("/question-types", response_model=List[QuestionTypeConfigOut])
+def list_question_types(db: Session = Depends(get_db), user=Depends(academy)):
+    _ensure_default_question_types(db)
+    stmt = select(QuestionTypeConfigModel).order_by(QuestionTypeConfigModel.type)
+    rows = db.scalars(stmt).all()
+    return [
+        QuestionTypeConfigOut(
+            type=r.type,
+            name=r.name,
+            description=r.description or "",
+            default_prep_time=r.default_prep_time,
+            default_response_time=r.default_response_time,
+            audio_instruction_url=r.audio_instruction_url,
+            max_score=r.max_score,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/question-types/{qtype}", response_model=QuestionTypeConfigOut)
+def get_question_type(qtype: str, db: Session = Depends(get_db), user=Depends(academy)):
+    row = db.scalar(select(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type == qtype.upper()))
+    if not row:
+        fail(404, "NOT_FOUND", f"Question type '{qtype}' not found")
+    return QuestionTypeConfigOut(
+        type=row.type,
+        name=row.name,
+        description=row.description or "",
+        default_prep_time=row.default_prep_time,
+        default_response_time=row.default_response_time,
+        audio_instruction_url=row.audio_instruction_url,
+        max_score=row.max_score,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.put("/question-types/{qtype}", response_model=QuestionTypeConfigOut)
+def update_question_type(qtype: str, body: QuestionTypeConfigIn, db: Session = Depends(get_db), user=Depends(academy)):
+    row = db.scalar(select(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type == qtype.upper()))
+    if not row:
+        fail(404, "NOT_FOUND", f"Question type '{qtype}' not found")
+
+    row.name = body.name
+    row.description = body.description
+    row.default_prep_time = body.default_prep_time
+    row.default_response_time = body.default_response_time
+    row.audio_instruction_url = body.audio_instruction_url
+    row.max_score = body.max_score
+    row.updated_at = time.time()
+
+    db.commit()
+    db.refresh(row)
+    return QuestionTypeConfigOut(
+        type=row.type,
+        name=row.name,
+        description=row.description or "",
+        default_prep_time=row.default_prep_time,
+        default_response_time=row.default_response_time,
+        audio_instruction_url=row.audio_instruction_url,
+        max_score=row.max_score,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )

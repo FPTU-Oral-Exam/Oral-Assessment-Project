@@ -63,7 +63,7 @@ def test_matrix_rules_validation():
     assert m_in.rules[1].type == "RS"
 
 def test_models_exist():
-    from app.models import AcademicQuestion, AcademicMatrix, QuestionTypeConfigModel
+    from app.models import AcademicQuestion, AcademicMatrix, QuestionTypeConfigModel, Rubric
 
     assert hasattr(AcademicQuestion, "code")
     assert hasattr(AcademicQuestion, "skill")
@@ -80,6 +80,13 @@ def test_models_exist():
 
     assert hasattr(QuestionTypeConfigModel, "type")
     assert hasattr(QuestionTypeConfigModel, "default_prep_time")
+
+    # Rubric model fields
+    assert hasattr(Rubric, "name")
+    assert hasattr(Rubric, "description")
+    assert hasattr(Rubric, "criteria")
+    assert hasattr(Rubric, "version")
+    assert hasattr(Rubric, "course_id")
 
 
 def test_db_persistence():
@@ -137,6 +144,131 @@ def test_db_persistence():
         saved_cfg = session.query(QuestionTypeConfigModel).filter_by(type="RA").first()
         assert saved_cfg is not None
         assert saved_cfg.default_prep_time == 35
+
+
+class TestAcademicRubrics:
+    """Test Suite for Task 4: Rubrics Studio & Question Type Configurations."""
+
+    def test_rubrics_crud_and_invariant(self, env):
+        clients, _ = env
+        academy = clients["academy"]
+
+        # 1. Rubric Invariant: Sum of weights must equal 100%
+        valid_payload = {
+            "name": "PTE Speaking Official Rubric",
+            "description": "5 standard dimensions",
+            "course_id": None,
+            "criteria": [
+                {"name": "Content", "max_score": 10.0, "weight": 30.0, "description": "Topic relevance"},
+                {"name": "Pronunciation", "max_score": 10.0, "weight": 25.0, "description": "Phoneme clarity"},
+                {"name": "Fluency", "max_score": 10.0, "weight": 25.0, "description": "Rhythm and speech rate"},
+                {"name": "Vocabulary", "max_score": 10.0, "weight": 20.0, "description": "Lexical richness"},
+            ],
+        }
+        res_create = academy.post("/api/academy/rubrics", json=valid_payload)
+        assert res_create.status_code in (200, 201), f"Create failed: {res_create.text}"
+        rubric_data = res_create.json()
+        assert rubric_data["name"] == "PTE Speaking Official Rubric"
+        assert rubric_data["version"] == 1
+        rubric_id = rubric_data["id"]
+
+        # 2. List Rubrics
+        res_list = academy.get("/api/academy/rubrics")
+        assert res_list.status_code == 200
+        items = res_list.json()
+        assert any(r["id"] == rubric_id for r in items)
+
+        # 3. Get Rubric Detail
+        res_get = academy.get(f"/api/academy/rubrics/{rubric_id}")
+        assert res_get.status_code == 200
+        assert res_get.json()["name"] == "PTE Speaking Official Rubric"
+
+        # 4. Update Rubric (add criterion)
+        res_update = academy.put(
+            f"/api/academy/rubrics/{rubric_id}",
+            json={
+                "name": "PTE Speaking Updated Rubric",
+                "criteria": [
+                    {"name": "Content", "max_score": 10.0, "weight": 25.0, "description": "Topic relevance"},
+                    {"name": "Pronunciation", "max_score": 10.0, "weight": 25.0, "description": "Phoneme clarity"},
+                    {"name": "Fluency", "max_score": 10.0, "weight": 25.0, "description": "Rhythm and speech rate"},
+                    {"name": "Vocabulary", "max_score": 10.0, "weight": 15.0, "description": "Lexical richness"},
+                    {"name": "Oral Fluency", "max_score": 10.0, "weight": 10.0, "description": "Spoken fluency"},
+                ],
+            },
+        )
+        assert res_update.status_code == 200
+        assert res_update.json()["name"] == "PTE Speaking Updated Rubric"
+        assert len(res_update.json()["criteria"]) == 5
+
+        # 5. Invalid Rubric: Sum of weights != 100 should fail with 400/422
+        bad_payload = {
+            "name": "Bad Rubric - Sum is 80%",
+            "description": "Invalid weights",
+            "course_id": None,
+            "criteria": [
+                {"name": "Content", "max_score": 10.0, "weight": 40.0, "description": "Topic"},
+                {"name": "Pronunciation", "max_score": 10.0, "weight": 40.0, "description": "Pron"},
+            ],
+        }
+        res_bad = academy.post("/api/academy/rubrics", json=bad_payload)
+        assert res_bad.status_code in (400, 422), f"Expected 400/422, got {res_bad.status_code}: {res_bad.text}"
+
+        # 6. Delete Rubric
+        res_delete = academy.delete(f"/api/academy/rubrics/{rubric_id}")
+        assert res_delete.status_code == 200
+        assert res_delete.json().get("ok") is True
+
+        # Verify deleted
+        res_list_after = academy.get("/api/academy/rubrics")
+        assert not any(r["id"] == rubric_id for r in res_list_after.json())
+
+    def test_question_types_config(self, env):
+        clients, _ = env
+        academy = clients["academy"]
+
+        # 1. List Question Types - should have 6 default types after init
+        res_list = academy.get("/api/academy/question-types")
+        assert res_list.status_code == 200
+        qt_list = res_list.json()
+        assert len(qt_list) == 6
+
+        # Verify expected types exist
+        type_codes = {item["type"] for item in qt_list}
+        expected = {"RA", "RS", "GD", "DI", "SI", "RL"}
+        assert expected.issubset(type_codes), f"Missing types: {expected - type_codes}"
+
+        # 2. Get specific question type config
+        res_ra = academy.get("/api/academy/question-types/RA")
+        assert res_ra.status_code == 200
+        ra_config = res_ra.json()
+        assert ra_config["type"] == "RA"
+        assert ra_config["default_prep_time"] == 35
+        assert ra_config["default_response_time"] == 40
+
+        # 3. Update question type config
+        res_update = academy.put(
+            "/api/academy/question-types/RA",
+            json={
+                "name": "Read Aloud (Updated)",
+                "description": "Read the passage aloud with correct pronunciation.",
+                "default_prep_time": 40,
+                "default_response_time": 45,
+            },
+        )
+        assert res_update.status_code == 200
+        updated = res_update.json()
+        assert updated["name"] == "Read Aloud (Updated)"
+        assert updated["default_prep_time"] == 40
+        assert updated["default_response_time"] == 45
+
+        # 4. Get non-existent question type should return 404
+        res_404 = academy.get("/api/academy/question-types/INVALID")
+        assert res_404.status_code == 404
+
+    def test_rubrics_and_question_types(self, env):
+        """Alias for plan naming compatibility."""
+        self.test_rubrics_crud_and_invariant(env)
 
 
 class TestAcademicMatrices:
