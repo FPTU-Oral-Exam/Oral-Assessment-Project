@@ -111,7 +111,6 @@ export interface AcademicQuestionItem {
   response_time: number;
   difficulty: DifficultyLevel;
   status: QuestionStatus;
-  is_predicted: boolean;
   usage_count: number;
   tags: string[];
   sample_answer?: string;
@@ -209,20 +208,20 @@ export interface SampleExamQuestion {
 }
 
 export interface QuestionTypeConfig {
-  code: QuestionType;
+  code: string;
   name: string;
   vietnamese_name: string;
   description: string;
-  color_theme: 'blue' | 'purple' | 'emerald' | 'amber' | 'rose' | 'indigo';
+  color_theme?: string;
   is_active: boolean;
 
   // Timing & Quotas
   default_prep_time: number;
-  min_prep_time: number;
-  max_prep_time: number;
+  min_prep_time?: number;
+  max_prep_time?: number;
   default_response_time: number;
-  min_response_time: number;
-  max_response_time: number;
+  min_response_time?: number;
+  max_response_time?: number;
   recommended_question_count: number;
 
   // Input Requirements
@@ -230,14 +229,17 @@ export interface QuestionTypeConfig {
   requires_audio_prompt: boolean;
   requires_audio_script: boolean;
   requires_key_points: boolean;
-  min_prompt_words: number;
-  max_prompt_words: number;
+  min_prompt_words?: number;
+  max_prompt_words?: number;
+
+  // Metrics
+  question_count?: number;
 
   // AI Grading Directives (%)
-  focus_pronunciation: number;
-  focus_fluency: number;
-  focus_content: number;
-  focus_grammar_lexical: number;
+  focus_pronunciation?: number;
+  focus_fluency?: number;
+  focus_content?: number;
+  focus_grammar_lexical?: number;
 }
 
 export const DEFAULT_QUESTION_TYPE_CONFIGS: Record<QuestionType, QuestionTypeConfig> = {

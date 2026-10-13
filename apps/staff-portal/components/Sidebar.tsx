@@ -1,10 +1,10 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import {
-  LayoutDashboard,
   Users,
   Settings,
   FileText,
@@ -20,9 +20,8 @@ import {
   Sliders,
 } from 'lucide-react';
 
-const menuItems: Record<string, { href: string; label: string; icon: typeof LayoutDashboard }[]> = {
+const menuItems: Record<string, { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[]> = {
   SYSTEM_ADMIN: [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/users', label: 'Quản lý người dùng', icon: Users },
     { href: '/settings', label: 'Cấu hình hệ thống', icon: Settings },
     { href: '/audit', label: 'Nhật ký kiểm toán', icon: FileText },
@@ -32,7 +31,6 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
   ],
 
   ACADEMY: [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/item-bank', label: 'Ngân hàng Đề & Câu hỏi', icon: Layers },
     { href: '/question-types', label: 'Cấu hình Dạng bài', icon: Sliders },
     { href: '/exam-matrix', label: 'Ma trận Đề & Ra đề', icon: ClipboardList },
@@ -40,7 +38,6 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
   ],
 
   EXAMINER: [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/semester', label: 'Quản lý học kỳ', icon: Calendar },
     { href: '/schedule', label: 'Lịch thi & Ca thi', icon: Calendar },
     { href: '/proctor', label: 'Coi thi & Giám sát', icon: Radio },

@@ -53,7 +53,7 @@ export default function UnauthorizedPage() {
 
           <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
             <Link
-              href="/dashboard"
+              href="/login"
               className="w-full sm:w-1/2 flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-md shadow-blue-500/20"
             >
               <ArrowLeft className="w-4 h-4" />

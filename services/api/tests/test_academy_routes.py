@@ -262,7 +262,78 @@ class TestAcademicRubrics:
         assert updated["default_prep_time"] == 40
         assert updated["default_response_time"] == 45
 
-        # 4. Get non-existent question type should return 404
+        # 4. Create new question type (POST)
+        res_create = academy.post(
+            "/api/academy/question-types",
+            json={
+                "type": "OP",
+                "name": "Open Presentation",
+                "vietnamese_name": "Thuyết trình chủ đề mở",
+                "description": "Thuyết trình tự do theo chủ đề cho trước trong 60 giây.",
+                "default_prep_time": 30,
+                "default_response_time": 60,
+                "requires_image": False,
+                "requires_audio_prompt": False,
+                "requires_audio_script": False,
+                "requires_key_points": True,
+                "recommended_question_count": 1,
+            },
+        )
+        assert res_create.status_code == 201, f"Create failed: {res_create.text}"
+        created_op = res_create.json()
+        assert created_op["type"] == "OP"
+        assert created_op["requires_key_points"] is True
+        assert created_op["question_count"] == 0
+
+        # Duplicate type returns 409 Conflict
+        res_dup = academy.post(
+            "/api/academy/question-types",
+            json={
+                "type": "OP",
+                "name": "Duplicate OP",
+                "default_prep_time": 20,
+                "default_response_time": 40,
+            },
+        )
+        assert res_dup.status_code == 409
+
+        # 5. Create a test question with type RA and verify sync_existing_questions
+        res_q = academy.post(
+            "/api/academy/questions",
+            json={
+                "code": "RA-SYNC-TEST-01",
+                "skill": "SPEAKING",
+                "type": "RA",
+                "title": "Sync Test Question",
+                "prompt": "Test prompt text for synchronization.",
+                "prep_time": 35,
+                "response_time": 40,
+                "difficulty": "MEDIUM",
+                "tags": ["SyncTest"],
+            },
+        )
+        assert res_q.status_code == 201
+        created_q_id = res_q.json()["id"]
+
+        # Update RA with sync_existing_questions=true
+        res_sync_update = academy.put(
+            "/api/academy/question-types/RA?sync_existing_questions=true",
+            json={
+                "name": "Read Aloud (Synced)",
+                "default_prep_time": 25,
+                "default_response_time": 50,
+            },
+        )
+        assert res_sync_update.status_code == 200
+        assert res_sync_update.json()["question_count"] >= 1
+
+        # Verify existing question's prep_time and response_time were updated
+        res_get_q = academy.get(f"/api/academy/questions/{created_q_id}")
+        assert res_get_q.status_code == 200
+        assert res_get_q.json()["prep_time"] == 25
+        assert res_get_q.json()["response_time"] == 50
+
+        # 6. Get non-existent question type should return 404
         res_404 = academy.get("/api/academy/question-types/INVALID")
         assert res_404.status_code == 404
 

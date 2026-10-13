@@ -435,13 +435,20 @@ class AcademicMatrix(Entity, Base):
 
 class QuestionTypeConfigModel(Entity, Base):
     __tablename__ = "question_type_configs"
-    type: Mapped[str] = mapped_column(String(20), unique=True, index=True)  # RA, RS, GD, DI, SI, RL
+    type: Mapped[str] = mapped_column(String(20), unique=True, index=True)  # RA, RS, GD, DI, SI, RL, ASQ...
     name: Mapped[str] = mapped_column(String(100))
+    vietnamese_name: Mapped[str | None] = mapped_column(String(100), default="", nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
     default_prep_time: Mapped[int] = mapped_column(Integer, default=30)
     default_response_time: Mapped[int] = mapped_column(Integer, default=40)
     audio_instruction_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     max_score: Mapped[float] = mapped_column(Float, default=10.0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    requires_image: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_audio_prompt: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_audio_script: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_key_points: Mapped[bool] = mapped_column(Boolean, default=False)
+    recommended_question_count: Mapped[int] = mapped_column(Integer, default=2)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 

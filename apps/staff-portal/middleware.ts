@@ -3,7 +3,6 @@ import type { NextRequest } from 'next/server';
 
 const rolePermissions: Record<string, RegExp[]> = {
   SYSTEM_ADMIN: [
-    /^\/dashboard/,
     /^\/users/,
     /^\/settings/,
     /^\/audit/,
@@ -21,7 +20,6 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/rubrics/,
   ],
   ACADEMY: [
-    /^\/dashboard/,
     /^\/rubrics/,
     /^\/item-bank/,
     /^\/question-types/,
@@ -29,7 +27,6 @@ const rolePermissions: Record<string, RegExp[]> = {
     /^\/schedule/,
   ],
   EXAMINER: [
-    /^\/dashboard/,
     /^\/semester/,
     /^\/courses/,
     /^\/exams/,
@@ -79,13 +76,17 @@ export function middleware(request: NextRequest) {
 
   const roles = user.roles || (user.role ? [user.role] : []);
 
-  // Redirect root path or /dashboard for TEACHER
-  if (path === '/' || path === '' || path === '/dashboard') {
-    if (roles.length === 1 && roles[0] === 'TEACHER') {
-      return NextResponse.redirect(new URL('/schedule', request.url));
-    }
-    if (path === '/' || path === '') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+  // Redirect root path to first accessible page by role
+  if (path === '/' || path === '') {
+    const redirectMap: Record<string, string> = {
+      ACADEMY: '/item-bank',
+      SYSTEM_ADMIN: '/users',
+      EXAMINER: '/semester',
+      TEACHER: '/schedule',
+    };
+    const firstRole = roles.find(r => redirectMap[r]);
+    if (firstRole) {
+      return NextResponse.redirect(new URL(redirectMap[firstRole], request.url));
     }
   }
 
@@ -95,7 +96,7 @@ export function middleware(request: NextRequest) {
     return patterns.some(pattern => pattern.test(path));
   });
 
-  if (!hasAccess && path !== '/dashboard') {
+  if (!hasAccess) {
     return NextResponse.redirect(new URL('/unauthorized', request.url));
   }
 

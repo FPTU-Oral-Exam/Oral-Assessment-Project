@@ -188,20 +188,39 @@ class RubricOut(BaseModel):
 
 class QuestionTypeConfigIn(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
+    vietnamese_name: Optional[str] = Field(default="")
     description: str = Field(default="")
     default_prep_time: int = Field(default=30, ge=0)
     default_response_time: int = Field(default=40, ge=5)
     audio_instruction_url: Optional[str] = None
     max_score: float = Field(default=10.0, ge=1.0)
+    is_active: bool = Field(default=True)
+    requires_image: bool = Field(default=False)
+    requires_audio_prompt: bool = Field(default=False)
+    requires_audio_script: bool = Field(default=False)
+    requires_key_points: bool = Field(default=False)
+    recommended_question_count: int = Field(default=2, ge=1, le=10)
+
+
+class QuestionTypeCreateIn(QuestionTypeConfigIn):
+    type: str = Field(..., min_length=2, max_length=10)
 
 
 class QuestionTypeConfigOut(BaseModel):
     type: str
     name: str
+    vietnamese_name: Optional[str] = ""
     description: str
     default_prep_time: int
     default_response_time: int
     audio_instruction_url: Optional[str] = None
     max_score: float
+    is_active: bool = True
+    requires_image: bool = False
+    requires_audio_prompt: bool = False
+    requires_audio_script: bool = False
+    requires_key_points: bool = False
+    recommended_question_count: int = 2
+    question_count: int = 0
     created_at: float
     updated_at: float
