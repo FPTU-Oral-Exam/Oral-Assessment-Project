@@ -45,15 +45,17 @@ apps/staff-portal/
 ## Nhiệm vụ 1: Mở rộng Model SQLAlchemy & Tạo Schemas Pydantic
 
 **Files:**
+
 - Create: `services/api/app/schemas_academy.py`
 - Modify: `services/api/app/models.py:382-396`
 - Test: `services/api/tests/test_academy_routes.py`
 
 **Interfaces:**
+
 - Consumes: `Entity`, `Base` từ `services/api/app/models.py`
 - Produces: `AcademicQuestion`, `AcademicMatrix`, `QuestionTypeConfigModel` trong `models.py` và các Pydantic schemas trong `schemas_academy.py`
 
-- [x] **Step 1: Viết test kiểm tra models và schemas**
+- [X] **Step 1: Viết test kiểm tra models và schemas**
 
 Tạo file `services/api/tests/test_academy_routes.py` với test khởi tạo:
 
@@ -110,14 +112,15 @@ def test_matrix_rules_validation():
     assert len(m_in.rules) == 2
 ```
 
-- [x] **Step 2: Chạy test để xác nhận test thất bại (Red phase)**
+- [X] **Step 2: Chạy test để xác nhận test thất bại (Red phase)**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -v`
 Kỳ vọng: FAIL với lỗi `ModuleNotFoundError: No module named 'app.schemas_academy'`
 
-- [x] **Step 3: Cập nhật `models.py` và tạo `schemas_academy.py`**
+- [X] **Step 3: Cập nhật `models.py` và tạo `schemas_academy.py`**
 
 Trong `services/api/app/models.py`, thêm các Model:
+
 ```python
 class AcademicQuestion(Entity, Base):
     __tablename__ = "academic_questions"
@@ -164,6 +167,7 @@ class QuestionTypeConfigModel(Entity, Base):
 ```
 
 Tạo file `services/api/app/schemas_academy.py` định nghĩa các schema Pydantic v2:
+
 - `AcademicQuestionIn`, `AcademicQuestionUpdate`, `AcademicQuestionOut`
 - `AcademicMatrixIn`, `AcademicMatrixUpdate`, `AcademicMatrixOut`
 - `StockHealthItem`, `StockHealthOut`
@@ -171,12 +175,12 @@ Tạo file `services/api/app/schemas_academy.py` định nghĩa các schema Pyda
 - `RubricIn`, `RubricUpdate`, `RubricOut`
 - `QuestionTypeConfigIn`, `QuestionTypeConfigOut`
 
-- [x] **Step 4: Chạy test để xác nhận test pass**
+- [X] **Step 4: Chạy test để xác nhận test pass**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_schemas_validation -v`
 Kỳ vọng: PASS (1 passed)
 
-- [x] **Step 5: Commit task 1**
+- [X] **Step 5: Commit task 1**
 
 ```bash
 git add services/api/app/models.py services/api/app/schemas_academy.py services/api/tests/test_academy_routes.py
@@ -188,10 +192,12 @@ git commit -m "feat(academy): add models and pydantic schemas for academic quest
 ## Nhiệm vụ 2: Xây dựng Backend Endpoints Ngân hàng Câu hỏi (Questions API)
 
 **Files:**
+
 - Create: `services/api/app/routes_academy.py`
 - Modify: `services/api/tests/test_academy_routes.py`
 
 **Interfaces:**
+
 - Consumes: `AcademicQuestion` từ `models.py`, `schemas_academy.py`, `get_db`, `current_user`
 - Produces: Các endpoints:
   + `GET /api/academy/questions`
@@ -201,9 +207,10 @@ git commit -m "feat(academy): add models and pydantic schemas for academic quest
   + `DELETE /api/academy/questions/{id}`
   + `POST /api/academy/questions/{id}/approve`
 
-- [x] **Step 1: Viết test cho Questions Endpoints**
+- [X] **Step 1: Viết test cho Questions Endpoints**
 
 Bổ sung test trong `services/api/tests/test_academy_routes.py`:
+
 ```python
 def test_create_and_list_questions(client, academy_token):
     # 1. Create Question
@@ -246,25 +253,26 @@ def test_create_and_list_questions(client, academy_token):
     assert any(item["id"] == q_id for item in items)
 ```
 
-- [x] **Step 2: Chạy test để xác nhận test fails**
+- [X] **Step 2: Chạy test để xác nhận test fails**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_create_and_list_questions -v`
 Kỳ vọng: FAIL với 404 Not Found (router chưa mount)
 
-- [x] **Step 3: Triển khai Questions Endpoints trong `routes_academy.py`**
+- [X] **Step 3: Triển khai Questions Endpoints trong `routes_academy.py`**
 
 Tạo `services/api/app/routes_academy.py` với APIRouter:
+
 - `router = APIRouter(prefix="/academy", tags=["Academy"])`
 - Role guard: `def require_academy(user=Depends(current_user)): if user.role not in {"ACADEMY", "SYSTEM_ADMIN"}: fail(403, "FORBIDDEN", ...)`
 - Endpoint `GET /questions` hỗ trợ filters (`type`, `skill`, `difficulty`, `status`, `is_predicted`, `search`).
 - Endpoint `POST /questions`, `GET /questions/{id}`, `PUT /questions/{id}`, `DELETE /questions/{id}` (soft-delete đánh dấu `deleted_at`), `POST /questions/{id}/approve` (chuyển status thành `APPROVED`).
 
-- [x] **Step 4: Chạy test để xác nhận test passes**
+- [X] **Step 4: Chạy test để xác nhận test passes**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_create_and_list_questions -v`
 Kỳ vọng: PASS
 
-- [x] **Step 5: Commit task 2**
+- [X] **Step 5: Commit task 2**
 
 ```bash
 git add services/api/app/routes_academy.py services/api/tests/test_academy_routes.py
@@ -276,10 +284,12 @@ git commit -m "feat(academy): implement question bank REST endpoints"
 ## Nhiệm vụ 3: Xây dựng Endpoints Ma trận Đề thi & Stock Health Validator
 
 **Files:**
+
 - Modify: `services/api/app/routes_academy.py`
 - Modify: `services/api/tests/test_academy_routes.py`
 
 **Interfaces:**
+
 - Consumes: `AcademicMatrix`, `AcademicQuestion` từ `models.py`
 - Produces:
   + `GET /api/academy/matrices`
@@ -290,9 +300,10 @@ git commit -m "feat(academy): implement question bank REST endpoints"
   + `GET /api/academy/matrices/{id}/stock-health`
   + `POST /api/academy/matrices/{id}/generate-sample`
 
-- [x] **Step 1: Viết test cho Matrix & Stock Health**
+- [X] **Step 1: Viết test cho Matrix & Stock Health**
 
 Bổ sung test trong `services/api/tests/test_academy_routes.py`:
+
 ```python
 def test_matrix_and_stock_health(client, academy_token):
     matrix_payload = {
@@ -338,12 +349,12 @@ def test_matrix_and_stock_health(client, academy_token):
     assert "is_ready_for_publishing" in data
 ```
 
-- [x] **Step 2: Chạy test để xác nhận test fails**
+- [X] **Step 2: Chạy test để xác nhận test fails**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_matrix_and_stock_health -v`
 Kỳ vọng: FAIL
 
-- [x] **Step 3: Triển khai Matrix & Stock Health logic trong `routes_academy.py`**
+- [X] **Step 3: Triển khai Matrix & Stock Health logic trong `routes_academy.py`**
 
 - Endpoint `GET /matrices`, `POST /matrices`, `GET /matrices/{id}`, `PUT /matrices/{id}`, `DELETE /matrices/{id}`.
 - Logic `GET /matrices/{id}/stock-health`:
@@ -355,12 +366,12 @@ Kỳ vọng: FAIL
   * Rút trích ngẫu nhiên các câu hỏi từ kho theo quy tắc từng rule.
   * Trả về `GeneratedSampleExam` cấu trúc đề mẫu có danh sách câu hỏi tuần tự.
 
-- [x] **Step 4: Chạy test để xác nhận test passes**
+- [X] **Step 4: Chạy test để xác nhận test passes**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_matrix_and_stock_health -v`
 Kỳ vọng: PASS
 
-- [x] **Step 5: Commit task 3**
+- [X] **Step 5: Commit task 3**
 
 ```bash
 git add services/api/app/routes_academy.py services/api/tests/test_academy_routes.py
@@ -372,11 +383,13 @@ git commit -m "feat(academy): implement blueprint matrices, stock health validat
 ## Nhiệm vụ 4: Xây dựng Endpoints Tiêu chuẩn Rubrics & Quy chuẩn Dạng bài
 
 **Files:**
+
 - Modify: `services/api/app/routes_academy.py`
 - Modify: `services/api/app/main.py:225-235`
 - Modify: `services/api/tests/test_academy_routes.py`
 
 **Interfaces:**
+
 - Consumes: `Rubric` từ `models.py`, `QuestionTypeConfigModel`
 - Produces:
   + `GET /api/academy/rubrics`
@@ -387,15 +400,11 @@ git commit -m "feat(academy): implement blueprint matrices, stock health validat
   + `GET /api/academy/question-types`
   + `PUT /api/academy/question-types/{type}`
 
-- [x] **Step 1: Viết test cho Rubrics & Question Types**
-
-- [x] **Step 2: Chạy test để xác nhận test fails**
-
-- [x] **Step 3: Triển khai Rubrics & Question Types logic trong `routes_academy.py` và mount vào `main.py`**
-
-- [x] **Step 4: Chạy test để xác nhận test passes**
-
-- [x] **Step 5: Commit task 4**
+- [X] **Step 1: Viết test cho Rubrics & Question Types**
+- [X] **Step 2: Chạy test để xác nhận test fails**
+- [X] **Step 3: Triển khai Rubrics & Question Types logic trong `routes_academy.py` và mount vào `main.py`**
+- [X] **Step 4: Chạy test để xác nhận test passes**
+- [X] **Step 5: Commit task 4**
 
 ```bash
 git add services/api/app/routes_academy.py services/api/app/main.py services/api/tests/test_academy_routes.py
@@ -407,16 +416,19 @@ git commit -m "feat(academy): implement rubrics studio and question type configu
 ## Nhiệm vụ 5: Viết Script Nạp Kho Câu hỏi Thật PTE Speaking vào DB (`import_pte_bank_to_db.py`)
 
 **Files:**
+
 - Create: `scripts/import_pte_bank_to_db.py`
 - Test: `services/api/tests/test_pte_import.py`
 
 **Interfaces:**
+
 - Consumes: Thư mục `data/pte-speaking/`, bảng `academic_questions`
 - Produces: Nhập hơn 600 câu hỏi vào cơ sở dữ liệu với trạng thái `APPROVED`
 
-- [x] **Step 1: Viết test cho script import**
+- [X] **Step 1: Viết test cho script import**
 
 Tạo `services/api/tests/test_pte_import.py`:
+
 ```python
 from scripts.import_pte_bank_to_db import parse_question_data
 
@@ -437,12 +449,12 @@ def test_parse_read_aloud_item():
     assert parsed["status"] == "APPROVED"
 ```
 
-- [x] **Step 2: Chạy test để xác nhận test fails**
+- [X] **Step 2: Chạy test để xác nhận test fails**
 
 Chạy: `python -m pytest services/api/tests/test_pte_import.py -v`
 Kỳ vọng: FAIL với `ModuleNotFoundError`
 
-- [x] **Step 3: Viết script `scripts/import_pte_bank_to_db.py`**
+- [X] **Step 3: Viết script `scripts/import_pte_bank_to_db.py`**
 
 - Định nghĩa ánh xạ:
   * "Read Aloud" $\rightarrow$ `RA` (prep: 35s, resp: 40s)
@@ -455,13 +467,13 @@ Kỳ vọng: FAIL với `ModuleNotFoundError`
 - Chèn idempotently (nếu code đã tồn tại thì bỏ qua hoặc cập nhật) vào bảng `academic_questions`.
 - In báo cáo tổng kết số lượng câu hỏi đã nạp theo từng dạng bài.
 
-- [x] **Step 4: Chạy test và chạy thử nghiệm import**
+- [X] **Step 4: Chạy test và chạy thử nghiệm import**
 
 Chạy test: `python -m pytest services/api/tests/test_pte_import.py -v` (Kỳ vọng: PASS)
 Chạy script: `python scripts/import_pte_bank_to_db.py`
 Kỳ vọng: Nạp thành công hơn 600 câu hỏi vào cơ sở dữ liệu.
 
-- [x] **Step 5: Commit task 5**
+- [X] **Step 5: Commit task 5**
 
 ```bash
 git add scripts/import_pte_bank_to_db.py services/api/tests/test_pte_import.py
@@ -473,23 +485,21 @@ git commit -m "feat(data): add CLI script to import PTE speaking bank questions 
 ## Nhiệm vụ 6: Cập nhật Cầu nối Frontend Service & Context (`academy.service.ts`, `AcademicContext.tsx`)
 
 **Files:**
+
 - Modify: `apps/staff-portal/services/academy.service.ts`
 - Modify: `apps/staff-portal/context/AcademicContext.tsx`
 - Test: `apps/staff-portal/tests/academic-service.test.ts`
 
 **Interfaces:**
+
 - Consumes: Backend API `/api/academy/...`
 - Produces: State thật được đồng bộ giữa Staff Portal và PostgreSQL
 
-- [x] **Step 1: Viết test cho `academy.service.ts`**
-
-- [x] **Step 2: Chạy test để xác minh**
-
-- [x] **Step 3: Cập nhật `academy.service.ts` & `AcademicContext.tsx`**
-
-- [x] **Step 4: Kiểm tra build & Typecheck Frontend**
-
-- [x] **Step 5: Commit task 6**
+- [X] **Step 1: Viết test cho `academy.service.ts`**
+- [X] **Step 2: Chạy test để xác minh**
+- [X] **Step 3: Cập nhật `academy.service.ts` & `AcademicContext.tsx`**
+- [X] **Step 4: Kiểm tra build & Typecheck Frontend**
+- [X] **Step 5: Commit task 6**
 
 ```bash
 git add apps/staff-portal/services/academy.service.ts apps/staff-portal/context/AcademicContext.tsx apps/staff-portal/tests/academic-service.test.ts
@@ -501,6 +511,7 @@ git commit -m "feat(staff-portal): bind academic context to backend REST API and
 ## 4. Kiểm định Toàn diện (Self-Review & Verification Checklist)
 
 Trước khi nghiệm thu Giai đoạn 1:
+
 1. **Pytest Coverage:** Chạy toàn bộ test suite `python -m pytest services/api/tests/test_academy_routes.py` $\rightarrow$ 100% Passed.
 2. **Database Verification:** Truy vấn bảng `academic_questions` để xác nhận số câu hỏi thực tế trong DB:
    ```sql
