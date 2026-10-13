@@ -19,14 +19,19 @@ import {
   Sliders,
   UserCheck,
   CheckCircle2,
-  AlertCircle
+  RotateCcw,
+  X,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  BookOpen,
+  Info
 } from 'lucide-react';
 import { AudioPlayer } from './components/AudioPlayer';
 import { EditTranscriptModal } from './components/EditTranscriptModal';
 import { ScoreOverrideModal } from './components/ScoreOverrideModal';
 import { RequestReEvalModal } from './components/RequestReEvalModal';
 import { ReEvaluationsList } from './components/ReEvaluationsList';
-import { EnhancedMetricsPanel } from './components/EnhancedMetricsPanel';
 import { teacherService } from '@/services';
 
 type ResultStatus = 'PENDING' | 'REVIEW_REQUIRED' | 'APPROVED' | 'REJECTED';
@@ -144,22 +149,39 @@ interface SessionDetail {
 }
 
 function PipelineProgressStepper({ stage, stageLabel }: { stage?: string; stageLabel?: string }) {
+  const isAllDone = stage === 'GRADED' || stage === 'COMPLETED' || stage === 'REVIEW_REQUIRED';
   const steps = [
-    { key: 'SUBMITTED', label: '1. Nhận âm thanh', isDone: ['TRANSCRIBING', 'ANALYZING', 'GRADING', 'GRADED'].includes(stage || '') },
-    { key: 'TRANSCRIBING', label: '2. Whisper STT', isDone: ['ANALYZING', 'GRADING', 'GRADED'].includes(stage || ''), isCurrent: stage === 'TRANSCRIBING' },
-    { key: 'ANALYZING', label: '3. Phân tích âm học', isDone: ['GRADING', 'GRADED'].includes(stage || ''), isCurrent: stage === 'ANALYZING' },
-    { key: 'GRADING', label: '4. AI Chấm Rubric', isDone: stage === 'GRADED', isCurrent: stage === 'GRADING' },
+    { key: 'SUBMITTED', label: '1. Nhận âm thanh', isDone: isAllDone || ['TRANSCRIBING', 'ANALYZING', 'GRADING'].includes(stage || '') },
+    { key: 'TRANSCRIBING', label: '2. Whisper STT', isDone: isAllDone || ['ANALYZING', 'GRADING'].includes(stage || ''), isCurrent: !isAllDone && stage === 'TRANSCRIBING' },
+    { key: 'ANALYZING', label: '3. Phân tích âm học', isDone: isAllDone || ['GRADING'].includes(stage || ''), isCurrent: !isAllDone && stage === 'ANALYZING' },
+    { key: 'GRADING', label: '4. AI Chấm Rubric', isDone: isAllDone, isCurrent: !isAllDone && stage === 'GRADING' },
   ];
 
   return (
-    <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-xl border border-blue-200/80 space-y-2.5">
-      <div className="flex items-center justify-between text-xs font-bold text-blue-900">
+    <div className={`p-3.5 rounded-xl border space-y-2.5 transition-all ${
+      isAllDone 
+        ? 'bg-gradient-to-r from-emerald-50 to-teal-50/60 border-emerald-200' 
+        : 'bg-gradient-to-r from-blue-50 to-indigo-50/60 border-blue-200/80'
+    }`}>
+      <div className="flex items-center justify-between text-xs font-bold">
         <span className="flex items-center gap-2">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-          <span>Tiến độ Worker AI: <strong className="text-blue-700">{stageLabel || 'Đang xử lý...'}</strong></span>
+          {isAllDone ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          ) : (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+          )}
+          <span className={isAllDone ? 'text-emerald-900' : 'text-blue-900'}>
+            Tiến độ Worker AI: <strong className={isAllDone ? 'text-emerald-700 font-bold' : 'text-blue-700'}>
+              {stageLabel || (isAllDone ? 'Hoàn tất AI chấm điểm — Sẵn sàng thẩm định' : 'Đang xử lý...')}
+            </strong>
+          </span>
         </span>
-        <span className="text-[10px] font-semibold bg-white border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full shadow-2xs">
-          Thời gian thực
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs ${
+          isAllDone 
+            ? 'bg-emerald-100/80 border-emerald-200 text-emerald-800' 
+            : 'bg-white border-blue-200 text-blue-700'
+        }`}>
+          {isAllDone ? 'Hoàn tất 100%' : 'Thời gian thực'}
         </span>
       </div>
 
@@ -194,6 +216,191 @@ function PipelineProgressStepper({ stage, stageLabel }: { stage?: string; stageL
   );
 }
 
+interface RubricGuideLevel {
+  score: number;
+  description: string;
+}
+
+interface RubricGuideItem {
+  key: string;
+  title: string;
+  question: string;
+  scoringMethod: string;
+  levels: RubricGuideLevel[];
+}
+
+const PTE_RUBRIC_GUIDES: Record<string, RubricGuideItem> = {
+  content: {
+    key: 'content',
+    title: 'Enabling skill - Content',
+    question: 'Does your response include all the words in the reading text and only these words?',
+    scoringMethod:
+      'Content is scored by counting the number of correct words in your response. Replacements insertions and omissions of words will negatively affect your score.',
+    levels: [
+      { score: 5, description: 'All words in the response from the prompt' },
+      { score: 4, description: 'At least 75% of words in the response from the prompt' },
+      { score: 3, description: 'At least 50% of words in the response from the prompt' },
+      { score: 2, description: 'At least 25% of words in the response from the prompt' },
+      { score: 1, description: 'Less than 25% of words in the response from the prompt' },
+      { score: 0, description: 'Almost nothing from the prompt in the response' },
+    ],
+  },
+  oral_fluency: {
+    key: 'oral_fluency',
+    title: 'Enabling skill - Oral fluency',
+    question: 'Does your response demonstrate a smooth, effortless and natural rate of Speech?',
+    scoringMethod:
+      'Oral fluency is scored by determining if your rhythm, phrasing and stress are smooth. The best responses are spoken at a constant and natural rate of speech with appropriate phrasing. Hesitations, repetitions and false starts will negatively affect your score.',
+    levels: [
+      {
+        score: 5,
+        description:
+          'Speech shows smooth rhythm and phrasing. There are no hesitations, repetitions, false starts or non-native phonological simplifications',
+      },
+      {
+        score: 4,
+        description:
+          'Speech has an acceptable rhythm with appropriate phrasing and word emphasis. There is no more than one hesitation, one repetition or a false start. There are no significant non-native phonological simplifications',
+      },
+      {
+        score: 3,
+        description:
+          'Speech is at an acceptable speed but may be uneven. There may be more than one hesitation, but most words are spoken in continuous phrases. There are few repetitions or false starts. There are no long pauses and speech does not sound staccato',
+      },
+      {
+        score: 2,
+        description:
+          'Speech may be uneven or staccato. Speech (if >= 6 words) has at least one smooth three-word run, and no more than two or three hesitations, repetitions or false starts. There may be one long pause, but not two or more',
+      },
+      {
+        score: 1,
+        description:
+          'Speech has irregular phrasing or sentence rhythm. Poor phrasing, staccato or syllabic timing, and/or multiple hesitations, repetitions, and/or false starts make spoken performance notably uneven or discontinuous. Long utterances may have one or two long pauses and inappropriate sentencelevel word emphasis',
+      },
+      {
+        score: 0,
+        description:
+          'Speech is slow and labored with little discernable phrase grouping, multiple hesitations, pauses, false starts, and/or major phonological simplifications. Most words are isolated, and there may be more than one long pause',
+      },
+    ],
+  },
+  pronunciation: {
+    key: 'pronunciation',
+    title: 'Enabling skill - Pronunciation',
+    question:
+      'Does your response demonstrate your ability to produce speech sounds in a similar way to most regular speakers of the language?',
+    scoringMethod:
+      'Pronunciation is scored by determining if your speech is easily understandable to most regular speakers of the language. The best responses contain vowels and consonants pronounced in a native-like way, as well as words and phrases stressed correctly. Responses should also be immediately understandable to a regular speaker of the language.',
+    levels: [
+      {
+        score: 5,
+        description:
+          'All vowels and consonants are produced in a manner that is easily understood by regular speakers of the language. The speaker uses assimilation and deletions appropriate to continuous speech. Stress is placed correctly in all words and sentence-level stress is fully appropriate',
+      },
+      {
+        score: 4,
+        description:
+          'Vowels and consonants are produced clearly and unambiguously. A few minor consonant, vowel or stress distortions do not affect intelligibility. All words are easily understandable. A few consonants or consonant sequences may be distorted. Stress is placed correctly on all common words, and sentence level stress is reasonable',
+      },
+      {
+        score: 3,
+        description:
+          'Most vowels and consonants are pronounced correctly. Some consistent errors might make a few words unclear. A few consonants in certain contexts may be regularly distorted, omitted or mispronounced. Stressdependent vowel reduction may occur on a few words',
+      },
+      {
+        score: 2,
+        description:
+          'Some consonants and vowels are consistently mispronounced in a nonnative like manner. At least 2/3 of speech is intelligible, but listeners might need to adjust to the accent. Some consonants are regularly omitted, and consonant sequences may be simplified. Stress may be placed incorrectly on some words or be unclear',
+      },
+      {
+        score: 1,
+        description:
+          'Many consonants and vowels are mispronounced, resulting in a strong intrusive foreign accent. Listeners may have difficulty understanding about 1/3 of the words. Many consonants may be distorted or omitted. Consonant sequences may be non-English. Stress is placed in a non-English manner; unstressed words may be reduced or omitted and a few syllables added or missed',
+      },
+      {
+        score: 0,
+        description:
+          'Pronunciation seems completely characteristic of another language. Many consonants and vowels are mispronounced, misordered or omitted. Listeners may find more than 1/2 of the speech unintelligible. Stressed and unstressed syllables are realized in a non-English manner. Several words may have the wrong number of syllables',
+      },
+    ],
+  },
+};
+
+function getRubricGuide(name: string): RubricGuideItem | null {
+  const norm = name.toLowerCase().trim();
+  if (norm.includes('content') || norm.includes('nội dung')) return PTE_RUBRIC_GUIDES.content;
+  if (norm.includes('fluen') || norm.includes('trôi chảy')) return PTE_RUBRIC_GUIDES.oral_fluency;
+  if (norm.includes('pronun') || norm.includes('phát âm')) return PTE_RUBRIC_GUIDES.pronunciation;
+  return null;
+}
+
+function RubricGuideAccordionContent({ guide }: { guide: RubricGuideItem }) {
+  const getBadgeStyle = (score: number) => {
+    switch (score) {
+      case 5:
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 4:
+        return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 3:
+        return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+      case 2:
+        return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 1:
+        return 'bg-orange-100 text-orange-800 border-orange-300';
+      default:
+        return 'bg-rose-100 text-rose-800 border-rose-300';
+    }
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-200/90 space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
+      {/* Question Header */}
+      <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200/70 text-xs space-y-1">
+        <span className="font-bold text-blue-900 flex items-center gap-1.5">
+          <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
+          Câu hỏi định hướng chấm điểm:
+        </span>
+        <p className="text-blue-800 italic leading-relaxed">
+          &ldquo;{guide.question}&rdquo;
+        </p>
+      </div>
+
+      {/* Scoring Method */}
+      <div className="text-[11px] text-slate-600 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">
+        <strong className="text-slate-800">Phương pháp tính điểm: </strong>
+        {guide.scoringMethod}
+      </div>
+
+      {/* Marks breakdown 0-5 */}
+      <div className="space-y-1.5">
+        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+          <BookOpen className="w-3 h-3 text-slate-500" />
+          Bảng thang điểm chi tiết (How marks are awarded):
+        </span>
+        <div className="space-y-1">
+          {guide.levels.map((lvl) => (
+            <div
+              key={lvl.score}
+              className="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-slate-200/70 text-xs shadow-2xs"
+            >
+              <span
+                className={`px-2 py-0.5 rounded font-black text-xs shrink-0 border ${getBadgeStyle(
+                  lvl.score
+                )}`}
+              >
+                {lvl.score} điểm
+              </span>
+              <p className="text-slate-700 leading-relaxed text-[11px] pt-0.5">
+                {lvl.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_CONFIG: Record<ResultStatus, { label: string; bgColor: string; textColor: string }> = {
   PENDING: {
     label: 'Chờ xử lý',
@@ -218,7 +425,6 @@ const STATUS_CONFIG: Record<ResultStatus, { label: string; bgColor: string; text
 };
 
 export default function GradingPage() {
-  const [activeTab, setActiveTab] = useState<'RESULTS' | 'RE_EVALUATION'>('RESULTS');
   const [results, setResults] = useState<GradingResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -253,6 +459,10 @@ export default function GradingPage() {
     sequence: number;
     questionText: string;
   } | null>(null);
+
+  // Rubric Accordion state
+  const [expandedRubricKey, setExpandedRubricKey] = useState<string | null>(null);
+  const [expandedAttemptRubricKey, setExpandedAttemptRubricKey] = useState<string | null>(null);
 
   const fetchResults = async () => {
     try {
@@ -407,7 +617,7 @@ export default function GradingPage() {
         exam_name: data.exam_name || data.course_name || 'Bài thi vấn đáp',
         student_name: data.student_name || 'Chưa có tên',
         final_score: data.final_score ?? data.ai_score ?? null,
-        status: data.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
+        status: data.status || 'IN_PROGRESS',
         progress: data.progress || null,
         attempts: mappedAttempts,
       };
@@ -462,29 +672,6 @@ export default function GradingPage() {
     fetchResults();
   }, []);
 
-  // Live Auto-Refresh polling when an exam is being processed by Celery/Worker
-  useEffect(() => {
-    const hasActiveJob = results.some((r) => r.status === 'PENDING' || !!r.progress);
-    const sessionActive = selectedSession && selectedSession.status !== 'COMPLETED';
-    if (!hasActiveJob && !sessionActive) {
-      return;
-    }
-
-    const timer = setInterval(async () => {
-      await fetchResults();
-      if (selectedSession && selectedSession.status !== 'COMPLETED') {
-        try {
-          const freshData: any = await teacherService.getResultDetail(String(selectedSession.id));
-          if (freshData) {
-            handleOpenDetail(selectedSession.id);
-          }
-        } catch {}
-      }
-    }, 2500);
-
-    return () => clearInterval(timer);
-  }, [results, selectedSession]);
-
   const filteredResults = results.filter((result) => {
     const query = searchQuery.toLowerCase();
     const matchesSearch =
@@ -514,46 +701,18 @@ export default function GradingPage() {
             Nghe minh chứng âm thanh, đối soát transcript Whisper, can thiệp điểm và yêu cầu thẩm định độc lập.
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('RESULTS')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'RESULTS'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            01 · Danh sách bài thi ({results.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('RE_EVALUATION')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'RE_EVALUATION'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            02 · Thẩm định độc lập (Blind Marking)
-          </button>
-          <Link
-            href="/grading/live"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20 hover:opacity-90 transition-all"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>03 · Chấm Trực tiếp (Live PTE Demo)</span>
-          </Link>
-        </div>
+        <button
+          onClick={() => fetchResults()}
+          disabled={loading}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-xl border border-slate-200/80 shadow-sm hover:shadow transition-all disabled:opacity-50 cursor-pointer self-start md:self-auto"
+        >
+          <RotateCcw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
+          <span>Làm mới dữ liệu</span>
+        </button>
       </div>
 
-      {/* TAB CONTENT 2: ReEvaluations */}
-      {activeTab === 'RE_EVALUATION' && (
-        <ReEvaluationsList />
-      )}
-
-      {/* TAB CONTENT 1: Grading Results */}
-      {activeTab === 'RESULTS' && (
-        <div className="space-y-6">
+      {/* Grading Results */}
+      <div className="space-y-6">
           {/* Filters Row */}
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Search Bar */}
@@ -725,33 +884,33 @@ export default function GradingPage() {
             </div>
           )}
         </div>
-      )}
 
-      {/* Slide-over Detail Modal */}
+      {/* Centered Detail Modal */}
       {selectedSession && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end">
-          <div className="bg-white w-full max-w-3xl h-full p-6 md:p-8 shadow-2xl flex flex-col justify-between overflow-y-auto">
-            <div className="space-y-6">
-              {/* Header */}
-              <div className="flex items-center justify-between border-b pb-4">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setSelectedSession(null)}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900">{selectedSession.student_name}</h3>
-                    <p className="text-xs text-slate-500 font-medium">{selectedSession.exam_name}</p>
-                  </div>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-white w-full max-w-4xl max-h-[92vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSelectedSession(null)}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+                  title="Quay lại danh sách"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">{selectedSession.student_name}</h3>
+                  <p className="text-xs text-slate-500 font-medium">{selectedSession.exam_name}</p>
                 </div>
+              </div>
+              <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <span className="text-xs text-slate-400 uppercase font-semibold">Điểm tổng kết</span>
-                  <p className="text-2xl font-black text-blue-600">
+                  <span className="text-[11px] text-slate-400 uppercase font-semibold">Điểm tổng kết</span>
+                  <p className="text-xl font-black text-blue-600">
                     {selectedSession.final_score !== null ? `${selectedSession.final_score.toFixed(1)}` : 'Chờ chấm'}
                   </p>
-                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold mt-1 ${
+                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
                     selectedSession.status === 'COMPLETED'
                       ? 'bg-emerald-100 text-emerald-800'
                       : 'bg-amber-100 text-amber-800'
@@ -759,17 +918,43 @@ export default function GradingPage() {
                     {selectedSession.status === 'COMPLETED' ? 'ĐÃ DUYỆT CHÍNH THỨC' : 'CẦN HẬU KIỂM'}
                   </span>
                 </div>
+                <button
+                  onClick={() => setSelectedSession(null)}
+                  className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  title="Đóng cửa sổ"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
+            </div>
 
-              {/* STT Engine Badge */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 text-xs">
-                <div className="flex items-center gap-2 text-blue-800 font-semibold">
-                  <Sparkles className="w-4 h-4 text-blue-600" />
-                  <span>Mô hình STT: Faster-Whisper Base/Large-v3 (Zero Client Leak)</span>
+            {/* Modal Body (Scrollable) */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {/* 1. AI Pipeline Progress Stepper Tracking */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    Tiến trình theo dõi AI chấm điểm:
+                  </h4>
+                  <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                    Quy trình 4 chặng Celery/Worker
+                  </span>
                 </div>
-                <span className="px-2 py-0.5 rounded-md bg-white text-blue-700 font-bold border border-blue-200">
-                  RAG-Assisted Grading
-                </span>
+                <PipelineProgressStepper
+                  stage={
+                    selectedSession.status === 'COMPLETED' || selectedSession.status === 'REVIEW_REQUIRED' || selectedSession.final_score !== null
+                      ? 'GRADED'
+                      : selectedSession.progress?.current_stage || selectedSession.status
+                  }
+                  stageLabel={
+                    selectedSession.status === 'COMPLETED'
+                      ? 'Đã hoàn thành toàn bộ quy trình chấm'
+                      : selectedSession.status === 'REVIEW_REQUIRED' || selectedSession.final_score !== null
+                      ? 'Hoàn tất AI chấm điểm — Sẵn sàng thẩm định'
+                      : selectedSession.progress?.stage_label || 'Đang xử lý...'
+                  }
+                />
               </div>
 
               {/* Questions & Audio Transcript List */}
@@ -784,6 +969,18 @@ export default function GradingPage() {
                   );
                   const isEdited = att.assessment?.transcript_edited;
                   const isOverridden = att.assessment?.manual_override;
+
+                  // Fallback rubric criteria if criteria is empty
+                  const hasGradedCriteria = att.assessment?.criteria && att.assessment.criteria.length > 0;
+                  const defaultCriteria = (selectedSession as any).snapshot?.criteria || [
+                    { name: 'Content', max_score: 5, weight: 1, description: 'Độ chính xác nội dung, độ bao phủ ý và từ khóa chính' },
+                    { name: 'Oral Fluency', max_score: 5, weight: 1, description: 'Độ trôi chảy, nhịp điệu phát âm, ngắt nghỉ câu tự nhiên' },
+                    { name: 'Pronunciation', max_score: 5, weight: 1, description: 'Độ chuẩn xác nguyên âm, phụ âm và trọng âm từ' },
+                  ];
+                  const displayCriteria = (hasGradedCriteria ? att.assessment!.criteria! : defaultCriteria).map((c: any) => ({
+                    ...c,
+                    max_score: c.name.toLowerCase().includes('content') ? 5 : (c.max_score || 5)
+                  }));
 
                   return (
                     <div key={idx} className="p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-4">
@@ -865,23 +1062,39 @@ export default function GradingPage() {
                         )}
                       </div>
 
-                      {/* Criteria Assessment Breakdown */}
-                      {att.assessment?.criteria && att.assessment.criteria.length > 0 && (
-                        <div className="pt-2 border-t border-slate-200/80 space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                              Đánh giá theo Tiêu chí Rubric:
-                            </span>
-                            <span className="text-[11px] text-slate-400 font-medium">
-                              {att.assessment.criteria.length} tiêu chí
-                            </span>
-                          </div>
-                          <div className="space-y-2.5">
-                            {att.assessment.criteria.map((c, cIdx) => (
-                              <div key={cIdx} className="p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-2xs space-y-2">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
+                      {/* Criteria Assessment Breakdown (With Fallback & Interactive 0-5 Guide) */}
+                      <div className="pt-2 border-t border-slate-200/80 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                            <Award className="w-3.5 h-3.5 text-blue-600" />
+                            Đánh giá theo Tiêu chí Rubric:
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {hasGradedCriteria ? `${displayCriteria.length} tiêu chí đã có điểm` : `${displayCriteria.length} tiêu chí chuẩn đề thi`}
+                          </span>
+                        </div>
+                        <div className="space-y-2.5">
+                          {displayCriteria.map((c: any, cIdx: number) => {
+                            const guide = getRubricGuide(c.name);
+                            const attemptKey = `${att.id}-${c.name}`;
+                            const isExpanded = expandedAttemptRubricKey === attemptKey;
+
+                            return (
+                              <div
+                                key={cIdx}
+                                className={`p-3 bg-white rounded-xl border text-xs shadow-2xs space-y-2 transition-all ${
+                                  isExpanded
+                                    ? 'border-blue-400 ring-2 ring-blue-50'
+                                    : 'border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <div
+                                  onClick={() =>
+                                    setExpandedAttemptRubricKey(isExpanded ? null : attemptKey)
+                                  }
+                                  className="flex items-start justify-between gap-2 cursor-pointer select-none"
+                                >
+                                  <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                       <span className="font-bold text-slate-800 text-[13px]">{c.name}</span>
                                       {c.weight !== undefined && c.weight > 0 && (
@@ -889,13 +1102,27 @@ export default function GradingPage() {
                                           Trọng số: {c.weight <= 1 ? Math.round(c.weight * 100) : c.weight}%
                                         </span>
                                       )}
+                                      <span className="text-[10px] text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 flex items-center gap-1">
+                                        <span>{isExpanded ? 'Đóng thang điểm' : 'Xem chuẩn 0-5đ'}</span>
+                                        {isExpanded ? (
+                                          <ChevronUp className="w-3 h-3 text-blue-600" />
+                                        ) : (
+                                          <ChevronDown className="w-3 h-3 text-blue-600" />
+                                        )}
+                                      </span>
                                     </div>
                                     {c.description && (
                                       <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{c.description}</p>
                                     )}
                                   </div>
-                                  <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold text-xs shrink-0 border border-blue-100">
-                                    {c.score} / {c.max_score} đ
+                                  <span className={`px-2.5 py-1 rounded-lg font-bold text-xs shrink-0 border ${
+                                    hasGradedCriteria && c.score !== undefined && c.score !== null
+                                      ? 'bg-blue-50 text-blue-700 border-blue-100'
+                                      : 'bg-slate-50 text-slate-500 border-slate-200'
+                                  }`}>
+                                    {hasGradedCriteria && c.score !== undefined && c.score !== null
+                                      ? `${c.score} / ${c.max_score || 5} đ`
+                                      : `Thang điểm: ${c.max_score || 5} đ`}
                                   </span>
                                 </div>
                                 {(c.feedback || c.comment) && (
@@ -904,26 +1131,14 @@ export default function GradingPage() {
                                     {c.feedback || c.comment}
                                   </div>
                                 )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
 
-                      {/* Enhanced Metrics Panel (NEW v2) */}
-                      {att.assessment?.enhanced_metrics && (
-                        <div className="pt-2 border-t border-slate-200/80">
-                          <EnhancedMetricsPanel
-                            metrics={att.assessment.enhanced_metrics}
-                            overallScore={att.assessment?.score ?? undefined}
-                            studentAudioUrl={audioEvidence ? `/api/evidence/${audioEvidence.id}/content` : undefined}
-                            realAudioUrl={
-                              (att.question as any)?.audio_url ||
-                              (att.sequence === 2 ? '/audio/pte_rs_prompt.wav' : '/audio/pte_ra_prompt.wav')
-                            }
-                          />
+                                {isExpanded && guide && <RubricGuideAccordionContent guide={guide} />}
+                              </div>
+                            );
+                          })}
                         </div>
-                      )}
+                      </div>
+
 
                       {/* Reasoning Summary if available */}
                       {att.assessment?.reasoning_summary && (
@@ -945,7 +1160,7 @@ export default function GradingPage() {
                               confidence: att.stt_confidence,
                             })
                           }
-                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
+                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-blue-600" />
                           <span>Sửa Transcript & Chấm lại</span>
@@ -959,10 +1174,10 @@ export default function GradingPage() {
                               sequence: att.sequence || idx + 1,
                               questionText: att.question?.text || '',
                               currentScore: att.assessment?.score ?? null,
-                              criteria: att.assessment?.criteria || [],
+                              criteria: displayCriteria,
                             })
                           }
-                          className="px-3 py-1.5 bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
+                          className="px-3 py-1.5 bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
                         >
                           <Sliders className="w-3.5 h-3.5 text-amber-600" />
                           <span>Can thiệp điểm</span>
@@ -977,7 +1192,7 @@ export default function GradingPage() {
                               questionText: att.question?.text || '',
                             })
                           }
-                          className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
+                          className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
                         >
                           <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
                           <span>Yêu cầu Thẩm định</span>
@@ -989,18 +1204,18 @@ export default function GradingPage() {
               </div>
             </div>
 
-            {/* Bottom Actions */}
-            <div className="pt-6 border-t mt-6 flex gap-3">
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
               <button
                 onClick={() => setSelectedSession(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-all"
+                className="px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-sm font-semibold transition-all cursor-pointer shadow-2xs"
               >
                 Đóng
               </button>
               <button
                 onClick={handleApproveSession}
                 disabled={approving}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-sm font-semibold transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2"
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-sm font-semibold transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {approving ? (
                   <>

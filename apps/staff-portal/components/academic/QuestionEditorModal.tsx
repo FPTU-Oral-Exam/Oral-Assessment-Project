@@ -36,8 +36,6 @@ export default function QuestionEditorModal({
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [prepTime, setPrepTime] = useState(35);
-  const [responseTime, setResponseTime] = useState(40);
   const [difficulty, setDifficulty] = useState<DifficultyLevel>('MEDIUM');
   const [mediaUrl, setMediaUrl] = useState('');
   const [audioScript, setAudioScript] = useState('');
@@ -54,8 +52,6 @@ export default function QuestionEditorModal({
       setCode(initialQuestion.code);
       setTitle(initialQuestion.title);
       setPrompt(initialQuestion.prompt);
-      setPrepTime(initialQuestion.prep_time);
-      setResponseTime(initialQuestion.response_time);
       setDifficulty(initialQuestion.difficulty);
       setMediaUrl(initialQuestion.media_url || '');
       setAudioScript(initialQuestion.audio_script || '');
@@ -67,9 +63,6 @@ export default function QuestionEditorModal({
       setCode(`RA-${Math.floor(100 + Math.random() * 900)}`);
       setTitle('');
       setPrompt('');
-      const raCfg = questionTypeConfigs?.RA;
-      setPrepTime(raCfg?.default_prep_time ?? QUESTION_TYPES_META.RA.defaultPrepTime);
-      setResponseTime(raCfg?.default_response_time ?? QUESTION_TYPES_META.RA.defaultResponseTime);
       setDifficulty('MEDIUM');
       setMediaUrl('');
       setAudioScript('');
@@ -80,12 +73,9 @@ export default function QuestionEditorModal({
     setError(null);
   }, [initialQuestion, isOpen, questionTypeConfigs]);
 
-  // Handle Type Change defaults from Config Master
+  // Khi đổi dạng bài, tự random lại mã nếu đang tạo mới
   const handleTypeChange = (newType: QuestionType) => {
     setType(newType);
-    const targetConfig = questionTypeConfigs?.[newType];
-    setPrepTime(targetConfig?.default_prep_time ?? QUESTION_TYPES_META[newType].defaultPrepTime);
-    setResponseTime(targetConfig?.default_response_time ?? QUESTION_TYPES_META[newType].defaultResponseTime);
     if (!initialQuestion) {
       setCode(`${newType}-${Math.floor(100 + Math.random() * 900)}`);
     }
@@ -124,16 +114,18 @@ export default function QuestionEditorModal({
       .map((t) => t.trim())
       .filter(Boolean);
 
+    const prepTime = currentConfig?.default_prep_time ?? QUESTION_TYPES_META[type].defaultPrepTime;
+    const responseTime = currentConfig?.default_response_time ?? QUESTION_TYPES_META[type].defaultResponseTime;
+
     if (initialQuestion) {
       updateQuestion(initialQuestion.id, {
         code: code.trim(),
         type,
         title: title.trim(),
         prompt: prompt.trim(),
-        prep_time: Number(prepTime),
-        response_time: Number(responseTime),
+        prep_time: prepTime,
+        response_time: responseTime,
         difficulty,
-        is_predicted: false,
         media_url: mediaUrl.trim() || undefined,
         audio_script: audioScript.trim() || undefined,
         sample_answer: sampleAnswer.trim() || undefined,
@@ -147,11 +139,10 @@ export default function QuestionEditorModal({
         type,
         title: title.trim(),
         prompt: prompt.trim(),
-        prep_time: Number(prepTime),
-        response_time: Number(responseTime),
+        prep_time: prepTime,
+        response_time: responseTime,
         difficulty,
         status: 'DRAFT',
-        is_predicted: false,
         media_url: mediaUrl.trim() || undefined,
         audio_script: audioScript.trim() || undefined,
         sample_answer: sampleAnswer.trim() || undefined,
@@ -256,32 +247,16 @@ export default function QuestionEditorModal({
             </div>
           </div>
 
-          {/* 3. Thời gian chuẩn bị & Trả lời */}
+          {/* 3. Thời gian & Độ khó */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Chuẩn bị (giây)
-              </label>
-              <input
-                type="number"
-                value={prepTime}
-                onChange={(e) => setPrepTime(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-                min={0}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Trả lời (giây)
-              </label>
-              <input
-                type="number"
-                value={responseTime}
-                onChange={(e) => setResponseTime(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-                min={5}
-              />
+            <div className="sm:col-span-2 p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+              <Clock className="w-4 h-4 text-slate-500" />
+              <div className="text-xs text-slate-600">
+                Thời gian: <strong className="text-slate-900 font-mono">{currentConfig?.default_prep_time ?? QUESTION_TYPES_META[type].defaultPrepTime}s prep</strong>
+                <span className="mx-1.5 text-slate-300">/</span>
+                <strong className="text-slate-900 font-mono">{currentConfig?.default_response_time ?? QUESTION_TYPES_META[type].defaultResponseTime}s resp</strong>
+                <span className="text-slate-400 ml-1.5">(theo Cấu hình Dạng bài {type})</span>
+              </div>
             </div>
 
             <div>

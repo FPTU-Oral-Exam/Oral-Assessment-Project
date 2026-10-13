@@ -14,20 +14,11 @@ import type {
   QuestionTypeConfig,
 } from '@/types/academic';
 import { QUESTION_TYPES_META, DEFAULT_QUESTION_TYPE_CONFIGS } from '@/types/academic';
-import { academyService } from '@/services/academy.service';
-
-/** Backend Question Type Config schema (from /api/academy/question-types) */
-export interface BackendQuestionTypeConfig {
-  type: string;
-  name: string;
-  description: string;
-  default_prep_time: number;
-  default_response_time: number;
-  audio_instruction_url: string | null;
-  max_score: number;
-  created_at: number;
-  updated_at: number;
-}
+import {
+  academyService,
+  type QuestionTypeConfigResponse,
+  type CreateQuestionTypePayload,
+} from '@/services/academy.service';
 
 interface AcademicContextValue {
   // Data
@@ -37,7 +28,7 @@ interface AcademicContextValue {
   activeMatrix: ExamBlueprintMatrix | null;
   rubrics: RubricSchema[];
   activeRubric: RubricSchema | null;
-  questionTypeConfigs: Record<QuestionType, QuestionTypeConfig>;
+  questionTypeConfigs: Record<string, QuestionTypeConfig>;
   isLoading: boolean;
   error: string | null;
 
@@ -77,8 +68,9 @@ interface AcademicContextValue {
   deleteRubric: (id: string) => Promise<void>;
 
   // Question Type Config actions
-  updateQuestionTypeConfig: (type: QuestionType, data: Partial<QuestionTypeConfig>) => void;
-  resetQuestionTypeConfigs: () => void;
+  addQuestionType: (data: CreateQuestionTypePayload) => Promise<void>;
+  updateQuestionTypeConfig: (type: string, data: Partial<QuestionTypeConfig>, syncExistingQuestions?: boolean) => Promise<void>;
+  resetQuestionTypeConfigs: () => Promise<void>;
 
   // Type counts (for badges)
   typeCounts: Record<QuestionType | 'ALL', number>;
@@ -92,7 +84,7 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
   const [matrices, setMatrices] = useState<ExamBlueprintMatrix[]>([]);
   const [rubrics, setRubrics] = useState<RubricSchema[]>([]);
   const [questionTypeConfigs, setQuestionTypeConfigs] = useState<
-    Record<QuestionType, QuestionTypeConfig>
+    Record<string, QuestionTypeConfig>
   >(DEFAULT_QUESTION_TYPE_CONFIGS);
 
   // Loading & error states
@@ -151,22 +143,41 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
 
         // Question Type Configs (map to local format with safe defaults)
         if (qts.status === 'fulfilled' && qts.value.length > 0) {
-          const configs = qts.value as BackendQuestionTypeConfig[];
-          const mapped: Record<QuestionType, QuestionTypeConfig> = { ...DEFAULT_QUESTION_TYPE_CONFIGS };
+          const configs = qts.value as QuestionTypeConfigResponse[];
+          const mapped: Record<string, QuestionTypeConfig> = { ...DEFAULT_QUESTION_TYPE_CONFIGS };
           for (const cfg of configs) {
-            const qt = cfg.type as QuestionType;
-            if (qt in QUESTION_TYPES_META && qt in DEFAULT_QUESTION_TYPE_CONFIGS) {
-              const base = DEFAULT_QUESTION_TYPE_CONFIGS[qt];
-              mapped[qt] = {
-                ...base,
-                code: qt,
-                name: cfg.name || base.name,
-                vietnamese_name: QUESTION_TYPES_META[qt].name,
-                description: cfg.description || base.description,
-                default_prep_time: cfg.default_prep_time || base.default_prep_time,
-                default_response_time: cfg.default_response_time || base.default_response_time,
-              };
-            }
+            const qt = cfg.type;
+            const base = (DEFAULT_QUESTION_TYPE_CONFIGS as Record<string, QuestionTypeConfig>)[qt] || {
+              code: qt,
+              name: cfg.name,
+              vietnamese_name: cfg.vietnamese_name || cfg.name,
+              description: cfg.description,
+              is_active: cfg.is_active,
+              default_prep_time: cfg.default_prep_time,
+              default_response_time: cfg.default_response_time,
+              recommended_question_count: cfg.recommended_question_count || 2,
+              requires_image: cfg.requires_image || false,
+              requires_audio_prompt: cfg.requires_audio_prompt || false,
+              requires_audio_script: cfg.requires_audio_script || false,
+              requires_key_points: cfg.requires_key_points || false,
+              question_count: cfg.question_count || 0,
+            };
+            mapped[qt] = {
+              ...base,
+              code: qt,
+              name: cfg.name || base.name,
+              vietnamese_name: cfg.vietnamese_name || base.vietnamese_name,
+              description: cfg.description || base.description,
+              default_prep_time: cfg.default_prep_time ?? base.default_prep_time,
+              default_response_time: cfg.default_response_time ?? base.default_response_time,
+              is_active: cfg.is_active !== undefined ? cfg.is_active : base.is_active,
+              requires_image: cfg.requires_image !== undefined ? cfg.requires_image : base.requires_image,
+              requires_audio_prompt: cfg.requires_audio_prompt !== undefined ? cfg.requires_audio_prompt : base.requires_audio_prompt,
+              requires_audio_script: cfg.requires_audio_script !== undefined ? cfg.requires_audio_script : base.requires_audio_script,
+              requires_key_points: cfg.requires_key_points !== undefined ? cfg.requires_key_points : base.requires_key_points,
+              recommended_question_count: cfg.recommended_question_count || base.recommended_question_count,
+              question_count: cfg.question_count ?? base.question_count ?? 0,
+            };
           }
           setQuestionTypeConfigs(mapped);
         }
@@ -431,7 +442,6 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
         response_time: q.response_time,
         media_url: q.media_url,
         status: 'APPROVED' as QuestionStatus,
-        is_predicted: false,
         usage_count: 0,
         tags: [],
         created_at: Date.now(),
@@ -441,52 +451,121 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
   };
 
   // Question Type Config Actions
-  const updateQuestionTypeConfig = async (
-    type: QuestionType,
-    data: Partial<QuestionTypeConfig>
-  ) => {
+  const addQuestionType = async (data: CreateQuestionTypePayload) => {
     try {
-      await academyService.updateQuestionTypeConfig(type, {
-        name: data.name || '',
-        description: data.description || '',
-        default_prep_time: data.default_prep_time || 30,
-        default_response_time: data.default_response_time || 40,
-        audio_instruction_url: data.requires_audio_prompt ? 'https://example.com/audio.mp3' : null,
-        max_score: 10.0,
-      });
+      const created = await academyService.createQuestionType(data);
+      const newConfig: QuestionTypeConfig = {
+        code: created.type,
+        name: created.name,
+        vietnamese_name: created.vietnamese_name || created.name,
+        description: created.description,
+        default_prep_time: created.default_prep_time,
+        default_response_time: created.default_response_time,
+        is_active: created.is_active,
+        requires_image: created.requires_image,
+        requires_audio_prompt: created.requires_audio_prompt,
+        requires_audio_script: created.requires_audio_script,
+        requires_key_points: created.requires_key_points,
+        recommended_question_count: created.recommended_question_count,
+        question_count: 0,
+      };
       setQuestionTypeConfigs((prev) => ({
         ...prev,
-        [type]: { ...(prev[type] || DEFAULT_QUESTION_TYPE_CONFIGS[type]), ...data },
+        [created.type]: newConfig,
       }));
+    } catch (err) {
+      console.error('[AcademicContext] Failed to create question type:', err);
+      throw err;
+    }
+  };
+
+  const updateQuestionTypeConfig = async (
+    type: string,
+    data: Partial<QuestionTypeConfig>,
+    syncExistingQuestions: boolean = false
+  ) => {
+    try {
+      const res = await academyService.updateQuestionTypeConfig(
+        type,
+        {
+          name: data.name,
+          vietnamese_name: data.vietnamese_name,
+          description: data.description,
+          default_prep_time: data.default_prep_time,
+          default_response_time: data.default_response_time,
+          is_active: data.is_active,
+          recommended_question_count: data.recommended_question_count,
+        },
+        syncExistingQuestions
+      );
+
+      setQuestionTypeConfigs((prev) => ({
+        ...prev,
+        [type]: {
+          ...(prev[type] || DEFAULT_QUESTION_TYPE_CONFIGS[type as QuestionType]),
+          ...data,
+          question_count: res.question_count ?? prev[type]?.question_count ?? 0,
+        },
+      }));
+
+      // Nếu đồng bộ câu hỏi cũ, cập nhật danh sách questions đang có trong state
+      if (syncExistingQuestions && data.default_prep_time !== undefined && data.default_response_time !== undefined) {
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.type === type
+              ? { ...q, prep_time: data.default_prep_time!, response_time: data.default_response_time! }
+              : q
+          )
+        );
+      }
     } catch (err) {
       console.error('[AcademicContext] Failed to update question type config:', err);
       throw err;
     }
   };
 
-  const resetQuestionTypeConfigs = () => {
-    // Reload from backend
-    academyService.getQuestionTypeConfigs().then((configs) => {
-      const mapped: Record<QuestionType, QuestionTypeConfig> = { ...DEFAULT_QUESTION_TYPE_CONFIGS };
-      for (const cfg of configs as BackendQuestionTypeConfig[]) {
-        const qt = cfg.type as QuestionType;
-        if (qt in QUESTION_TYPES_META && qt in DEFAULT_QUESTION_TYPE_CONFIGS) {
-          const base = DEFAULT_QUESTION_TYPE_CONFIGS[qt];
-          mapped[qt] = {
-            ...base,
-            code: qt,
-            name: cfg.name || base.name,
-            vietnamese_name: QUESTION_TYPES_META[qt].name,
-            description: cfg.description || base.description,
-            default_prep_time: cfg.default_prep_time || base.default_prep_time,
-            default_response_time: cfg.default_response_time || base.default_response_time,
-          };
-        }
+  const resetQuestionTypeConfigs = async () => {
+    try {
+      const configs = await academyService.getQuestionTypeConfigs();
+      const mapped: Record<string, QuestionTypeConfig> = { ...DEFAULT_QUESTION_TYPE_CONFIGS };
+      for (const cfg of configs) {
+        const qt = cfg.type;
+        const base = (DEFAULT_QUESTION_TYPE_CONFIGS as Record<string, QuestionTypeConfig>)[qt] || {
+          code: qt,
+          name: cfg.name,
+          vietnamese_name: cfg.vietnamese_name || cfg.name,
+          description: cfg.description,
+          is_active: cfg.is_active,
+          default_prep_time: cfg.default_prep_time,
+          default_response_time: cfg.default_response_time,
+          recommended_question_count: cfg.recommended_question_count || 2,
+          requires_image: cfg.requires_image || false,
+          requires_audio_prompt: cfg.requires_audio_prompt || false,
+          requires_audio_script: cfg.requires_audio_script || false,
+          requires_key_points: cfg.requires_key_points || false,
+          question_count: cfg.question_count || 0,
+        };
+        mapped[qt] = {
+          ...base,
+          code: qt,
+          name: cfg.name || base.name,
+          vietnamese_name: cfg.vietnamese_name || base.vietnamese_name,
+          description: cfg.description || base.description,
+          default_prep_time: cfg.default_prep_time ?? base.default_prep_time,
+          default_response_time: cfg.default_response_time ?? base.default_response_time,
+          is_active: cfg.is_active !== undefined ? cfg.is_active : base.is_active,
+          requires_image: cfg.requires_image !== undefined ? cfg.requires_image : base.requires_image,
+          requires_audio_prompt: cfg.requires_audio_prompt !== undefined ? cfg.requires_audio_prompt : base.requires_audio_prompt,
+          requires_audio_script: cfg.requires_audio_script !== undefined ? cfg.requires_audio_script : base.requires_audio_script,
+          requires_key_points: cfg.requires_key_points !== undefined ? cfg.requires_key_points : base.requires_key_points,
+          recommended_question_count: cfg.recommended_question_count || base.recommended_question_count,
+          question_count: cfg.question_count ?? base.question_count ?? 0,
+        };
       }
       setQuestionTypeConfigs(mapped);
-    }).catch(() => {
+    } catch {
       setQuestionTypeConfigs(DEFAULT_QUESTION_TYPE_CONFIGS);
-    });
+    }
   };
 
   return (
@@ -526,6 +605,7 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
         addRubric,
         updateRubric,
         deleteRubric,
+        addQuestionType,
         updateQuestionTypeConfig,
         resetQuestionTypeConfigs,
         typeCounts,

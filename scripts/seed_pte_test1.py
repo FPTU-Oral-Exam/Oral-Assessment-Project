@@ -51,6 +51,9 @@ def seed_pte():
             db.add(student)
             db.flush()
 
+        teacher = db.scalar(select(User).where(User.username == "teacher"))
+        teacher_id = teacher.id if teacher else None
+
         course = db.get(Course, PTE_COURSE_ID)
         if not course:
             course = Course(
@@ -59,9 +62,13 @@ def seed_pte():
                 name="PTE Core & Academic Speaking",
                 description="Bộ đề thi luyện nói tiếng Anh chuẩn PTE gồm 6 phần.",
                 owner_id=admin.id,
+                teacher_id=teacher_id,
                 hotwords=["sleep", "disorder", "villages", "nitrogen", "oxygen", "entrepreneur", "intelligence", "originality"],
             )
             db.add(course)
+            db.flush()
+        elif teacher_id and not course.teacher_id:
+            course.teacher_id = teacher_id
             db.flush()
 
         lo = db.scalar(select(LearningOutcome).where(LearningOutcome.course_id == course.id))
@@ -87,7 +94,7 @@ def seed_pte():
             db.add(TopicOutcome(topic_id=topic.id, outcome_id=lo.id))
 
         criteria = [
-            {"name": "Content", "description": "Appropriate keywords, concept coverage and accuracy", "max_score": 3, "weight": 1},
+            {"name": "Content", "description": "Appropriate keywords, concept coverage and accuracy", "max_score": 5, "weight": 1},
             {"name": "Oral Fluency", "description": "Rhythm, phrasing, hesitation and smooth speech delivery", "max_score": 5, "weight": 1},
             {"name": "Pronunciation", "description": "Clarity of consonants, vowels and word stress", "max_score": 5, "weight": 1},
         ]
@@ -95,6 +102,9 @@ def seed_pte():
         if not rubric:
             rubric = Rubric(course_id=course.id, name="PTE Speaking Standard Rubric", criteria=criteria)
             db.add(rubric)
+            db.flush()
+        else:
+            rubric.criteria = criteria
             db.flush()
 
         questions = [
@@ -191,7 +201,10 @@ def seed_pte():
                     "topic_chunk_ids": {},
                 },
             )
-            db.add(exam)
+        else:
+            snap = dict(exam.snapshot or {})
+            snap["criteria"] = criteria
+            exam.snapshot = snap
             db.flush()
 
         # Enroll all active students and assign this exam

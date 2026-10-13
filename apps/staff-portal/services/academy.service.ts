@@ -21,13 +21,38 @@ import type {
 export interface QuestionTypeConfigResponse {
   type: string;
   name: string;
+  vietnamese_name?: string;
   description: string;
   default_prep_time: number;
   default_response_time: number;
   audio_instruction_url: string | null;
   max_score: number;
+  is_active: boolean;
+  requires_image: boolean;
+  requires_audio_prompt: boolean;
+  requires_audio_script: boolean;
+  requires_key_points: boolean;
+  recommended_question_count: number;
+  question_count: number;
   created_at: number;
   updated_at: number;
+}
+
+export interface CreateQuestionTypePayload {
+  type: string;
+  name: string;
+  vietnamese_name?: string;
+  description?: string;
+  default_prep_time: number;
+  default_response_time: number;
+  audio_instruction_url?: string | null;
+  max_score?: number;
+  is_active?: boolean;
+  requires_image?: boolean;
+  requires_audio_prompt?: boolean;
+  requires_audio_script?: boolean;
+  requires_key_points?: boolean;
+  recommended_question_count?: number;
 }
 
 export interface QuestionFilterParams {
@@ -200,19 +225,19 @@ export class AcademyService {
     }
   }
 
+  async createQuestionType(data: CreateQuestionTypePayload): Promise<QuestionTypeConfigResponse> {
+    return apiClient.post<QuestionTypeConfigResponse>('/academy/question-types', data);
+  }
+
   async updateQuestionTypeConfig(
     type: string,
-    data: {
-      name: string;
-      description: string;
-      default_prep_time: number;
-      default_response_time: number;
-      audio_instruction_url: string | null;
-      max_score: number;
-    }
+    data: Partial<CreateQuestionTypePayload>,
+    syncExistingQuestions: boolean = false
   ): Promise<QuestionTypeConfigResponse> {
-    return apiClient.put<QuestionTypeConfigResponse>(`/academy/question-types/${type}`, data);
+    const query = syncExistingQuestions ? '?sync_existing_questions=true' : '';
+    return apiClient.put<QuestionTypeConfigResponse>(`/academy/question-types/${type}${query}`, data);
   }
 }
 
 export const academyService = new AcademyService();
+

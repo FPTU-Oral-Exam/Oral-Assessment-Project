@@ -43,10 +43,10 @@ flowchart TD
 * **Tác tử thực hiện:** Cán bộ Khảo thí (`EXAMINER`) + File dữ liệu từ Hệ thống FAP.
 * **Đầu vào (Input):**
   - Blueprint đã Publish từ Giai đoạn 1.
-  - File Excel/CSV FAP gồm các cột: `RollNumber`, `FullName`, `Password`, `Room`, `SeatNumber`.
-* **Đầu ra (Output):** `exam_session` ở trạng thái `READY` + danh sách `session_candidates` đã liên kết.
+  - File Excel/CSV FAP gồm các cột: `Ca thi`, `Ngày thi`, `Giờ bắt đầu`, `Giờ kết thúc`, `Phòng thi`, `Email GV coi thi`, `MSSV`, `Họ tên`, `Lớp học`.
+* **Đầu ra (Output):** `schedule_slots` / `exam_batches` ở trạng thái `READY` + danh sách `course_candidates` và `slot_assignments` đã liên kết phòng & lớp.
 * **Thực thể dữ liệu (Database Tables):**
-  - `schedule_slots` / `exam_sessions`
-  - `exam_batches`
-  - `course_candidates` / `session_candidates`
+  - `schedule_slots` / `exam_batches`
+  - `sections` / `exam_enrollments`
+  - `course_candidates`
   - `slot_assignments`

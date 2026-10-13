@@ -2,20 +2,38 @@
 
 import React, { useState } from 'react';
 import {
-  Clock,
-  Volume2,
-  Image as ImageIcon,
-  CheckCircle2,
   Eye,
   Edit2,
   Trash2,
+  Image as ImageIcon,
   Play,
   Pause,
-  Layers,
-  Sparkles,
+  Volume2,
+  X,
+  BookOpen,
 } from 'lucide-react';
-import { AcademicQuestionItem, QuestionType, QUESTION_TYPES_META } from '@/types/academic';
+import { AcademicQuestionItem, QuestionType } from '@/types/academic';
 import { useAcademic } from '@/context/AcademicContext';
+
+const TYPE_META: Record<QuestionType, { label: string; bg: string; text: string; dot: string }> = {
+  RA: { label: 'Đọc to', bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
+  RS: { label: 'Lặp câu', bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
+  GD: { label: 'Thảo luận', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  DI: { label: 'Mô tả ảnh', bg: 'bg-amber-50', text: 'text-amber-800', dot: 'bg-amber-500' },
+  SI: { label: 'Chỉ dẫn', bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
+  RL: { label: 'Kể lại', bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
+  ASQ: { label: 'Trả lời ngắn', bg: 'bg-cyan-50', text: 'text-cyan-700', dot: 'bg-cyan-500' },
+};
+
+const DIFFICULTY_META = {
+  EASY: { label: 'Dễ', bg: 'bg-emerald-50 text-emerald-700' },
+  MEDIUM: { label: 'Vừa', bg: 'bg-amber-50 text-amber-700' },
+  HARD: { label: 'Khó', bg: 'bg-rose-50 text-rose-700' },
+};
+
+const HAS_IMAGE: QuestionType[] = ['DI'];
+const HAS_AUDIO: QuestionType[] = ['RS', 'GD', 'RL', 'SI'];
+const HAS_TEXT_PROMPT: QuestionType[] = ['RA', 'ASQ', 'SI', 'DI'];
 
 interface QuestionCardProps {
   question: AcademicQuestionItem;
@@ -23,258 +41,155 @@ interface QuestionCardProps {
   onEdit: (q: AcademicQuestionItem) => void;
 }
 
-const TYPE_LIGHT_THEME: Record<
-  QuestionType,
-  { bg: string; text: string; border: string; badgeBg: string }
-> = {
-  RA: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badgeBg: 'bg-blue-600' },
-  RS: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badgeBg: 'bg-purple-600' },
-  GD: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badgeBg: 'bg-emerald-600' },
-  DI: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badgeBg: 'bg-amber-600' },
-  SI: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', badgeBg: 'bg-rose-600' },
-  RL: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badgeBg: 'bg-indigo-600' },
-  ASQ: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', badgeBg: 'bg-cyan-600' },
-};
-
 export default function QuestionCard({ question, onPreview, onEdit }: QuestionCardProps) {
-  const { deleteQuestion, approveQuestion } = useAcademic();
+  const { deleteQuestion } = useAcademic();
+  const meta = TYPE_META[question.type] || TYPE_META.RA;
+  const diff = DIFFICULTY_META[question.difficulty] || DIFFICULTY_META.MEDIUM;
+
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [showFullPrompt, setShowFullPrompt] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  const meta = QUESTION_TYPES_META[question.type] || {
-    type: question.type,
-    name: question.type,
-    badge: question.type,
-    description: '',
-    color: 'text-slate-400',
-    bgLight: 'bg-slate-500/10',
-    borderColor: 'border-slate-500/30',
-    defaultPrepTime: question.prep_time || 30,
-    defaultResponseTime: question.response_time || 40,
-  };
-  const typeStyle = TYPE_LIGHT_THEME[question.type] || TYPE_LIGHT_THEME.RA;
-
-  const difficultyColors = {
-    EASY: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200',
-    HARD: 'bg-rose-50 text-rose-700 border-rose-200',
-  };
-
-  const handleToggleAudio = () => {
-    setIsPlayingAudio(!isPlayingAudio);
-  };
-
-  const handleDelete = () => {
-    if (confirm(`Bạn có chắc chắn muốn xóa câu hỏi [${question.code}] không?`)) {
-      deleteQuestion(question.id);
-    }
-  };
+  const showImage = HAS_IMAGE.includes(question.type) && question.media_url;
+  const showAudio = HAS_AUDIO.includes(question.type) && question.audio_script;
+  const showText = HAS_TEXT_PROMPT.includes(question.type);
 
   return (
-    <div className="bg-white border border-slate-200/90 rounded-2xl p-5 hover:border-blue-300 hover:shadow-md transition-all flex flex-col justify-between group">
-      <div>
-        {/* Top Header Row */}
-        <div className="flex items-center justify-between gap-2.5 mb-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Type Badge */}
-            <span
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${typeStyle.bg} ${typeStyle.text} ${typeStyle.border}`}
-            >
-              <span className={`w-2 h-2 rounded-full ${typeStyle.badgeBg}`} />
-              <span>{question.type} · {meta?.name || question.type}</span>
-            </span>
-
-            {/* Code */}
-            <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-              {question.code}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {/* Difficulty Badge */}
-            <span
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
-                difficultyColors[question.difficulty]
-              }`}
-            >
-              {question.difficulty === 'EASY'
-                ? 'Dễ'
-                : question.difficulty === 'MEDIUM'
-                ? 'Vừa'
-                : 'Khó'}
-            </span>
-
-            {/* Status Badge */}
-            {question.status === 'APPROVED' ? (
-              <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                <span>Đã duyệt</span>
-              </span>
-            ) : (
-              <button
-                onClick={() => approveQuestion(question.id)}
-                title="Bấm để phê duyệt câu hỏi này"
-                className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 px-2 py-0.5 rounded transition-all"
-              >
-                <Clock className="w-3 h-3" />
-                <span>Duyệt nhanh</span>
-              </button>
-            )}
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-300 hover:shadow-sm transition-all flex flex-col">
+      {/* ===== MEDIA BLOCK (image for DI) ===== */}
+      {showImage && (
+        <div
+          className="relative bg-slate-100 h-32 cursor-pointer group"
+          onClick={() => setLightboxOpen(true)}
+        >
+          <img
+            src={question.media_url}
+            alt={question.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur text-[10px] text-amber-300 px-2 py-0.5 rounded flex items-center gap-1 border border-amber-500/30 font-semibold">
+            <ImageIcon className="w-3 h-3" />
+            Biểu đồ / Hình ảnh
           </div>
         </div>
+      )}
 
-        {/* Title */}
-        <h3 className="text-base font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors leading-snug">
-          {question.title}
+      <div className="p-5 flex-1 flex flex-col">
+        {/* Header: type + difficulty */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${meta.bg} ${meta.text}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+              {question.type}
+            </span>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${diff.bg}`}>
+              {diff.label}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400 font-mono">
+            {question.prep_time}s | {question.response_time}s
+          </span>
+        </div>
+
+        {/* Title (clean, no code suffix) */}
+        <h3 className="text-sm font-bold text-slate-900 mb-2 leading-snug line-clamp-2">
+          {cleanTitle(question.title, question.type)}
         </h3>
 
-        {/* Media Preview Block (Image for DI) */}
-        {question.type === 'DI' && question.media_url && (
-          <div className="mb-3 relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50 max-h-48 group/img">
-            <img
-              src={question.media_url}
-              alt={question.title}
-              className="w-full h-36 object-cover hover:scale-105 transition-transform duration-300"
-            />
-            <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur text-[11px] text-amber-300 px-2 py-0.5 rounded flex items-center gap-1 border border-amber-500/30">
-              <ImageIcon className="w-3 h-3" />
-              <span>Biểu đồ / Hình ảnh mô tả</span>
-            </div>
-          </div>
-        )}
-
-        {/* Audio Player Prompt (for RS, RL, GD, SI) */}
-        {(question.type === 'RS' ||
-          question.type === 'RL' ||
-          question.type === 'GD' ||
-          question.type === 'SI') && (
-          <div className="mb-3 p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <button
-                onClick={handleToggleAudio}
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                  isPlayingAudio
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs'
-                }`}
-              >
-                {isPlayingAudio ? (
-                  <Pause className="w-3.5 h-3.5" />
-                ) : (
-                  <Play className="w-3.5 h-3.5 ml-0.5" />
-                )}
-              </button>
-              <div>
-                <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Audio Prompt ({question.type})</span>
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  {isPlayingAudio ? 'Đang phát âm thanh mẫu...' : 'Nhấn để nghe thử file âm thanh'}
-                </p>
-              </div>
-            </div>
-
-            {question.audio_script && (
-              <span className="text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded shadow-xs">
-                Có kịch bản
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Prompt Content */}
-        <div className="text-sm text-slate-700 leading-relaxed mb-3">
-          <p className={showFullPrompt ? '' : 'line-clamp-3'}>{question.prompt}</p>
-          {question.prompt.length > 180 && (
+        {/* Audio Player for RS/RL/GD/SI */}
+        {showAudio && (
+          <div className="mb-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2.5">
             <button
-              onClick={() => setShowFullPrompt(!showFullPrompt)}
-              className="text-xs text-blue-600 hover:text-blue-700 mt-1 font-semibold"
+              onClick={() => setIsPlayingAudio(!isPlayingAudio)}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                isPlayingAudio
+                  ? 'bg-rose-600 text-white'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
             >
-              {showFullPrompt ? 'Thu gọn' : 'Xem toàn bộ prompt...'}
+              {isPlayingAudio ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
             </button>
-          )}
-        </div>
-
-        {/* Key Points Badges if any */}
-        {question.key_points && question.key_points.length > 0 && (
-          <div className="mb-3">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Luận điểm cốt lõi AI chấm:
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {question.key_points.slice(0, 3).map((kp, idx) => (
-                <span
-                  key={idx}
-                  className="text-[11px] bg-slate-50 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium"
-                >
-                  • {kp}
-                </span>
-              ))}
-              {question.key_points.length > 3 && (
-                <span className="text-[10px] text-slate-500 self-center font-medium">
-                  +{question.key_points.length - 3} ý nữa
-                </span>
-              )}
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                <Volume2 className="w-3 h-3 text-blue-600" />
+                Audio
+              </p>
+              <p className="text-[10px] text-slate-500 truncate">
+                {isPlayingAudio ? 'Đang phát...' : 'Nhấn play để nghe'}
+              </p>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Footer Meta & Actions */}
-      <div className="pt-3 border-t border-slate-100 mt-2">
-        <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 font-mono text-slate-700 font-medium">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>Prep: {question.prep_time}s</span>
-              <span className="text-slate-300">|</span>
-              <span>Resp: {question.response_time}s</span>
-            </span>
-            <span className="text-slate-500">
-              Dùng: <strong className="text-slate-700">{question.usage_count}</strong> lần
-            </span>
-          </div>
+        {/* Text prompt for RA/SI/DI/ASQ */}
+        {showText && question.prompt && (
+          <p className="text-xs text-slate-600 leading-relaxed mb-3 line-clamp-3">
+            {question.prompt}
+          </p>
+        )}
 
-          <div className="flex items-center gap-1">
-            {question.tags.slice(0, 2).map((t, idx) => (
-              <span
-                key={idx}
-                className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded font-medium"
-              >
-                #{t}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Buttons Row */}
-        <div className="flex items-center justify-between gap-2">
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-3 border-t border-slate-100 mt-auto">
           <button
             onClick={() => onPreview(question)}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-300 transition-colors shadow-xs"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
           >
-            <Eye className="w-3.5 h-3.5 text-blue-600" />
-            <span>Xem thử (Simulator)</span>
+            <Eye className="w-3.5 h-3.5" />
+            Xem thử
           </button>
-
           <button
             onClick={() => onEdit(question)}
-            className="flex items-center justify-center gap-1 py-2 px-3 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors shadow-xs"
+            className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-amber-50 text-slate-700 hover:text-amber-700 border border-slate-200 hover:border-amber-300 transition-colors"
           >
-            <Edit2 className="w-3.5 h-3.5 text-amber-600" />
-            <span>Sửa</span>
+            <Edit2 className="w-3.5 h-3.5" />
+            Sửa
           </button>
-
           <button
-            onClick={handleDelete}
-            title="Xóa câu hỏi khỏi ngân hàng"
+            onClick={() => {
+              if (confirm(`Xóa câu hỏi "${question.title}"?`)) {
+                deleteQuestion(question.id);
+              }
+            }}
             className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Lightbox for DI image */}
+      {lightboxOpen && question.media_url && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur flex items-center justify-center p-4"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={question.media_url}
+            alt={question.title}
+            className="max-w-full max-h-full rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
+}
+
+/**
+ * Làm sạch tiêu đề đang lưu dạng "Answer Short Question #SSQ1733276770014"
+ * → lấy phần trước dấu '#', hoặc dùng prompt ngắn
+ */
+function cleanTitle(rawTitle: string, type: QuestionType): string {
+  if (!rawTitle) {
+    const fallback = TYPE_META[type]?.label || type;
+    return fallback;
+  }
+  const hashIndex = rawTitle.indexOf('#');
+  const cleaned = hashIndex > 0 ? rawTitle.substring(0, hashIndex).trim() : rawTitle;
+  return cleaned.length > 80 ? cleaned.substring(0, 80) + '...' : cleaned;
 }

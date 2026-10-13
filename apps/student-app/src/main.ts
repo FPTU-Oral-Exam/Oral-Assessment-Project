@@ -112,3 +112,7 @@ app.on('activate', () => {
 });
 
 ipcMain.handle('get-version', () => app.getVersion());
+ipcMain.handle('close-app', () => {
+  app.quit();
+});
+

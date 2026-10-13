@@ -652,12 +652,12 @@ export default function ScheduleClient() {
                         <div className="flex items-center justify-end gap-1.5">
                           {isTeacher && (
                             <Link
-                              href="/proctor"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
-                              title="Vào phòng coi thi & giám sát thí sinh"
+                              href={`/proctor?slot_id=${slot.id}&room=${encodeURIComponent(slot.room)}&course=${encodeURIComponent(slot.course_code)}&exam=${encodeURIComponent(slot.exam_name)}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition"
+                              title="Vào phòng coi thi & giám sát thí sinh cho ca này"
                             >
-                              <span>Coi thi</span>
-                              <Radio className="w-3 h-3" />
+                              <Radio className="w-3.5 h-3.5" />
+                              <span>Vào coi thi</span>
                             </Link>
                           )}
                           {isExaminer && (

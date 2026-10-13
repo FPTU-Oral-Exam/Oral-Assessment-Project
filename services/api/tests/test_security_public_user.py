@@ -85,9 +85,12 @@ def test_public_user_no_attribute_error():
 
             # 'roles' is the derived list (plural) — kept for UI compatibility
             assert isinstance(result["roles"], list), f"roles should be list, got {type(result['roles'])}"
-            assert len(result["roles"]) == 1, f"roles should have exactly 1 element, got {result['roles']}"
-            assert result["roles"][0] == user.role, (
-                f"roles[0]={result['roles'][0]!r} != user.role={user.role!r}"
-            )
+            if user.role in ("SYSTEM_ADMIN", "ADMIN"):
+                assert result["roles"] == ["SYSTEM_ADMIN", "ACADEMY", "EXAMINER", "TEACHER"]
+            else:
+                assert len(result["roles"]) == 1, f"roles should have exactly 1 element, got {result['roles']}"
+                assert result["roles"][0] == user.role, (
+                    f"roles[0]={result['roles'][0]!r} != user.role={user.role!r}"
+                )
 
     engine.dispose()

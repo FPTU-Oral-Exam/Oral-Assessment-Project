@@ -88,29 +88,30 @@ services:
     depends_on:
       api:
         condition: service_healthy
-  web:
-    build:
-      context: .
-      dockerfile: apps/staff-portal/Dockerfile
-    environment:
-      API_INTERNAL_URL: http://api:8000
-    ports:
-      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test:
-        [
-          CMD,
-          node,
-          -e,
-          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
+  # Service web (Staff Portal) duoc tach khoi docker de dev truc tiep tren may host qua `npm run dev:staff`
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/staff-portal/Dockerfile
+  #   environment:
+  #     API_INTERNAL_URL: http://api:8000
+  #   ports:
+  #     - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+  #   depends_on:
+  #     api:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test:
+  #       [
+  #         CMD,
+  #         node,
+  #         -e,
+  #         "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+  #       ]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5
+  #   restart: unless-stopped
 volumes:
   postgres_data:
   redis_data:

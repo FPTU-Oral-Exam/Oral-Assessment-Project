@@ -36,7 +36,7 @@ export default function LoginPage() {
 
       // Redirect to target or dashboard
       const params = new URLSearchParams(window.location.search);
-      const from = params.get('from') || (data.user.role === 'ACADEMY' ? '/item-bank' : '/dashboard');
+      const from = params.get('from') || (data.user.role === 'ACADEMY' ? '/item-bank' : (data.user.role === 'SYSTEM_ADMIN' ? '/users' : (data.user.role === 'EXAMINER' ? '/semester' : '/schedule')));
       window.location.replace(from);
     } catch (err) {
       setLoading(false);
@@ -57,7 +57,7 @@ export default function LoginPage() {
           role: 'SYSTEM_ADMIN',
           roles: ['SYSTEM_ADMIN', 'ACADEMY', 'EXAMINER', 'TEACHER'],
           pass: 'Admin@123456',
-          defaultPath: '/dashboard',
+          defaultPath: '/users',
         },
         examiner: {
           id: 'usr-examiner-demo',
@@ -73,7 +73,7 @@ export default function LoginPage() {
           role: 'TEACHER',
           roles: ['TEACHER'],
           pass: 'Teacher@123456',
-          defaultPath: '/grading',
+          defaultPath: '/schedule',
         },
       };
 
@@ -111,9 +111,9 @@ export default function LoginPage() {
     // Trigger submit with credentials
     const DEMO_ACCOUNTS: Record<string, { id: string; name: string; role: string; roles?: string[]; defaultPath: string }> = {
       academy: { id: 'usr-academy-demo', name: 'Ban Học thuật (Master Curators)', role: 'ACADEMY', roles: ['ACADEMY'], defaultPath: '/item-bank' },
-      admin: { id: 'usr-admin-demo', name: 'Nguyễn Văn Gia Bình (Super Admin)', role: 'SYSTEM_ADMIN', roles: ['SYSTEM_ADMIN', 'ACADEMY', 'EXAMINER', 'TEACHER'], defaultPath: '/dashboard' },
+      admin: { id: 'usr-admin-demo', name: 'Nguyễn Văn Gia Bình (Super Admin)', role: 'SYSTEM_ADMIN', roles: ['SYSTEM_ADMIN', 'ACADEMY', 'EXAMINER', 'TEACHER'], defaultPath: '/users' },
       examiner: { id: 'usr-examiner-demo', name: 'Cán bộ Khảo thí (Exam Board)', role: 'EXAMINER', roles: ['EXAMINER'], defaultPath: '/semester' },
-      teacher: { id: 'usr-teacher-demo', name: 'Giảng viên Chấm thi', role: 'TEACHER', roles: ['TEACHER'], defaultPath: '/grading' },
+      teacher: { id: 'usr-teacher-demo', name: 'Giảng viên Chấm thi', role: 'TEACHER', roles: ['TEACHER'], defaultPath: '/schedule' },
     };
 
     const matched = DEMO_ACCOUNTS[uname];
@@ -241,7 +241,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => handleQuickLogin('admin', 'Admin@123456')}
                   className="px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                  title="Quản trị viên Hệ thống: /dashboard, /users, /settings, /audit"
+                  title="Quản trị viên Hệ thống: /users, /settings, /audit, /item-bank"
                 >
                   <span>🛡️ Quản trị viên</span>
                 </button>

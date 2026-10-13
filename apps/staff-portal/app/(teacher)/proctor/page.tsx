@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Radio,
   CheckCircle2,
@@ -14,9 +16,11 @@ import {
   HardDriveDownload,
   Search,
   Monitor,
-  Volume2
+  Volume2,
+  ArrowLeft,
 } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
+import { teacherService } from '@/services';
 
 interface Workstation {
   id: number;
@@ -62,14 +66,66 @@ const INITIAL_WORKSTATIONS: Workstation[] = Array.from({ length: 35 }, (_, i) =>
   };
 });
 
-export default function ProctorPage() {
+function ProctorContent() {
   const { user } = useUser();
+  const searchParams = useSearchParams();
+  const slotId = searchParams.get('slot_id');
+  const roomName = searchParams.get('room') || 'Lab 301';
+  const courseCode = searchParams.get('course') || 'ENG101';
+  const examName = searchParams.get('exam') || 'Kỳ thi vấn đáp';
+
   const [workstations, setWorkstations] = useState<Workstation[]>(INITIAL_WORKSTATIONS);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<Workstation | null>(null);
   const [isLocking, setIsLocking] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [confirmModal, setConfirmModal] = useState(false);
+  const [loadingRealData, setLoadingRealData] = useState(false);
+
+  useEffect(() => {
+    if (!slotId) return;
+
+    let isMounted = true;
+    const fetchRoom = async () => {
+      try {
+        setLoadingRealData(true);
+        const data = await teacherService.getProctorRoom(slotId);
+        if (!isMounted || !data?.candidates || data.candidates.length === 0) return;
+
+        const mapped: Workstation[] = data.candidates.map((cand, idx) => {
+          const num = (idx + 1).toString().padStart(2, '0');
+          let st: Workstation['status'] = 'READY';
+          if (cand.status === 'COMPLETED' || cand.status === 'SUBMITTED') st = 'SUBMITTED';
+          else if (cand.status === 'IN_PROGRESS') st = 'RECORDING';
+          else if (cand.status === 'DEVICE_CHECK') st = 'DEVICE_CHECK';
+
+          return {
+            id: idx + 1,
+            stationCode: `PC-${roomName}-${num}`,
+            studentId: cand.username || `SV${num}`,
+            studentName: cand.name || `Thí sinh ${num}`,
+            status: st,
+            currentQuestion: st === 'SUBMITTED' ? 3 : st === 'RECORDING' ? 2 : 1,
+            totalQuestions: 3,
+            audioUploadProgress: st === 'SUBMITTED' ? 100 : st === 'RECORDING' ? 60 : 0,
+            noiseLevel: '-45 dBFS (Tốt)',
+            lastActive: cand.started_at ? 'Đang thi' : 'Chờ vào',
+          };
+        });
+
+        setWorkstations(mapped);
+      } catch (err) {
+        console.warn('Cannot fetch real room candidates, fallback to lab preview', err);
+      } finally {
+        if (isMounted) setLoadingRealData(false);
+      }
+    };
+
+    fetchRoom();
+    return () => {
+      isMounted = false;
+    };
+  }, [slotId, roomName]);
 
   // Statistics
   const submittedCount = workstations.filter(w => w.status === 'SUBMITTED').length;
@@ -99,15 +155,29 @@ export default function ProctorPage() {
       {/* Session Title & Live Signal */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold mb-2 border border-emerald-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Phòng Thi Đang Hoạt Động (Live Relay)</span>
+          <Link
+            href="/schedule"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors mb-3 group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+            <span>Quay lại Lịch coi thi</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold mb-2 border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Phòng Thi Đang Hoạt Động (Live Relay)</span>
+            </div>
+            {slotId && (
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold mb-2 border border-blue-200">
+                Ca #{slotId.slice(-6)}
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Phòng Lab 301 — Môn ENG101 (Software Engineering)
+            Phòng {roomName} — Môn {courseCode} ({examName})
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Ca thi: <strong>Ca 1 (08:00 - 09:30)</strong> | Cán bộ coi thi: <strong className="text-slate-800">{user?.name || user?.username || 'Giám thị'}</strong>
+            Cán bộ coi thi: <strong className="text-slate-800">{user?.name || user?.username || 'Giám thị'}</strong>
           </p>
         </div>
 
@@ -341,5 +411,20 @@ export default function ProctorPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProctorPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-12 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
+          <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-700">Đang nạp dữ liệu phòng coi thi...</p>
+        </div>
+      }
+    >
+      <ProctorContent />
+    </Suspense>
   );
 }

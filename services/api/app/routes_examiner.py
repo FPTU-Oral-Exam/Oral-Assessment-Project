@@ -51,7 +51,7 @@ def data(row, *fields):
 # ─────────────────────────────────────────────────────────────────
 
 @router.get("/examiner/semesters")
-def list_semesters(db: Session = Depends(get_db), user=Depends(staff)):
+def list_semesters(db: Session = Depends(get_db), user=Depends(examiner)):
     semesters = db.scalars(select(Semester).order_by(Semester.created_at.desc())).all()
     return [
         {
@@ -85,7 +85,7 @@ def create_semester(body: s.SemesterIn, db: Session = Depends(get_db), user=Depe
 
 
 @router.get("/examiner/semesters/{semester_id}")
-def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(staff)):
+def get_semester(semester_id: str, db: Session = Depends(get_db), user=Depends(examiner)):
     semester = by_id(db, Semester, semester_id)
 
     # 1. Courses directly associated with this semester
