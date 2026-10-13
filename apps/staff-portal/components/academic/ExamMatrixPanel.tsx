@@ -51,6 +51,7 @@ export default function ExamMatrixPanel() {
     getStockHealth,
     generateSampleExam,
     rubrics,
+    questionTypeConfigs,
   } = useAcademic();
 
   const [rules, setRules] = useState<ExamMatrixRule[]>([]);
@@ -289,8 +290,6 @@ export default function ExamMatrixPanel() {
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-bold">
                 <th className="py-3 px-4">Dạng bài Speaking</th>
                 <th className="py-3 px-4 text-center">Số lượng câu</th>
-                <th className="py-3 px-4 text-center">Chuẩn bị (Prep)</th>
-                <th className="py-3 px-4 text-center">Trả lời (Resp)</th>
                 <th className="py-3 px-4 text-center">Trọng số (%)</th>
                 <th className="py-3 px-4 text-right">Tổng thời gian</th>
               </tr>
@@ -299,13 +298,14 @@ export default function ExamMatrixPanel() {
               {(['RA', 'RS', 'GD', 'DI', 'SI', 'RL'] as QuestionType[]).map((t) => {
                 const meta = QUESTION_TYPES_META[t];
                 const typeStyle = TYPE_LIGHT_THEME[t] || TYPE_LIGHT_THEME.RA;
+                const cfg = questionTypeConfigs?.[t];
                 const rule = rules.find((r) => r.type === t) || {
                   type: t,
-                  question_count: 1,
-                  prep_time: meta.defaultPrepTime,
-                  response_time: meta.defaultResponseTime,
+                  question_count: 0,
+                  prep_time: cfg?.default_prep_time ?? meta.defaultPrepTime,
+                  response_time: cfg?.default_response_time ?? meta.defaultResponseTime,
                   target_difficulty: 'MEDIUM' as const,
-                  weight_percentage: 15,
+                  weight_percentage: 0,
                 };
 
                 const subtotal = (rule.prep_time + rule.response_time) * rule.question_count;
@@ -321,7 +321,9 @@ export default function ExamMatrixPanel() {
                         </span>
                         <div>
                           <p className="font-bold text-slate-900 text-xs">{meta.name}</p>
-                          <p className="text-[10px] text-slate-500">{meta.description}</p>
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            {rule.prep_time}s prep · {rule.response_time}s resp
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -330,45 +332,13 @@ export default function ExamMatrixPanel() {
                       <input
                         type="number"
                         min={0}
-                        max={10}
+                        max={20}
                         value={rule.question_count}
                         onChange={(e) =>
                           handleRuleChange(t, 'question_count', Number(e.target.value))
                         }
                         className="w-16 bg-slate-50 border border-slate-200 text-slate-900 font-mono font-bold px-2 py-1.5 rounded-lg text-center focus:border-blue-500 focus:bg-white focus:outline-none"
                       />
-                    </td>
-
-                    <td className="py-3 px-4 text-center">
-                      <div className="inline-flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={1}
-                          max={120}
-                          value={rule.prep_time}
-                          onChange={(e) =>
-                            handleRuleChange(t, 'prep_time', Number(e.target.value))
-                          }
-                          className="w-16 bg-slate-50 border border-slate-200 text-slate-800 font-mono px-2 py-1.5 rounded-lg text-center focus:border-blue-500 focus:bg-white focus:outline-none"
-                        />
-                        <span className="text-slate-500">giây</span>
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-4 text-center">
-                      <div className="inline-flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={5}
-                          max={180}
-                          value={rule.response_time}
-                          onChange={(e) =>
-                            handleRuleChange(t, 'response_time', Number(e.target.value))
-                          }
-                          className="w-16 bg-slate-50 border border-slate-200 text-slate-800 font-mono px-2 py-1.5 rounded-lg text-center focus:border-blue-500 focus:bg-white focus:outline-none"
-                        />
-                        <span className="text-slate-500">giây</span>
-                      </div>
                     </td>
 
                     <td className="py-3 px-4 text-center">
@@ -397,64 +367,12 @@ export default function ExamMatrixPanel() {
           </table>
         </div>
 
-        {/* Difficulty Distribution Bar */}
-        <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Tỷ lệ Độ khó Mục tiêu (Target Difficulty Distribution):
-            </span>
-            <span className="text-xs font-mono text-slate-600 font-semibold">
-              Dễ: {easyRatio}% · Vừa: {mediumRatio}% · Khó: {hardRatio}% (Tổng:{' '}
-              {Number(easyRatio) + Number(mediumRatio) + Number(hardRatio)}%)
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <div className="flex justify-between text-xs text-emerald-700 mb-1 font-semibold">
-                <span>Dễ (Easy):</span>
-                <span className="font-mono font-bold">{easyRatio}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={easyRatio}
-                onChange={(e) => setEasyRatio(Number(e.target.value))}
-                className="w-full accent-emerald-600 cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs text-amber-700 mb-1 font-semibold">
-                <span>Vừa (Medium):</span>
-                <span className="font-mono font-bold">{mediumRatio}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={mediumRatio}
-                onChange={(e) => setMediumRatio(Number(e.target.value))}
-                className="w-full accent-amber-600 cursor-pointer"
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs text-rose-700 mb-1 font-semibold">
-                <span>Khó (Hard):</span>
-                <span className="font-mono font-bold">{hardRatio}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={hardRatio}
-                onChange={(e) => setHardRatio(Number(e.target.value))}
-                className="w-full accent-rose-600 cursor-pointer"
-              />
-            </div>
-          </div>
+        {/* Difficulty Distribution Summary */}
+        <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-600">
+          <span className="font-bold text-slate-700">Tỷ lệ Độ khó mục tiêu (chỉnh ở Cấu hình Dạng bài):</span>
+          <span className="font-mono">
+            Dễ: <strong className="text-emerald-700">{easyRatio}%</strong> · Vừa: <strong className="text-amber-700">{mediumRatio}%</strong> · Khó: <strong className="text-rose-700">{hardRatio}%</strong>
+          </span>
         </div>
 
         {/* Footer Actions */}
