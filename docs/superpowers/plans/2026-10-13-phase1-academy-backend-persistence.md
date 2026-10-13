@@ -290,7 +290,7 @@ git commit -m "feat(academy): implement question bank REST endpoints"
   + `GET /api/academy/matrices/{id}/stock-health`
   + `POST /api/academy/matrices/{id}/generate-sample`
 
-- [ ] **Step 1: Viết test cho Matrix & Stock Health**
+- [x] **Step 1: Viết test cho Matrix & Stock Health**
 
 Bổ sung test trong `services/api/tests/test_academy_routes.py`:
 ```python
@@ -338,12 +338,12 @@ def test_matrix_and_stock_health(client, academy_token):
     assert "is_ready_for_publishing" in data
 ```
 
-- [ ] **Step 2: Chạy test để xác nhận test fails**
+- [x] **Step 2: Chạy test để xác nhận test fails**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_matrix_and_stock_health -v`
 Kỳ vọng: FAIL
 
-- [ ] **Step 3: Triển khai Matrix & Stock Health logic trong `routes_academy.py`**
+- [x] **Step 3: Triển khai Matrix & Stock Health logic trong `routes_academy.py`**
 
 - Endpoint `GET /matrices`, `POST /matrices`, `GET /matrices/{id}`, `PUT /matrices/{id}`, `DELETE /matrices/{id}`.
 - Logic `GET /matrices/{id}/stock-health`:
@@ -355,12 +355,12 @@ Kỳ vọng: FAIL
   * Rút trích ngẫu nhiên các câu hỏi từ kho theo quy tắc từng rule.
   * Trả về `GeneratedSampleExam` cấu trúc đề mẫu có danh sách câu hỏi tuần tự.
 
-- [ ] **Step 4: Chạy test để xác nhận test passes**
+- [x] **Step 4: Chạy test để xác nhận test passes**
 
 Chạy: `python -m pytest services/api/tests/test_academy_routes.py -k test_matrix_and_stock_health -v`
 Kỳ vọng: PASS
 
-- [ ] **Step 5: Commit task 3**
+- [x] **Step 5: Commit task 3**
 
 ```bash
 git add services/api/app/routes_academy.py services/api/tests/test_academy_routes.py
