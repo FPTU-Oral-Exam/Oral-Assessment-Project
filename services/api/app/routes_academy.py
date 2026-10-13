@@ -2,8 +2,8 @@ import time
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, or_, select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from .db import get_db
@@ -19,6 +19,7 @@ from .schemas_academy import (
     GeneratedSampleExamOut,
     QuestionTypeConfigIn,
     QuestionTypeConfigOut,
+    QuestionTypeCreateIn,
     RubricCriterion,
     RubricIn,
     RubricOut,
@@ -570,24 +571,145 @@ def delete_rubric(key: str, db: Session = Depends(get_db), user=Depends(academy)
 # 3. QUY CHUẨN DẠNG BÀI (QUESTION TYPE CONFIGS) — TASK 4
 # ============================================================================
 
-# Default 6 question types
+# Default 7 question types
 _QUESTION_TYPE_DEFAULTS = [
-    {"type": "RA", "name": "Read Aloud", "description": "Read the passage aloud with correct pronunciation and intonation.", "default_prep_time": 35, "default_response_time": 40, "max_score": 10.0},
-    {"type": "RS", "name": "Repeat Sentence", "description": "Repeat the sentence exactly as heard.", "default_prep_time": 3, "default_response_time": 15, "max_score": 10.0},
-    {"type": "GD", "name": "Summarize Group Discussion", "description": "Summarize the group discussion within 60 seconds.", "default_prep_time": 10, "default_response_time": 60, "max_score": 10.0},
-    {"type": "DI", "name": "Describe Image", "description": "Describe the image in detail within 40 seconds.", "default_prep_time": 25, "default_response_time": 40, "max_score": 10.0},
-    {"type": "SI", "name": "Respond to a Situation", "description": "Respond appropriately to the given situation.", "default_prep_time": 20, "default_response_time": 40, "max_score": 10.0},
-    {"type": "RL", "name": "Re-tell Lecture", "description": "Re-tell the lecture content within 40 seconds.", "default_prep_time": 10, "default_response_time": 40, "max_score": 10.0},
-    {"type": "ASQ", "name": "Answer Short Question", "description": "Listen to a simple question and give a brief and accurate answer.", "default_prep_time": 3, "default_response_time": 10, "max_score": 10.0},
+    {
+        "type": "RA",
+        "name": "Read Aloud",
+        "vietnamese_name": "Đọc to văn bản học thuật",
+        "description": "Thí sinh quan sát đoạn văn bản trên màn hình và đọc to rõ ràng, chuẩn phát âm và nhịp điệu.",
+        "default_prep_time": 35,
+        "default_response_time": 40,
+        "max_score": 10.0,
+        "is_active": True,
+        "requires_image": False,
+        "requires_audio_prompt": False,
+        "requires_audio_script": False,
+        "requires_key_points": False,
+        "recommended_question_count": 2,
+    },
+    {
+        "type": "RS",
+        "name": "Repeat Sentence",
+        "vietnamese_name": "Lặp lại câu nguyên bản",
+        "description": "Lắng nghe một câu ngắn học thuật và lặp lại chính xác từng từ với ngữ điệu tự nhiên.",
+        "default_prep_time": 3,
+        "default_response_time": 15,
+        "max_score": 10.0,
+        "is_active": True,
+        "requires_image": False,
+        "requires_audio_prompt": True,
+        "requires_audio_script": False,
+        "requires_key_points": False,
+        "recommended_question_count": 3,
+    },
+    {
+        "type": "GD",
+        "name": "Summarize Group Discussion",
+        "vietnamese_name": "Tóm tắt thảo luận nhóm",
+        "description": "Lắng nghe đoạn thảo luận nhóm học thuật và phát biểu tóm tắt các luận điểm trọng yếu.",
+        "default_prep_time": 10,
+        "default_response_time": 60,
+        "max_score": 10.0,
+        "is_active": True,
+        "requires_image": False,
+        "requires_audio_prompt": True,
+        "requires_audio_script": False,
+        "requires_key_points": True,
+        "recommended_question_count": 1,
+    },
+    {
+        "type": "DI",
+        "name": "Describe Image",
+        "vietnamese_name": "Miêu tả hình ảnh / biểu đồ",
+        "description": "Quan sát biểu đồ, sơ đồ hoặc hình ảnh học thuật và trình bày phân tích các xu hướng chính.",
+        "default_prep_time": 25,
+        "default_response_time": 40,
+        "max_score": 10.0,
+        "is_active": True,
+        "requires_image": True,
+        "requires_audio_prompt": False,
+        "requires_audio_script": False,
+        "requires_key_points": True,
+        "recommended_question_count": 3,
+    },
+    {
+        "type": "SI",
+        "name": "Respond to a Situation",
+        "vietnamese_name": "Ứng đáp tình huống học thuật",
+        "description": "Đọc tình huống giả định giao tiếp đại học và đưa ra phản hồi giải quyết thấu đáo, lịch thiệp.",
+        "default_prep_time": 20,
+        "default_response_time": 40,
+        "max_score": 10.0,
+        "is_active": True,
+        "requires_image": False,
+        "requires_audio_prompt": False,
+        "requires_audio_script": False,
+        "requires_key_points": True,
+        "recommended_question_count": 2,
+    },
+    {
+        "type": "RL",
+        "name": "Re-tell Lecture",
+        "vietnamese_name": "Thuyết trình lại bài giảng",
+        "description": "Lắng nghe bài giảng học thuật ngắn (60-90s) và thuyết trình tóm tắt lại nội dung cốt lõi.",
+        "default_prep_time": 10,
+        "default_response_time": 40,
+        "max_score": 10.0,
+        "is_active": True,
+        "requires_image": False,
+        "requires_audio_prompt": True,
+        "requires_audio_script": False,
+        "requires_key_points": True,
+        "recommended_question_count": 2,
+    },
+    {
+        "type": "ASQ",
+        "name": "Answer Short Question",
+        "vietnamese_name": "Trả lời câu hỏi ngắn",
+        "description": "Lắng nghe câu hỏi vấn đáp ngắn và trả lời bằng một hoặc vài từ súc tích, chính xác.",
+        "default_prep_time": 3,
+        "default_response_time": 10,
+        "max_score": 10.0,
+        "is_active": True,
+        "requires_image": False,
+        "requires_audio_prompt": True,
+        "requires_audio_script": False,
+        "requires_key_points": False,
+        "recommended_question_count": 4,
+    },
 ]
 
 
+def _serialize_question_type(row: QuestionTypeConfigModel, question_count: int = 0) -> QuestionTypeConfigOut:
+    return QuestionTypeConfigOut(
+        type=row.type,
+        name=row.name,
+        vietnamese_name=row.vietnamese_name or row.name,
+        description=row.description or "",
+        default_prep_time=row.default_prep_time,
+        default_response_time=row.default_response_time,
+        audio_instruction_url=row.audio_instruction_url,
+        max_score=row.max_score,
+        is_active=row.is_active,
+        requires_image=row.requires_image,
+        requires_audio_prompt=row.requires_audio_prompt,
+        requires_audio_script=row.requires_audio_script,
+        requires_key_points=row.requires_key_points,
+        recommended_question_count=row.recommended_question_count,
+        question_count=question_count,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
 def _ensure_default_question_types(db: Session) -> None:
-    """Khởi tạo 6 dạng bài mặc định nếu bảng question_type_configs trống."""
+    """Khởi tạo 7 dạng bài mặc định nếu bảng question_type_configs trống."""
     existing_count = db.query(QuestionTypeConfigModel).count()
     if existing_count == 0:
+        now = time.time()
         for defaults in _QUESTION_TYPE_DEFAULTS:
-            db.add(QuestionTypeConfigModel(**defaults, updated_at=time.time()))
+            db.add(QuestionTypeConfigModel(**defaults, created_at=now, updated_at=now))
         db.commit()
 
 
@@ -596,20 +718,48 @@ def list_question_types(db: Session = Depends(get_db), user=Depends(academy)):
     _ensure_default_question_types(db)
     stmt = select(QuestionTypeConfigModel).order_by(QuestionTypeConfigModel.type)
     rows = db.scalars(stmt).all()
-    return [
-        QuestionTypeConfigOut(
-            type=r.type,
-            name=r.name,
-            description=r.description or "",
-            default_prep_time=r.default_prep_time,
-            default_response_time=r.default_response_time,
-            audio_instruction_url=r.audio_instruction_url,
-            max_score=r.max_score,
-            created_at=r.created_at,
-            updated_at=r.updated_at,
-        )
-        for r in rows
-    ]
+
+    # Query số lượng câu hỏi hiện có trong Item Bank theo từng type
+    counts_stmt = (
+        select(AcademicQuestion.type, func.count(AcademicQuestion.id))
+        .where(AcademicQuestion.deleted_at.is_(None))
+        .group_by(AcademicQuestion.type)
+    )
+    counts_map = dict(db.execute(counts_stmt).all())
+
+    return [_serialize_question_type(r, question_count=counts_map.get(r.type, 0)) for r in rows]
+
+
+@router.post("/question-types", response_model=QuestionTypeConfigOut, status_code=201)
+def create_question_type(body: QuestionTypeCreateIn, db: Session = Depends(get_db), user=Depends(academy)):
+    normalized_type = body.type.strip().upper()
+    existing = db.scalar(select(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type == normalized_type))
+    if existing:
+        fail(409, "CONFLICT", f"Question type '{normalized_type}' already exists")
+
+    now = time.time()
+    row = QuestionTypeConfigModel(
+        type=normalized_type,
+        name=body.name.strip(),
+        vietnamese_name=(body.vietnamese_name or body.name).strip(),
+        description=body.description or "",
+        default_prep_time=body.default_prep_time,
+        default_response_time=body.default_response_time,
+        audio_instruction_url=body.audio_instruction_url,
+        max_score=body.max_score,
+        is_active=body.is_active,
+        requires_image=body.requires_image,
+        requires_audio_prompt=body.requires_audio_prompt,
+        requires_audio_script=body.requires_audio_script,
+        requires_key_points=body.requires_key_points,
+        recommended_question_count=body.recommended_question_count,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _serialize_question_type(row, question_count=0)
 
 
 @router.get("/question-types/{qtype}", response_model=QuestionTypeConfigOut)
@@ -617,43 +767,71 @@ def get_question_type(qtype: str, db: Session = Depends(get_db), user=Depends(ac
     row = db.scalar(select(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type == qtype.upper()))
     if not row:
         fail(404, "NOT_FOUND", f"Question type '{qtype}' not found")
-    return QuestionTypeConfigOut(
-        type=row.type,
-        name=row.name,
-        description=row.description or "",
-        default_prep_time=row.default_prep_time,
-        default_response_time=row.default_response_time,
-        audio_instruction_url=row.audio_instruction_url,
-        max_score=row.max_score,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+
+    count = (
+        db.scalar(
+            select(func.count(AcademicQuestion.id)).where(
+                AcademicQuestion.type == qtype.upper(), AcademicQuestion.deleted_at.is_(None)
+            )
+        )
+        or 0
     )
+    return _serialize_question_type(row, question_count=count)
 
 
 @router.put("/question-types/{qtype}", response_model=QuestionTypeConfigOut)
-def update_question_type(qtype: str, body: QuestionTypeConfigIn, db: Session = Depends(get_db), user=Depends(academy)):
+def update_question_type(
+    qtype: str,
+    body: QuestionTypeConfigIn,
+    sync_existing_questions: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    user=Depends(academy),
+):
     row = db.scalar(select(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type == qtype.upper()))
     if not row:
         fail(404, "NOT_FOUND", f"Question type '{qtype}' not found")
 
-    row.name = body.name
-    row.description = body.description
+    now = time.time()
+    # Cho phép sửa thời lượng thi, trạng thái mở và số câu khuyến nghị
     row.default_prep_time = body.default_prep_time
     row.default_response_time = body.default_response_time
-    row.audio_instruction_url = body.audio_instruction_url
-    row.max_score = body.max_score
-    row.updated_at = time.time()
+    row.is_active = body.is_active
+    row.recommended_question_count = body.recommended_question_count
+
+    if body.name:
+        row.name = body.name.strip()
+    if body.vietnamese_name:
+        row.vietnamese_name = body.vietnamese_name.strip()
+    if body.description:
+        row.description = body.description
+    if body.audio_instruction_url is not None:
+        row.audio_instruction_url = body.audio_instruction_url
+    if body.max_score:
+        row.max_score = body.max_score
+    row.updated_at = now
+
+    # Đồng bộ sang các câu hỏi cũ trong Item Bank nếu người dùng xác nhận
+    if sync_existing_questions:
+        db.execute(
+            update(AcademicQuestion)
+            .where(AcademicQuestion.type == qtype.upper(), AcademicQuestion.deleted_at.is_(None))
+            .values(
+                prep_time=body.default_prep_time,
+                response_time=body.default_response_time,
+                updated_at=now,
+            )
+        )
 
     db.commit()
     db.refresh(row)
-    return QuestionTypeConfigOut(
-        type=row.type,
-        name=row.name,
-        description=row.description or "",
-        default_prep_time=row.default_prep_time,
-        default_response_time=row.default_response_time,
-        audio_instruction_url=row.audio_instruction_url,
-        max_score=row.max_score,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+
+    count = (
+        db.scalar(
+            select(func.count(AcademicQuestion.id)).where(
+                AcademicQuestion.type == qtype.upper(), AcademicQuestion.deleted_at.is_(None)
+            )
+        )
+        or 0
     )
+    return _serialize_question_type(row, question_count=count)
+
