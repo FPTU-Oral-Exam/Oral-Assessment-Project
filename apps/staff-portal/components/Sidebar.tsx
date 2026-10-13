@@ -37,7 +37,6 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/question-types', label: 'Cấu hình Dạng bài', icon: Sliders },
     { href: '/exam-matrix', label: 'Ma trận Đề & Ra đề', icon: ClipboardList },
     { href: '/rubrics', label: 'Tiêu chuẩn Rubrics', icon: Award },
-    { href: '/courses', label: 'Môn học & Học thuật', icon: BookOpen },
   ],
 
   EXAMINER: [
@@ -49,11 +48,8 @@ const menuItems: Record<string, { href: string; label: string; icon: typeof Layo
     { href: '/results', label: 'Phê duyệt kết quả', icon: CheckCircle },
   ],
   TEACHER: [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/schedule', label: 'Lịch coi thi được gán', icon: Calendar },
-    { href: '/proctor', label: 'Phòng coi thi & Giám sát', icon: Radio },
     { href: '/grading', label: 'Đánh giá & Chấm bài', icon: Award },
-    { href: '/grading/live', label: 'Chấm trực tiếp (Live PTE)', icon: Sparkles },
   ],
 };
 
