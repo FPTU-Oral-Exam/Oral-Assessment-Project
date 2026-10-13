@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X,
   UploadCloud,
@@ -40,6 +40,8 @@ interface FapImportScheduleModalProps {
   semesters: Semester[];
   courses: Course[];
   exams: ExamInfo[];
+  defaultCourseId?: string;
+  defaultExamId?: string;
 }
 
 export default function FapImportScheduleModal({
@@ -49,9 +51,11 @@ export default function FapImportScheduleModal({
   semesters,
   courses,
   exams,
+  defaultCourseId,
+  defaultExamId,
 }: FapImportScheduleModalProps) {
   const [selectedSemester, setSelectedSemester] = useState<string>('');
-  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>(defaultCourseId || '');
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<{
@@ -61,7 +65,12 @@ export default function FapImportScheduleModal({
     assigned_teachers_count: number;
   } | null>(null);
 
-  if (!isOpen) return null;
+  // Synchronize defaultCourseId when provided
+  useEffect(() => {
+    if (defaultCourseId) {
+      setSelectedCourse(defaultCourseId);
+    }
+  }, [defaultCourseId, isOpen]);
 
   // Filter courses by selected semester if any
   const availableCourses = selectedSemester
@@ -101,10 +110,10 @@ export default function FapImportScheduleModal({
       formData.append('semester_id', selectedSemester || (semesters[0]?.id ?? ''));
       formData.append('course_id', selectedCourse);
 
-      // Find matching exam for this course if exists
-      const matchedExam = exams.find((ex) => ex.course_id === selectedCourse);
-      if (matchedExam) {
-        formData.append('exam_id', matchedExam.id);
+      // Prioritize defaultExamId or find matching exam for this course
+      const targetExamId = defaultExamId || exams.find((ex) => ex.course_id === selectedCourse)?.id;
+      if (targetExamId) {
+        formData.append('exam_id', targetExamId);
       }
 
       formData.append('file', file);
@@ -137,6 +146,8 @@ export default function FapImportScheduleModal({
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">

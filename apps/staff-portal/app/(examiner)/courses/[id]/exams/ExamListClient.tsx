@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   BookOpen,
@@ -52,6 +53,7 @@ interface BatchFormData {
 }
 
 export default function ExamListClient({ courseId }: { courseId: string }) {
+  const router = useRouter();
   const [exams, setExams] = useState<Exam[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [batchesByExam, setBatchesByExam] = useState<Record<string, ExamBatch[]>>({});
@@ -190,13 +192,13 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
     e.preventDefault();
     setCreatingExam(true);
     try {
-      await examinerService.createExam(courseId, {
+      const created = await examinerService.createExam(courseId, {
         name: examForm.name,
         description: examForm.description,
         time_limit: examForm.time_limit,
         question_count: examForm.question_count,
       });
-      toast.success('Đã tạo kỳ thi thành công');
+      toast.success('Đã tạo kỳ thi thành công! Đang chuyển đến chi tiết kỳ thi...');
       setShowExamModal(false);
       setExamForm({
         name: 'Thi Vấn Đáp Cuối Kỳ',
@@ -204,7 +206,11 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
         time_limit: 30,
         question_count: 3,
       });
-      fetchExams();
+      if (created?.id) {
+        router.push(`/courses/${courseId}/exams?examId=${created.id}`);
+      } else {
+        fetchExams();
+      }
     } catch (err) {
       const msg = parseApiError(err, {
         EXAM_NAME_EXISTS: `Tên kỳ thi "${examForm.name.trim()}" đã tồn tại trong môn học này! Vui lòng đặt tên khác.`,
@@ -400,7 +406,13 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                         <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-md bg-blue-100 text-blue-800">
                           {exam.exam_type || 'FINAL'}
                         </span>
-                        <h3 className="text-xl font-bold text-slate-900">{exam.name}</h3>
+                        <h3
+                          onClick={() => router.push(`/courses/${courseId}/exams?examId=${exam.id}`)}
+                          className="text-xl font-bold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors"
+                          title="Bấm để xem chi tiết kỳ thi và import ca thi"
+                        >
+                          {exam.name}
+                        </h3>
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                             exam.status === 'PUBLISHED'
@@ -432,8 +444,17 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                       </div>
                     </div>
 
-                    {/* Action Buttons: Generate Variants (ATA) & Create Batch */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    {/* Action Buttons: Chi tiết kỳ thi & Generate Variants (ATA) */}
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => router.push(`/courses/${courseId}/exams?examId=${exam.id}`)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
+                      >
+                        <Calendar className="w-4 h-4" />
+                        Chi tiết kỳ thi
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+
                       <button
                         onClick={() => handleGenerateVariants(exam)}
                         disabled={generatingExamId === exam.id || batches.length === 0}
@@ -449,15 +470,7 @@ export default function ExamListClient({ courseId }: { courseId: string }) {
                         ) : (
                           <Sparkles className="w-4 h-4" />
                         )}
-                        Sinh mã đề song song (ATA)
-                      </button>
-
-                      <button
-                        onClick={() => openBatchModal(exam)}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Thêm ca thi / đợt thi
+                        Sinh mã đề (ATA)
                       </button>
                     </div>
                   </div>

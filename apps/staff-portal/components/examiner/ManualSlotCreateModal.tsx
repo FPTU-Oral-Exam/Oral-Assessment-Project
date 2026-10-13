@@ -47,6 +47,8 @@ interface ManualSlotCreateModalProps {
   semesters: Semester[];
   courses: Course[];
   exams: ExamInfo[];
+  defaultCourseId?: string;
+  defaultExamId?: string;
 }
 
 export default function ManualSlotCreateModal({
@@ -56,9 +58,11 @@ export default function ManualSlotCreateModal({
   semesters,
   courses,
   exams,
+  defaultCourseId,
+  defaultExamId,
 }: ManualSlotCreateModalProps) {
   const [selectedSemester, setSelectedSemester] = useState<string>('');
-  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>(defaultCourseId || '');
   const [slotNumber, setSlotNumber] = useState<number>(1);
   const [dateStr, setDateStr] = useState<string>(new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState<string>('08:00');
@@ -86,6 +90,12 @@ export default function ManualSlotCreateModal({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (defaultCourseId) {
+      setSelectedCourse(defaultCourseId);
+    }
+  }, [defaultCourseId, isOpen]);
+
   if (!isOpen) return null;
 
   const availableCourses = selectedSemester
@@ -106,9 +116,11 @@ export default function ManualSlotCreateModal({
     try {
       setIsSubmitting(true);
 
-      // Find or create matching exam for this course
-      let targetExam = exams.find((ex) => ex.course_id === selectedCourse);
-      let examId = targetExam?.id;
+      // Prioritize defaultExamId or find matching exam for this course
+      let targetExam = defaultExamId
+        ? exams.find((ex) => ex.id === defaultExamId)
+        : exams.find((ex) => ex.course_id === selectedCourse);
+      let examId = defaultExamId || targetExam?.id;
 
       if (!examId) {
         // Need to create or retrieve exam

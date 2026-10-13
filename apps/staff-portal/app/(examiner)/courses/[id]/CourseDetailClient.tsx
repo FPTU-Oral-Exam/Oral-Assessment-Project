@@ -16,14 +16,14 @@ import CandidatesTab from './candidates/CandidatesClient';
 import { examinerService } from '@/services';
 import type { CourseDetail } from '@/services/examiner.service';
 
-type TabType = 'candidates' | 'exams';
+type TabType = 'exams' | 'candidates';
 
 export default function CourseDetailClient({ courseId }: { courseId: string }) {
   const router = useRouter();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('candidates');
+  const [activeTab, setActiveTab] = useState<TabType>('exams');
 
   const fetchCourse = useCallback(async () => {
     try {
@@ -69,8 +69,8 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
   }
 
   const tabs = [
-    { id: 'candidates' as TabType, label: 'Danh sách sinh viên', icon: Users },
     { id: 'exams' as TabType, label: 'Quản lý kỳ thi', icon: CalendarDays },
+    { id: 'candidates' as TabType, label: 'Danh sách sinh viên', icon: Users },
   ];
 
   return (
@@ -135,8 +135,8 @@ export default function CourseDetailClient({ courseId }: { courseId: string }) {
 
       {/* Tab Content */}
       <div>
-        {activeTab === 'candidates' && <CandidatesTab courseId={courseId} />}
         {activeTab === 'exams' && <ExamsTab courseId={courseId} />}
+        {activeTab === 'candidates' && <CandidatesTab courseId={courseId} />}
       </div>
     </div>
   );

@@ -26,8 +26,8 @@
         return <CourseWorkspaceClient courseId={id} />;
       }
 
-      // Examiner-only role gets CourseDetailClient (shifts, classes, slots)
-      if (isExaminer && !isAcademy && !isAdmin) {
+      // Examiner role or Admin (when not in teacher/academy workspace) gets CourseDetailClient
+      if (isExaminer || (isAdmin && !isAcademy && !isTeacher)) {
         return <CourseDetailClient courseId={id} />;
       }
 
