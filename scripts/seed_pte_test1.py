@@ -29,18 +29,22 @@ def seed_pte():
     Base.metadata.create_all(bind=engine)
     
     with SessionLocal() as db:
-        admin = db.scalar(select(User).where(User.role == "ADMIN").order_by(User.created_at))
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        if not admin:
+            admin = db.scalar(select(User).where(User.role.in_(["SYSTEM_ADMIN", "ADMIN"])).order_by(User.created_at))
         if not admin:
             admin = User(
                 username="admin",
                 name="Quản trị viên",
-                role="ADMIN",
+                role="SYSTEM_ADMIN",
                 password_hash=hasher.hash("admin12345678"),
             )
             db.add(admin)
             db.flush()
 
-        student = db.scalar(select(User).where(User.role == "STUDENT").order_by(User.created_at))
+        student = db.scalar(select(User).where(User.username == "student"))
+        if not student:
+            student = db.scalar(select(User).where(User.role == "STUDENT").order_by(User.created_at))
         if not student:
             student = User(
                 username="student",
@@ -63,7 +67,6 @@ def seed_pte():
                 description="Bộ đề thi luyện nói tiếng Anh chuẩn PTE gồm 6 phần.",
                 owner_id=admin.id,
                 teacher_id=teacher_id,
-                hotwords=["sleep", "disorder", "villages", "nitrogen", "oxygen", "entrepreneur", "intelligence", "originality"],
             )
             db.add(course)
             db.flush()
@@ -132,17 +135,6 @@ def seed_pte():
             },
             {
                 "sequence": 3,
-                "type": "SUMMARIZE_GROUP_DISCUSSION",
-                "instruction": "You will hear three people having a discussion. When you hear the beep, summarize the whole discussion. You will have 10 seconds to prepare and 2 minutes to give your response. The microphone will stop after 3 seconds of silence!",
-                "prompt_audio": "/pte/test1/q5_sgd.mp3",
-                "text": "Group Discussion on Artificial Intelligence in Creative Fields",
-                "prep_time": 10,
-                "speak_time": 120,
-                "silence_timeout": 3,
-                "expected_concepts": ["Artificial Intelligence", "creative fields", "originality", "regulation", "artists"],
-            },
-            {
-                "sequence": 4,
                 "type": "DESCRIBE_IMAGE",
                 "instruction": "Look at the image below. In 25 seconds, please speak into the microphone and describe in detail what the image is showing. You have 40 seconds to give your response. The microphone will stop after 3 seconds of silence!",
                 "prompt_image": "/pte/test1/q3_di.svg",
@@ -153,18 +145,7 @@ def seed_pte():
                 "expected_concepts": ["composition of the air", "Nitrogen 79%", "Oxygen 20%", "Other gases 1%"],
             },
             {
-                "sequence": 5,
-                "type": "RESPOND_TO_SITUATION",
-                "instruction": "Listen to and read a description of a situation. Then answer a question about it with an extended response. You will have 10 seconds to think about your answer. You will have 40 seconds to give your response. The microphone will stop after 3 seconds of silence!",
-                "prompt_audio": "/pte/test1/q6_rts.mp3",
-                "text": "You're at a local café and realize you left your wallet at home after ordering. The cashier is waiting for payment, and you don't have enough time to go back home. What would you say to the cashier to resolve the situation?",
-                "prep_time": 10,
-                "speak_time": 40,
-                "silence_timeout": 3,
-                "expected_concepts": ["apologize", "left wallet", "mobile banking", "transfer", "solution"],
-            },
-            {
-                "sequence": 6,
+                "sequence": 4,
                 "type": "RETELL_LECTURE",
                 "instruction": "You will hear a lecture. After listening to the lecture, in 10 seconds, please speak into the microphone and retell what you have just heard from the lecture in your own words. You will have 40 seconds to give your response. The microphone will stop after 3 seconds of silence!",
                 "prompt_audio": "/pte/test1/q4_rl.mp3",
@@ -173,6 +154,28 @@ def seed_pte():
                 "speak_time": 40,
                 "silence_timeout": 3,
                 "expected_concepts": ["successful entrepreneur", "great idea", "unique", "transformative", "innovation"],
+            },
+            {
+                "sequence": 5,
+                "type": "SUMMARIZE_GROUP_DISCUSSION",
+                "instruction": "You will hear three people having a discussion. When you hear the beep, summarize the whole discussion. You will have 10 seconds to prepare and 2 minutes to give your response. The microphone will stop after 3 seconds of silence!",
+                "prompt_audio": "/pte/test1/q5_sgd.mp3",
+                "text": "Group Discussion on Artificial Intelligence in Creative Fields",
+                "prep_time": 10,
+                "speak_time": 120,
+                "silence_timeout": 3,
+                "expected_concepts": ["Artificial Intelligence", "creative fields", "originality", "regulation", "artists"],
+            },
+            {
+                "sequence": 6,
+                "type": "RESPOND_TO_SITUATION",
+                "instruction": "Listen to and read a description of a situation. Then answer a question about it with an extended response. You will have 10 seconds to think about your answer. You will have 40 seconds to give your response. The microphone will stop after 3 seconds of silence!",
+                "prompt_audio": "/pte/test1/q6_rts.mp3",
+                "text": "You're at a local café and realize you left your wallet at home after ordering. The cashier is waiting for payment, and you don't have enough time to go back home. What would you say to the cashier to resolve the situation?",
+                "prep_time": 10,
+                "speak_time": 40,
+                "silence_timeout": 3,
+                "expected_concepts": ["apologize", "left wallet", "mobile banking", "transfer", "solution"],
             },
         ]
 
@@ -201,9 +204,12 @@ def seed_pte():
                     "topic_chunk_ids": {},
                 },
             )
+            db.add(exam)
+            db.flush()
         else:
             snap = dict(exam.snapshot or {})
             snap["criteria"] = criteria
+            snap["questions"] = questions
             exam.snapshot = snap
             db.flush()
 

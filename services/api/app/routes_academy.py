@@ -14,6 +14,7 @@ from .schemas_academy import (
     AcademicMatrixUpdate,
     AcademicQuestionIn,
     AcademicQuestionOut,
+    AcademicQuestionsStatsOut,
     AcademicQuestionUpdate,
     ExamMatrixRule,
     GeneratedSampleExamOut,
@@ -69,8 +70,8 @@ def list_questions(
     status: Optional[str] = None,
     is_predicted: Optional[bool] = None,
     search: Optional[str] = None,
-    limit: int = 500,
-    offset: int = 0,
+    limit: int = Query(default=2000, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user=Depends(academy),
 ):
@@ -97,6 +98,46 @@ def list_questions(
     stmt = stmt.order_by(AcademicQuestion.created_at.desc()).offset(offset).limit(limit)
     rows = db.scalars(stmt).all()
     return [_to_question_out(q) for q in rows]
+
+
+@router.get("/questions/stats", response_model=AcademicQuestionsStatsOut)
+def get_questions_stats(
+    db: Session = Depends(get_db),
+    user=Depends(academy),
+):
+    base_filter = AcademicQuestion.deleted_at.is_(None)
+    total = db.scalar(select(func.count(AcademicQuestion.id)).where(base_filter)) or 0
+
+    type_counts = dict(
+        db.execute(
+            select(AcademicQuestion.type, func.count(AcademicQuestion.id))
+            .where(base_filter)
+            .group_by(AcademicQuestion.type)
+        ).all()
+    )
+
+    diff_counts = dict(
+        db.execute(
+            select(AcademicQuestion.difficulty, func.count(AcademicQuestion.id))
+            .where(base_filter)
+            .group_by(AcademicQuestion.difficulty)
+        ).all()
+    )
+
+    status_counts = dict(
+        db.execute(
+            select(AcademicQuestion.status, func.count(AcademicQuestion.id))
+            .where(base_filter)
+            .group_by(AcademicQuestion.status)
+        ).all()
+    )
+
+    return AcademicQuestionsStatsOut(
+        total=total,
+        by_type=type_counts,
+        by_difficulty=diff_counts,
+        by_status=status_counts,
+    )
 
 
 @router.post("/questions", status_code=201, response_model=AcademicQuestionOut)

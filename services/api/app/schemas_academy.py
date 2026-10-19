@@ -64,6 +64,13 @@ class AcademicQuestionOut(BaseModel):
     updated_at: float
 
 
+class AcademicQuestionsStatsOut(BaseModel):
+    total: int
+    by_type: Dict[str, int]
+    by_difficulty: Dict[str, int]
+    by_status: Dict[str, int]
+
+
 # ==========================================
 # 2. MA TRẬN ĐỀ THI (EXAM BLUEPRINT MATRIX SCHEMAS)
 # ==========================================
@@ -150,11 +157,14 @@ class GeneratedSampleExamOut(BaseModel):
 # ==========================================
 
 class RubricCriterion(BaseModel):
+    id: Optional[str] = Field(default=None, description="Mã định danh tiêu chí")
     name: str = Field(..., min_length=1, description="Tên tiêu chí (Content, Pronunciation...)")
-    max_score: float = Field(default=10.0, ge=1.0, description="Điểm tối đa của tiêu chí")
+    max_score: float = Field(default=5.0, ge=1.0, description="Điểm tối đa của tiêu chí")
     weight: float = Field(..., ge=0.0, le=100.0, description="Trọng số (%)")
     description: Optional[str] = Field(default="", description="Mô tả tiêu chí")
-    descriptors: Optional[Dict[str, str]] = Field(default=None, description="Mô tả các band điểm")
+    guiding_question: Optional[str] = Field(default=None, description="Câu hỏi định hướng chấm điểm")
+    scoring_method: Optional[str] = Field(default=None, description="Phương pháp tính điểm")
+    descriptors: Optional[Any] = Field(default=None, description="Mô tả các band điểm")
 
 
 class RubricIn(BaseModel):

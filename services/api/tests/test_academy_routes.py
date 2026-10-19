@@ -548,6 +548,19 @@ class TestAcademicQuestions:
         resp_list_after = academy.get("/api/academy/questions?type=RA")
         assert not any(item["id"] == q_id for item in resp_list_after.json())
 
+    def test_questions_stats_endpoint(self, env):
+        clients, _ = env
+        academy = clients["academy"]
+
+        resp = academy.get("/api/academy/questions/stats")
+        assert resp.status_code == 200, f"Stats failed: {resp.text}"
+        data = resp.json()
+        assert "total" in data
+        assert "by_type" in data
+        assert "by_difficulty" in data
+        assert "by_status" in data
+        assert isinstance(data["total"], int)
+
 
 
 
