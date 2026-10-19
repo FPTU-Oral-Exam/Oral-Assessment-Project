@@ -12,6 +12,7 @@ import {
   Sliders,
   Sparkles,
   BookOpen,
+  HelpCircle,
 } from 'lucide-react';
 import { useAcademic } from '@/context/AcademicContext';
 import { RubricSchema, RubricCriterion } from '@/types/academic';
@@ -31,7 +32,11 @@ export default function RubricsStudioPanel() {
     if (activeRubric) {
       setName(activeRubric.name);
       setDescription(activeRubric.description || '');
-      setCriteria([...activeRubric.criteria]);
+      const normalized = (activeRubric.criteria || []).map((crit, idx) => ({
+        ...crit,
+        id: crit.id || crit.name.toLowerCase().replace(/[^a-z0-9]/g, '_') || `crit_${idx + 1}`,
+      }));
+      setCriteria(normalized);
     }
   }, [activeRubric]);
 
@@ -51,12 +56,14 @@ export default function RubricsStudioPanel() {
   };
 
   const handleSaveCriterion = (updated: RubricCriterion) => {
+    const targetId = updated.id || updated.name.toLowerCase().replace(/[^a-z0-9]/g, '_') || `crit_${Date.now()}`;
+    const criterionToSave = { ...updated, id: targetId };
     setCriteria((prev) => {
-      const exists = prev.some((c) => c.id === updated.id);
+      const exists = prev.some((c) => c.id === targetId);
       if (exists) {
-        return prev.map((c) => (c.id === updated.id ? updated : c));
+        return prev.map((c) => (c.id === targetId ? criterionToSave : c));
       } else {
-        return [...prev, updated];
+        return [...prev, criterionToSave];
       }
     });
   };
@@ -211,89 +218,149 @@ export default function RubricsStudioPanel() {
           <span>Danh sách Tiêu chí Đo lường ({criteria.length} tiêu chí Speaking)</span>
         </h2>
 
-        {criteria.map((crit) => (
-          <div
-            key={crit.id}
-            className="bg-white border border-slate-200/90 rounded-2xl p-5 hover:border-slate-300 transition-all shadow-xs space-y-4"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">{crit.name}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{crit.description}</p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-                  <span className="text-xs text-slate-500">Trọng số:</span>
-                  <span className="font-mono text-sm font-black text-blue-600">
-                    {crit.weight}%
-                  </span>
+        {criteria.map((crit, critIdx) => {
+          const criterionKey = crit.id || `crit_${critIdx + 1}`;
+          return (
+            <div
+              key={criterionKey}
+              className="bg-white border border-slate-200/90 rounded-2xl p-5 hover:border-slate-300 transition-all shadow-xs space-y-4"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="text-base font-bold text-slate-900">{crit.name}</h3>
+                    <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
+                      Trọng số: {crit.weight}%
+                    </span>
+                  </div>
+                  {crit.description && (
+                    <p className="text-xs text-slate-500">{crit.description}</p>
+                  )}
                 </div>
 
-                <button
-                  onClick={() => {
-                    if (!crit.id) return;
-                    setEditingCriterion(crit);
-                    setIsModalOpen(true);
-                  }}
-                  className="p-2 text-slate-400 hover:text-amber-600 hover:bg-slate-50 rounded-xl transition-colors"
-                  title="Chỉnh sửa chi tiết tiêu chí"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-
-                <button
-                  onClick={() => handleDeleteCriterion(crit.id)}
-                  disabled={!crit.id}
-                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-xl transition-colors disabled:opacity-40"
-                  title="Xóa tiêu chí"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Weight Input */}
-            <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <span className="text-xs font-semibold text-slate-600">
-                Trọng số:
-              </span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={crit.weight}
-                onChange={(e) => handleWeightChange(crit.id, Number(e.target.value))}
-                className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-mono font-bold text-slate-900 text-center focus:outline-none focus:border-blue-500"
-              />
-              <span className="text-sm font-bold text-slate-700">%</span>
-            </div>
-
-            {/* Band Descriptors Grid */}
-            {crit.descriptors && crit.descriptors.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
-                {crit.descriptors.map((desc, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-emerald-700 text-[11px]">
-                        {desc.level}
-                      </span>
-                      <span className="font-mono text-[10px] text-slate-500 font-semibold">
-                        {desc.score_range}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
-                      {desc.description}
-                    </p>
+                <div className="flex items-center gap-3">
+                  <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                    <span className="text-xs font-bold text-slate-700">
+                      Thang điểm: {crit.max_score || 5} đ
+                    </span>
                   </div>
-                ))}
+
+                  <button
+                    onClick={() => {
+                      setEditingCriterion(crit);
+                      setIsModalOpen(true);
+                    }}
+                    className="p-2 text-slate-400 hover:text-amber-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                    title="Chỉnh sửa chi tiết tiêu chí"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteCriterion(crit.id)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                    title="Xóa tiêu chí"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* Guiding Question Box */}
+              {crit.guiding_question && (
+                <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-blue-900 font-bold">
+                    <HelpCircle className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <span>Câu hỏi định hướng chấm điểm:</span>
+                  </div>
+                  <p className="text-blue-800 italic pl-5.5 font-medium leading-relaxed">
+                    &ldquo;{crit.guiding_question}&rdquo;
+                  </p>
+                </div>
+              )}
+
+              {/* Scoring Method Box */}
+              {crit.scoring_method && (
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed">
+                  <strong className="text-slate-900 font-bold">Phương pháp tính điểm: </strong>
+                  {crit.scoring_method}
+                </div>
+              )}
+
+              {/* Quick Weight Adjustment */}
+              <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                <span className="text-xs font-semibold text-slate-600">
+                  Điều chỉnh trọng số:
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={crit.weight}
+                  onChange={(e) => handleWeightChange(crit.id, Number(e.target.value))}
+                  className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-900 text-center focus:outline-none focus:border-blue-500"
+                />
+                <span className="text-xs font-bold text-slate-700">%</span>
+              </div>
+
+              {/* Band Descriptors List */}
+              {crit.descriptors && crit.descriptors.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Bảng thang điểm chi tiết (How Marks Are Awarded):</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {crit.descriptors.map((desc, idx) => {
+                      const badgeText = desc.level;
+                      const isHigh = badgeText.includes('5') || badgeText.includes('Xuất sắc');
+                      const isGood = badgeText.includes('4') || badgeText.includes('Khá');
+                      const isMid = badgeText.includes('3') || badgeText.includes('Đạt');
+                      const isLow = badgeText.includes('2');
+                      const isPoor = badgeText.includes('1') || badgeText.includes('Cần');
+                      const isZero = badgeText.includes('0');
+
+                      const badgeClass = isHigh
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : isGood
+                        ? 'bg-blue-50 text-blue-700 border-blue-300'
+                        : isMid
+                        ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                        : isLow
+                        ? 'bg-amber-50 text-amber-700 border-amber-300'
+                        : isPoor
+                        ? 'bg-orange-50 text-orange-700 border-orange-300'
+                        : isZero
+                        ? 'bg-rose-50 text-rose-700 border-rose-300'
+                        : 'bg-slate-100 text-slate-700 border-slate-300';
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex flex-col sm:flex-row sm:items-center gap-2 p-2.5 rounded-xl border border-slate-200/80 bg-white hover:bg-slate-50/50 transition-colors text-xs"
+                        >
+                          <span
+                            className={`px-2.5 py-1 rounded-lg border font-mono font-bold text-xs whitespace-nowrap text-center sm:min-w-[70px] ${badgeClass}`}
+                          >
+                            {desc.level}
+                          </span>
+                          <p className="text-xs text-slate-700 leading-relaxed flex-1">
+                            {desc.description}
+                          </p>
+                          {desc.score_range && desc.score_range !== desc.level && (
+                            <span className="text-[11px] font-mono text-slate-400 font-medium whitespace-nowrap">
+                              {desc.score_range}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Footer Actions */}

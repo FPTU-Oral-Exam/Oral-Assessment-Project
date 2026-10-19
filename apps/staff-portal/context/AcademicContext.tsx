@@ -114,7 +114,7 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
 
       try {
         const [qs, ms, rs, qts] = await Promise.allSettled([
-          academyService.getQuestions(),
+          academyService.getQuestions({ limit: 2000 }),
           academyService.getMatrices(),
           academyService.getRubrics(),
           academyService.getQuestionTypeConfigs(),
@@ -123,7 +123,7 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         // Questions
-        if (qs.status === 'fulfilled' && qs.value.length > 0) {
+        if (qs.status === 'fulfilled') {
           setQuestions(qs.value as AcademicQuestionItem[]);
         }
 
@@ -138,8 +138,16 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
         if (rs.status === 'fulfilled' && rs.value.length > 0) {
           const loadedRubrics = rs.value as RubricSchema[];
           setRubrics(loadedRubrics);
-          if (!activeRubricId) setActiveRubricId(loadedRubrics[0].id);
+          if (!activeRubricId) {
+            const official = loadedRubrics.find(
+              (r) =>
+                r.name.toLowerCase().includes('official') ||
+                r.name.toLowerCase().includes('academic speaking')
+            );
+            setActiveRubricId(official ? official.id : loadedRubrics[0].id);
+          }
         }
+
 
         // Question Type Configs (map to local format with safe defaults)
         if (qts.status === 'fulfilled' && qts.value.length > 0) {
@@ -485,16 +493,17 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
     syncExistingQuestions: boolean = false
   ) => {
     try {
+      const existing = questionTypeConfigs[type] || (DEFAULT_QUESTION_TYPE_CONFIGS as Record<string, QuestionTypeConfig>)[type];
       const res = await academyService.updateQuestionTypeConfig(
         type,
         {
-          name: data.name,
-          vietnamese_name: data.vietnamese_name,
-          description: data.description,
-          default_prep_time: data.default_prep_time,
-          default_response_time: data.default_response_time,
-          is_active: data.is_active,
-          recommended_question_count: data.recommended_question_count,
+          name: data.name ?? existing?.name ?? type,
+          vietnamese_name: data.vietnamese_name ?? existing?.vietnamese_name ?? type,
+          description: data.description ?? existing?.description ?? '',
+          default_prep_time: data.default_prep_time ?? existing?.default_prep_time ?? 30,
+          default_response_time: data.default_response_time ?? existing?.default_response_time ?? 40,
+          is_active: data.is_active !== undefined ? data.is_active : (existing?.is_active ?? true),
+          recommended_question_count: data.recommended_question_count ?? existing?.recommended_question_count ?? 2,
         },
         syncExistingQuestions
       );

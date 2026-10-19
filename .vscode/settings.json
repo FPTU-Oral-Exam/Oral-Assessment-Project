@@ -1,5 +1,6 @@
 {
   "workbench.editorAssociations": {
-    "*.drawio": "hediet.vscode-drawio-text"
+    "*.drawio": "hediet.vscode-drawio-text",
+    "*.xlsx": "default"
   }
 }
