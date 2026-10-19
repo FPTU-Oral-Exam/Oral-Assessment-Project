@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Clock,
@@ -9,11 +9,13 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   Play,
+  Pause,
   RotateCcw,
   Sparkles,
   Award,
 } from 'lucide-react';
 import { AcademicQuestionItem, QuestionType, QUESTION_TYPES_META } from '@/types/academic';
+import { resolveMediaUrl } from './QuestionCard';
 
 interface QuestionDetailModalProps {
   question: AcademicQuestionItem | null;
@@ -37,13 +39,84 @@ export default function QuestionDetailModal({ question, onClose }: QuestionDetai
   const [phase, setPhase] = useState<'PREP' | 'RECORDING' | 'DONE'>('PREP');
   const [secondsLeft, setSecondsLeft] = useState<number>(question?.prep_time || 25);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopAllAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+  };
 
   useEffect(() => {
+    stopAllAudio();
     if (!question) return;
     setPhase('PREP');
     setSecondsLeft(question.prep_time);
     setIsTimerRunning(false);
   }, [question]);
+
+  useEffect(() => {
+    return () => {
+      stopAllAudio();
+    };
+  }, []);
+
+  const playTTSFallback = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const textToSpeak = question?.audio_script || question?.prompt || '';
+      if (!textToSpeak) {
+        setIsPlayingAudio(false);
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.95;
+      utterance.onstart = () => setIsPlayingAudio(true);
+      utterance.onend = () => setIsPlayingAudio(false);
+      utterance.onerror = () => setIsPlayingAudio(false);
+      window.speechSynthesis.speak(utterance);
+    } else {
+      setIsPlayingAudio(false);
+    }
+  };
+
+  const handleToggleAudio = () => {
+    if (isPlayingAudio) {
+      stopAllAudio();
+      return;
+    }
+
+    const audioUrl = question?.media_url ? resolveMediaUrl(question.media_url) : '';
+    if (audioUrl && (audioUrl.endsWith('.mp3') || audioUrl.endsWith('.wav') || audioUrl.endsWith('.ogg'))) {
+      stopAllAudio();
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      setIsPlayingAudio(true);
+
+      audio.play().catch((err) => {
+        console.warn('[QuestionDetailModal] File audio failed, using Web Speech TTS fallback:', err);
+        playTTSFallback();
+      });
+
+      audio.onended = () => {
+        setIsPlayingAudio(false);
+      };
+
+      audio.onerror = () => {
+        console.warn('[QuestionDetailModal] Audio error, using Web Speech TTS fallback');
+        playTTSFallback();
+      };
+    } else {
+      playTTSFallback();
+    }
+  };
 
   useEffect(() => {
     if (!isTimerRunning) return;
@@ -191,23 +264,48 @@ export default function QuestionDetailModal({ question, onClose }: QuestionDetai
           {question.type === 'DI' && question.media_url && (
             <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 p-2">
               <img
-                src={question.media_url}
+                src={resolveMediaUrl(question.media_url)}
                 alt={question.title}
                 className="w-full max-h-72 object-contain rounded-xl mx-auto"
               />
             </div>
           )}
 
-          {/* Audio Script / Simulation if needed */}
-          {question.audio_script && (
+          {/* Audio Script / Player if needed */}
+          {(question.audio_script || question.media_url) && (
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                <Volume2 className="w-4 h-4 text-blue-600" />
-                <span>Kịch bản âm thanh đầu vào (Audio Prompt Script):</span>
+              <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <Volume2 className="w-4 h-4 text-blue-600" />
+                  <span>Kịch bản âm thanh đầu vào (Audio Prompt Script):</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleAudio}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                    isPlayingAudio
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {isPlayingAudio ? (
+                    <>
+                      <Pause className="w-3.5 h-3.5" />
+                      <span>Dừng phát</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Nghe Audio</span>
+                    </>
+                  )}
+                </button>
               </div>
-              <p className="text-sm font-serif italic text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200/80">
-                "{question.audio_script}"
-              </p>
+              {question.audio_script && (
+                <p className="text-sm font-serif italic text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200/80">
+                  "{question.audio_script}"
+                </p>
+              )}
             </div>
           )}
 

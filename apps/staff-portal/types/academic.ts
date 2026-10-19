@@ -157,6 +157,8 @@ export interface RubricCriterion {
   id?: string;
   name: string;
   description?: string;
+  guiding_question?: string;
+  scoring_method?: string;
   max_score: number;
   weight: number; // Tổng = 100%
   descriptors?: BandDescriptor[];

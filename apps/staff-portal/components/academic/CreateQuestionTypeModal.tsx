@@ -201,7 +201,7 @@ export default function CreateQuestionTypeModal({
               <span>Thời lượng Chuẩn ban đầu</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                   Chuẩn bị (Prep):
@@ -233,23 +233,6 @@ export default function CreateQuestionTypeModal({
                     className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-blue-700 text-center focus:outline-none focus:border-blue-500"
                   />
                   <span className="text-[11px] text-slate-500">giây</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Khuyến nghị / Đề:
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={recommendedCount}
-                    onChange={(e) => setRecommendedCount(Number(e.target.value))}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 text-center focus:outline-none focus:border-blue-500"
-                  />
-                  <span className="text-[11px] text-slate-500">câu</span>
                 </div>
               </div>
             </div>

@@ -62,6 +62,15 @@ export interface QuestionFilterParams {
   status?: QuestionStatus;
   is_predicted?: boolean;
   search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface QuestionStatsResponse {
+  total: number;
+  by_type: Record<string, number>;
+  by_difficulty: Record<string, number>;
+  by_status: Record<string, number>;
 }
 
 export interface CreateQuestionPayload {
@@ -115,6 +124,8 @@ export class AcademyService {
       if (params?.status) searchParams.set('status', params.status);
       if (params?.is_predicted !== undefined) searchParams.set('is_predicted', String(params.is_predicted));
       if (params?.search) searchParams.set('search', params.search);
+      if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
+      if (params?.offset !== undefined) searchParams.set('offset', String(params.offset));
 
       const qs = searchParams.toString();
       const url = qs ? `/academy/questions?${qs}` : '/academy/questions';
@@ -122,6 +133,14 @@ export class AcademyService {
     } catch {
       // Fallback khi backend endpoint chưa triển khai (mock handled at Context level)
       return [];
+    }
+  }
+
+  async getQuestionStats(): Promise<QuestionStatsResponse | null> {
+    try {
+      return await apiClient.get<QuestionStatsResponse>('/academy/questions/stats');
+    } catch {
+      return null;
     }
   }
 
