@@ -1,6 +1,5 @@
 import React from 'react';
-import ExamMatrixClient from './ExamMatrixClient';
-import { AcademicProvider } from '@/context/AcademicContext';
+import ExamMatrixPanel from '@/components/academic/ExamMatrixPanel';
 
 export const metadata = {
   title: 'Ma trận Đề thi & Ra đề · OralAI Academic',
@@ -8,9 +7,5 @@ export const metadata = {
 };
 
 export default function ExamMatrixPage() {
-  return (
-    <AcademicProvider>
-      <ExamMatrixClient />
-    </AcademicProvider>
-  );
+  return <ExamMatrixPanel />;
 }

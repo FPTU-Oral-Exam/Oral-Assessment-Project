@@ -1,6 +1,5 @@
 import React from 'react';
-import RubricsClient from './RubricsClient';
-import { AcademicProvider } from '@/context/AcademicContext';
+import RubricsStudioPanel from '@/components/academic/RubricsStudioPanel';
 
 export const metadata = {
   title: 'Tiêu chuẩn Rubrics · OralAI Academic',
@@ -8,9 +7,5 @@ export const metadata = {
 };
 
 export default function RubricsPage() {
-  return (
-    <AcademicProvider>
-      <RubricsClient />
-    </AcademicProvider>
-  );
+  return <RubricsStudioPanel />;
 }

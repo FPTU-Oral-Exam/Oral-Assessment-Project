@@ -1,5 +1,4 @@
-import { requireRole } from '@/lib/auth';
-import { AcademicProvider } from '@/context/AcademicContext';
+import React from 'react';
 import QuestionTypesClient from './QuestionTypesClient';
 
 export const metadata = {
@@ -7,12 +6,6 @@ export const metadata = {
   description: 'Quản lý quy chuẩn 4 dạng câu hỏi thi vấn đáp học thuật ENTs / Oral Assessment FPTU',
 };
 
-export default async function QuestionTypesPage() {
-  await requireRole(['ACADEMY', 'SYSTEM_ADMIN']);
-
-  return (
-    <AcademicProvider>
-      <QuestionTypesClient />
-    </AcademicProvider>
-  );
+export default function QuestionTypesPage() {
+  return <QuestionTypesClient />;
 }
