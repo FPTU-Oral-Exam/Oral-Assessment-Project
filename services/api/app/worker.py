@@ -392,7 +392,17 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
         except Exception:
             pass
 
-    active_pte = pte_di_result or pte_rs_result or pte_result or pte_sgd_result or pte_rts_result or pte_rl_result
+    is_ents_rubric = any(
+        c.get("name") in [
+            "Ideas",
+            "Grammar Range and Accuracy",
+            "Vocabulary Range and Accuracy",
+            "Fluency and coherence",
+        ]
+        for c in snapshot.get("criteria", [])
+    )
+
+    active_pte = None if is_ents_rubric else (pte_di_result or pte_rs_result or pte_result or pte_sgd_result or pte_rts_result or pte_rl_result)
 
     if active_pte:
         assessment = {
@@ -459,9 +469,31 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
             "pte_retell_lecture": pte_rl_result if pte_rl_result else None,
         }
 
-        active_pte = pte_di_result or pte_rs_result or pte_result or pte_sgd_result or pte_rts_result or pte_rl_result
+        if is_ents_rubric and assessment.get("criteria"):
+            for crit in assessment["criteria"]:
+                c_name = crit.get("name", "")
+                if c_name == "Fluency and coherence" and fluency_obj:
+                    wps = fluency_obj.get("speech_rate_wps") or 2.0
+                    pauses = fluency_obj.get("pause_count") or 0
+                    if (wps < 1.2 or pauses > 6) and crit.get("score", 0) > 0.95:
+                        crit["score"] = 0.9
+                        crit["band"] = ai.resolve_criterion_band(crit["score"], 2.0)
+                        crit["comment"] = (crit.get("comment", "") + " (Tốc độ nói còn chậm hoặc nhiều khoảng dừng dài).").strip()
+                elif c_name == "Pronunciation" and confidence is not None:
+                    blended_p = round(min(2.0, max(0.0, 0.6 * (confidence * 2.0) + 0.4 * crit.get("score", 1.0))), 2)
+                    crit["score"] = blended_p
+                    crit["band"] = ai.resolve_criterion_band(crit["score"], 2.0)
 
-        if active_pte:
+            tot = sum(c.get("score", 0.0) for c in assessment["criteria"])
+            assessment["score"] = round(min(10.0, max(0.0, tot)), 1)
+            assessment["status"] = "COMPLETED"
+            assessment["review_required"] = bool(
+                (confidence is not None and confidence < 0.40) or
+                any(c.get("band") == "Insufficient evidence" for c in assessment["criteria"])
+            )
+            assessment["feedback"] = " | ".join(f"{c['name']} ({c['score']}/2): {c.get('band', '')}" for c in assessment["criteria"])
+            assessment["reasoning_summary"] = assessment["feedback"]
+        elif active_pte:
             assessment['score'] = active_pte["overall"]["score_10"]
             assessment['pte_score_90'] = active_pte["overall"]["score_90"]
             assessment['pte_total_points'] = active_pte["overall"]["total_points"]

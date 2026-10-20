@@ -204,6 +204,41 @@ def grading_schema(criteria, chunks):
     )
 
 
+def resolve_criterion_band(score: float, max_score: float = 2.0, descriptors: list | None = None) -> str:
+    if descriptors and isinstance(descriptors, list):
+        for d in descriptors:
+            if not isinstance(d, dict):
+                continue
+            sr = str(d.get("score_range", "")).lower()
+            lvl = d.get("level", "")
+            if "1.6" in sr and score >= 1.6:
+                return lvl
+            elif ("1" in sr or "1.0" in sr) and "1.6" in sr and 1.0 <= score < 1.6:
+                return lvl
+            elif "0.6" in sr and ("1" in sr or "1.0" in sr) and 0.6 <= score < 1.0:
+                return lvl
+            elif "0" in sr and "0.6" in sr and score < 0.6:
+                return lvl
+    if max_score == 2.0:
+        if score >= 1.6:
+            return "Exceeds standard"
+        elif score >= 1.0:
+            return "Meets standard"
+        elif score >= 0.6:
+            return "Attempt made"
+        else:
+            return "Insufficient evidence"
+    ratio = score / max_score if max_score > 0 else 0
+    if ratio >= 0.8:
+        return "Exceeds standard"
+    elif ratio >= 0.5:
+        return "Meets standard"
+    elif ratio >= 0.3:
+        return "Attempt made"
+    else:
+        return "Insufficient evidence"
+
+
 def grade(question, transcript, criteria, chunks, stt_confidence):
     cfg = settings()
     base = {
@@ -224,27 +259,53 @@ def grade(question, transcript, criteria, chunks, stt_confidence):
         }
     if not chunks:
         raise ValueError("RAG returned no evidence")
+
+    # Build detailed rubric descriptors context for LLM prompt
+    rubric_detail = []
+    for c in criteria:
+        item = {
+            "name": c["name"],
+            "max_score": c["max_score"],
+            "weight": c.get("weight", 1.0),
+            "description": c.get("description", ""),
+        }
+        if c.get("descriptors"):
+            item["descriptors"] = c["descriptors"]
+        rubric_detail.append(item)
+
     result = structured(
         "Grade the answer against every rubric criterion, using only supplied knowledge. "
         "Confidence MUST be a decimal float between 0.0 and 1.0 (e.g. 0.85). "
         "The transcript is from an English oral exam taken by ESL (English as a Second Language) students. "
         "Be tolerant of minor phonetic transcription errors, pronunciation quirks, or non-native phrasing. "
         "Focus on evaluating whether the student demonstrates correct conceptual understanding according to the rubric and evidence. "
+        "Carefully follow each criterion's descriptor band thresholds to determine the exact score and appropriate band. "
         "Return one score per criterion with the exact criterion name, bounded by its max_score. "
-        "Scores are raw rubric points, NEVER percentages: for max_score=2, three of four equal items earns 1.5, not 75. "
+        "Scores are raw rubric points, NEVER percentages: for max_score=2, a Meets Standard score is between 1.0 and 1.55, not 75. "
         "Return every criterion once in the supplied order; use its own max_score even when other criteria have a larger maximum. "
         "Use short comments and a brief reasoning summary. Cite supporting chunk IDs.",
-        {"question": question, "transcript": transcript, "rubric": criteria, "evidence": chunks},
+        {"question": question, "transcript": transcript, "rubric": rubric_detail, "evidence": chunks},
         grading_schema(criteria, chunks),
     ).model_dump(mode="json")
     actual = {c["name"]: c for c in result.get("criteria", [])}
     for criterion in criteria:
-        if criterion["name"] not in actual:
-            actual[criterion["name"]] = {"name": criterion["name"], "score": 0.0, "comment": "Chưa có đánh giá cụ thể"}
-        elif actual[criterion["name"]]["score"] > criterion["max_score"]:
-            actual[criterion["name"]]["score"] = float(criterion["max_score"])
-        elif actual[criterion["name"]]["score"] < 0:
-            actual[criterion["name"]]["score"] = 0.0
+        c_name = criterion["name"]
+        max_s = float(criterion.get("max_score", 5.0))
+        w = float(criterion.get("weight", 1.0))
+        if c_name not in actual:
+            actual[c_name] = {"name": c_name, "score": 0.0, "comment": "Chưa có đánh giá cụ thể"}
+        elif actual[c_name]["score"] > max_s:
+            actual[c_name]["score"] = max_s
+        elif actual[c_name]["score"] < 0:
+            actual[c_name]["score"] = 0.0
+
+        actual[c_name]["max_score"] = max_s
+        actual[c_name]["weight"] = w
+        actual[c_name]["band"] = resolve_criterion_band(
+            actual[c_name]["score"],
+            max_s,
+            criterion.get("descriptors")
+        )
 
     valid_refs = [cid for cid in result.get("reference_chunk_ids", []) if cid in {c["id"] for c in chunks}]
     result["reference_chunk_ids"] = valid_refs or [chunks[0]["id"]]
@@ -255,9 +316,11 @@ def grade(question, transcript, criteria, chunks, stt_confidence):
         / sum(c["weight"] for c in criteria),
         2,
     )
+    has_insufficient = any(actual[c["name"]].get("band") == "Insufficient evidence" for c in criteria)
     review = (
         result["confidence"] < cfg.confidence_threshold
         or stt_confidence < cfg.confidence_threshold
+        or has_insufficient
         or abs(score - 5) <= 0.25
     )
     return base | result | {"score": score, "review_required": review, "status": "COMPLETED"}

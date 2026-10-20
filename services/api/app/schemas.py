@@ -310,6 +310,9 @@ class GradeCriterion(Input):
     name: str
     score: float = Field(ge=0, le=100)
     comment: str = Field(default="", max_length=2000)
+    band: str | None = Field(default=None)
+    max_score: float | None = Field(default=None)
+    weight: float | None = Field(default=None)
 
 
 class GradeOutput(Input):
