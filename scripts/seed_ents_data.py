@@ -15,8 +15,17 @@ import os
 import time
 import uuid
 
-# Cho phép import app từ services/api
+# Cấu hình UTF-8 cho console Windows
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+# Cho phép import app từ services/api hoặc trực tiếp từ thư mục cha
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "services", "api")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sqlalchemy import select, delete
 from app.db import SessionLocal
@@ -366,7 +375,30 @@ SAMPLE_QUESTIONS = [
 ]
 
 
+def ensure_schema():
+    from app.db import engine, Base
+    Base.metadata.create_all(bind=engine)
+    if engine.dialect.name == "sqlite":
+        with engine.connect() as conn:
+            for table_name, table in Base.metadata.tables.items():
+                row = conn.exec_driver_sql(
+                    f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"
+                ).fetchone()
+                if not row:
+                    continue
+                existing_cols = {c[1] for c in conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()}
+                for col in table.columns:
+                    if col.name not in existing_cols:
+                        col_type = col.type.compile(engine.dialect)
+                        try:
+                            conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}")
+                        except Exception as e:
+                            print(f"Warning adding column {table_name}.{col.name}: {e}")
+            conn.commit()
+
+
 def seed_database():
+    ensure_schema()
     print("=" * 70)
     print(">>> BẮT ĐẦU NẠP SEED DATA CHUẨN ENTS SPEAKING 5 TIÊU CHÍ (SCALE 10) <<<")
     print("=" * 70)
@@ -455,7 +487,7 @@ def seed_database():
             rubric = Rubric(
                 name=rubric_name,
                 description="Bộ tiêu chuẩn đánh giá Vấn đáp Tiếng Anh FPTU gồm 5 tiêu chí: Ideas, Pronunciation, Grammar, Vocabulary, Fluency (Thang điểm 10).",
-                course_id=None,  # Dùng chung toàn khoa
+                course_id=course_map.get("ENT104"),
                 version=1,
                 criteria=ENT_RUBRIC_CRITERIA,
             )
