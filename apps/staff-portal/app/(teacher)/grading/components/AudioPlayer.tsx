@@ -4,12 +4,13 @@ import { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, RotateCcw, Download, Loader2, Music } from 'lucide-react';
 
 interface AudioPlayerProps {
-  evidenceId: string;
+  evidenceId?: string;
+  audioUrl?: string;
   sha256?: string;
   size?: number;
 }
 
-export function AudioPlayer({ evidenceId, sha256, size }: AudioPlayerProps) {
+export function AudioPlayer({ evidenceId, audioUrl, sha256, size }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -21,12 +22,23 @@ export function AudioPlayer({ evidenceId, sha256, size }: AudioPlayerProps) {
   const [error, setError] = useState<string | null>(null);
   const [audioSrc, setAudioSrc] = useState<string>('');
 
-  const streamUrl = `/api/evidence/${evidenceId}/content`;
+  const streamUrl = audioUrl || (evidenceId ? `/api/evidence/${evidenceId}/content` : '');
 
   // Fetch audio with credentials to create local blob URL (bypasses any cross-origin audio cookie limits)
   useEffect(() => {
     let isCancelled = false;
     let blobUrl = '';
+
+    if (!streamUrl) {
+      setLoading(false);
+      return;
+    }
+
+    if (audioUrl) {
+      setAudioSrc(audioUrl);
+      setLoading(false);
+      return;
+    }
 
     async function loadAudio() {
       try {

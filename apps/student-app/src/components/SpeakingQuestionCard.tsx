@@ -1,11 +1,12 @@
 import React, { useRef, useEffect, useState } from 'react';
 import type { QuestionAttempt } from '@oralai/shared';
 
-export type PTEPhase = 'AUDIO_PLAYING' | 'PREPARING' | 'RECORDING' | 'RECORDED';
+export type SpeakingPhase = 'AUDIO_PLAYING' | 'PREPARING' | 'RECORDING' | 'RECORDED';
+export type PTEPhase = SpeakingPhase;
 
-interface PTEQuestionCardProps {
+interface SpeakingQuestionCardProps {
   attempt: QuestionAttempt;
-  phase: PTEPhase;
+  phase: SpeakingPhase;
   prepTimeRemaining: number;
   speakTimeRemaining: number;
   totalPrepTime: number;
@@ -16,6 +17,13 @@ interface PTEQuestionCardProps {
 }
 
 const TYPE_TITLES: Record<string, string> = {
+  // 4 Chuẩn ENTs Speaking theo Đề cương FPTU
+  GENERAL_INTERVIEW: 'Part 1: Phỏng vấn Tổng quát (General Interview)',
+  PICTURE_DESCRIPTION: 'Part 2: Miêu tả Tranh (Picture Description)',
+  TOPIC_MONOLOGUE: 'Part 3: Thuyết trình theo Chủ đề (Topic Monologue)',
+  DEEP_DISCUSSION: 'Part 4: Thảo luận Chuyên sâu (Deep Discussion)',
+
+  // Legacy mappings for backward compatibility
   READ_ALOUD: 'Part 1: Read Aloud (RA)',
   REPEAT_SENTENCE: 'Part 2: Repeat Sentence (RS)',
   DESCRIBE_IMAGE: 'Part 3: Describe Image (DI)',
@@ -32,7 +40,7 @@ const resolveMediaUrl = (url?: string | null): string | undefined => {
   return url.replace(/^\/+/, './');
 };
 
-export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
+export const SpeakingQuestionCard: React.FC<SpeakingQuestionCardProps> = ({
   attempt,
   phase,
   prepTimeRemaining,
@@ -47,12 +55,11 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
 
-  const type = attempt.type || 'PTE_QUESTION';
-  const title = TYPE_TITLES[type] || `PTE Task: ${type}`;
+  const type = attempt.type || 'GENERAL_INTERVIEW';
+  const title = TYPE_TITLES[type] || `Speaking Task: ${type}`;
   const instruction = attempt.instruction || '';
   const promptAudio = resolveMediaUrl(attempt.prompt_audio);
   const promptImage = resolveMediaUrl(attempt.prompt_image);
-  const modelAudio = resolveMediaUrl(attempt.model_audio);
   const text = attempt.text || '';
 
   // Auto-play prompt audio when entering AUDIO_PLAYING phase
@@ -72,7 +79,7 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
     }
   }, [phase, promptAudio]);
 
-  // Pause prompt audio when phase leaves AUDIO_PLAYING (e.g. recording started early)
+  // Pause prompt audio when phase leaves AUDIO_PLAYING
   useEffect(() => {
     if (phase !== 'AUDIO_PLAYING' && audioRef.current) {
       audioRef.current.pause();
@@ -113,6 +120,11 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
           <span style={styles.taskBadge}>{title}</span>
           <span style={styles.seqBadge}>Câu {attempt.sequence}</span>
         </div>
+        {phase === 'AUDIO_PLAYING' && onSkipAudioToRecord && (
+          <button style={styles.skipToRecordBtn} onClick={onSkipAudioToRecord}>
+            Bỏ qua nghe đề &amp; Ghi âm ngay ⏭
+          </button>
+        )}
       </div>
 
       {/* Instruction Box */}
@@ -151,12 +163,12 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
         </div>
       )}
 
-      {/* Visual Chart / Image for Describe Image */}
+      {/* Visual Chart / Image for Picture Description or Describe Image */}
       {promptImage && (
         <div style={styles.imageContainer}>
           <img
             src={promptImage}
-            alt="PTE Prompt Diagram"
+            alt="Speaking Prompt Visual"
             style={styles.promptImage}
           />
         </div>
@@ -180,11 +192,15 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
       {text && type !== 'READ_ALOUD' && type !== 'REPEAT_SENTENCE' && (
         <div style={styles.questionTextContainer}>
           <div style={styles.questionTextHeader}>
-            {type === 'RETELL_LECTURE' || type === 'SUMMARIZE_GROUP_DISCUSSION'
-              ? 'Chủ đề bài nghe (Topic):'
-              : type === 'RESPOND_TO_SITUATION'
-              ? 'Tình huống (Situation context):'
-              : 'Thông tin bổ trợ (Information):'}
+            {type === 'TOPIC_MONOLOGUE'
+              ? 'Chủ đề thuyết trình (Topic Presentation):'
+              : type === 'PICTURE_DESCRIPTION'
+              ? 'Yêu cầu miêu tả tranh (Picture Prompt):'
+              : type === 'DEEP_DISCUSSION'
+              ? 'Câu hỏi thảo luận (Discussion Question):'
+              : type === 'GENERAL_INTERVIEW'
+              ? 'Câu hỏi phỏng vấn (Interview Question):'
+              : 'Nội dung câu hỏi (Question):'}
           </div>
           <p style={styles.questionText}>{text}</p>
         </div>
@@ -197,8 +213,15 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
             <div style={styles.phaseHeaderRow}>
               <div style={styles.phaseTitle}>
                 <span style={styles.prepBadge}>CHUẨN BỊ (PREPARATION)</span>
-                <span style={styles.timerCount}>Bắt đầu ghi âm sau: <strong>{prepTimeRemaining}s</strong></span>
+                <span style={styles.timerCount}>
+                  Bắt đầu ghi âm sau: <strong>{prepTimeRemaining}s</strong>
+                </span>
               </div>
+              {onSkipPrep && (
+                <button style={styles.skipPrepBtn} onClick={onSkipPrep}>
+                  Bắt đầu nói ngay ⏭
+                </button>
+              )}
             </div>
             <div style={styles.progressBarTrack}>
               <div
@@ -216,7 +239,9 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
             <div style={styles.phaseHeaderRow}>
               <div style={styles.phaseTitle}>
                 <span style={styles.recordBadge}>● ĐANG GHI ÂM (RECORDING)</span>
-                <span style={styles.timerCountRecord}>Còn lại: <strong>{speakTimeRemaining}s</strong></span>
+                <span style={styles.timerCountRecord}>
+                  Còn lại: <strong>{speakTimeRemaining}s</strong>
+                </span>
               </div>
             </div>
             <div style={styles.progressBarTrack}>
@@ -239,6 +264,10 @@ export const PTEQuestionCard: React.FC<PTEQuestionCardProps> = ({
     </div>
   );
 };
+
+// Aliases for backward compatibility
+export const PTEQuestionCard = SpeakingQuestionCard;
+export default SpeakingQuestionCard;
 
 const styles: Record<string, React.CSSProperties> = {
   card: {
@@ -399,77 +428,35 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '18px',
     lineHeight: 1.6,
     color: '#0f172a',
-    fontWeight: 600,
     margin: 0,
-  },
-  repeatSentenceNoticeBox: {
-    backgroundColor: '#f8fafc',
-    border: '1px dashed #94a3b8',
-    borderRadius: '8px',
-    padding: '16px 20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    marginBottom: '18px',
-  },
-  repeatSentenceNoticeIcon: {
-    fontSize: '24px',
-    flexShrink: 0,
-  },
-  repeatSentenceNoticeText: {
-    fontSize: '14px',
-    color: '#334155',
-    lineHeight: '1.5',
-  },
-  modelAudioBox: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    backgroundColor: '#f8fafc',
-    borderRadius: '8px',
-    padding: '10px 16px',
-    marginBottom: '16px',
-    border: '1px dashed #cbd5e1',
-  },
-  modelAudioLabel: {
-    fontSize: '13px',
-    color: '#64748b',
-    fontWeight: 600,
-  },
-  modelAudioElement: {
-    height: '36px',
+    fontWeight: 500,
   },
   countdownSection: {
     marginTop: '16px',
   },
-  phaseAlertInfo: {
-    backgroundColor: '#eff6ff',
-    border: '1px solid #bfdbfe',
-    borderRadius: '8px',
-    padding: '12px 16px',
-    color: '#1e40af',
-    fontSize: '14px',
-  },
   phaseAlertPrep: {
-    backgroundColor: '#f0f9ff',
-    border: '1px solid #bae6fd',
+    backgroundColor: '#fffbeb',
+    border: '1px solid #fef3c7',
     borderRadius: '8px',
-    padding: '14px 16px',
+    padding: '14px 18px',
   },
   phaseAlertRecord: {
     backgroundColor: '#fef2f2',
-    border: '1px solid #fecaca',
+    border: '1px solid #fee2e2',
     borderRadius: '8px',
-    padding: '14px 16px',
+    padding: '14px 18px',
   },
   phaseAlertDone: {
     backgroundColor: '#f0fdf4',
-    border: '1px solid #bbf7d0',
+    border: '1px solid #dcfce7',
+    color: '#166534',
     borderRadius: '8px',
-    padding: '12px 16px',
-    color: '#15803d',
+    padding: '14px 18px',
+    fontWeight: 600,
     fontSize: '14px',
-    fontWeight: 500,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
   },
   phaseHeaderRow: {
     display: 'flex',
@@ -481,60 +468,63 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
+    flexWrap: 'wrap',
   },
   prepBadge: {
-    backgroundColor: '#0284c7',
+    backgroundColor: '#d97706',
     color: '#ffffff',
     fontSize: '11px',
-    fontWeight: 700,
-    padding: '2px 8px',
+    fontWeight: 800,
+    padding: '3px 8px',
     borderRadius: '4px',
-    letterSpacing: '0.4px',
+    letterSpacing: '0.5px',
   },
   recordBadge: {
     backgroundColor: '#dc2626',
     color: '#ffffff',
     fontSize: '11px',
-    fontWeight: 700,
-    padding: '2px 8px',
+    fontWeight: 800,
+    padding: '3px 8px',
     borderRadius: '4px',
-    letterSpacing: '0.4px',
+    letterSpacing: '0.5px',
+    animation: 'pulse 1.5s infinite',
   },
   timerCount: {
-    color: '#0369a1',
-    fontSize: '15px',
+    fontSize: '14px',
+    color: '#92400e',
   },
   timerCountRecord: {
-    color: '#b91c1c',
-    fontSize: '15px',
+    fontSize: '14px',
+    color: '#991b1b',
   },
   skipPrepBtn: {
-    backgroundColor: '#ffffff',
-    color: '#0284c7',
-    border: '1px solid #0284c7',
+    backgroundColor: '#f59e0b',
+    color: '#ffffff',
+    border: 'none',
     borderRadius: '6px',
     padding: '5px 12px',
     fontSize: '12px',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.2s',
+    transition: 'background-color 0.2s',
   },
   progressBarTrack: {
-    height: '8px',
-    backgroundColor: '#e2e8f0',
-    borderRadius: '4px',
+    width: '100%',
+    height: '6px',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: '3px',
     overflow: 'hidden',
   },
   progressBarFillPrep: {
     height: '100%',
-    backgroundColor: '#0284c7',
+    backgroundColor: '#d97706',
+    borderRadius: '3px',
     transition: 'width 1s linear',
   },
   progressBarFillRecord: {
     height: '100%',
     backgroundColor: '#dc2626',
+    borderRadius: '3px',
     transition: 'width 1s linear',
   },
 };
-
-export default PTEQuestionCard;

@@ -12,10 +12,10 @@ interface RubricCriteriaEditorModalProps {
 }
 
 const DEFAULT_DESCRIPTORS: BandDescriptor[] = [
-  { level: 'Xuất sắc (80-90)', score_range: '80 - 90', description: 'Thể hiện hoàn hảo, ngữ điệu tự nhiên, từ vựng chuẩn mực.' },
-  { level: 'Khá (65-79)', score_range: '65 - 79', description: 'Trình bày rõ ràng, đôi lúc có lỗi nhỏ không ảnh hưởng hiểu ý.' },
-  { level: 'Đạt (50-64)', score_range: '50 - 64', description: 'Đáp ứng yêu cầu cơ bản, còn ngập ngừng hoặc thiếu ý phụ.' },
-  { level: 'Cần cải thiện (<50)', score_range: '< 50', description: 'Nhiều sai sót, thiếu tự tin, ngắt quãng kéo dài.' },
+  { level: 'Exceeds standard', score_range: '1.6 - 2.0', description: 'Thể hiện xuất sắc, ngữ điệu và trọng âm tự nhiên, vốn từ phong phú, cấu trúc đa dạng và không có lỗi cản trở giao tiếp.' },
+  { level: 'Meets standard', score_range: '1.0 - 1.55', description: 'Đạt chuẩn yêu cầu, nói rõ ràng, dễ hiểu dù đôi chỗ còn ngập ngừng hoặc có lỗi nhỏ về ngữ pháp, phát âm.' },
+  { level: 'Attempt made', score_range: '0.6 - 0.95', description: 'Có nỗ lực trả lời nhưng diễn đạt hạn chế, ngập ngừng nhiều, mắc lỗi phát âm và ngữ pháp ảnh hưởng đến việc truyền tải ý.' },
+  { level: 'Insufficient evidence', score_range: '0.0 - 0.55', description: 'Không đủ dữ liệu đánh giá, phát âm không thể hiểu được, nói lạc đề hoàn toàn hoặc im lặng không trả lời.' },
 ];
 
 export default function RubricCriteriaEditorModal({
@@ -28,8 +28,8 @@ export default function RubricCriteriaEditorModal({
   const [description, setDescription] = useState('');
   const [guidingQuestion, setGuidingQuestion] = useState('');
   const [scoringMethod, setScoringMethod] = useState('');
-  const [maxScore, setMaxScore] = useState(5);
-  const [weight, setWeight] = useState(33);
+  const [maxScore, setMaxScore] = useState<number>(2.0);
+  const [weight, setWeight] = useState<number>(20);
   const [descriptors, setDescriptors] = useState<BandDescriptor[]>(DEFAULT_DESCRIPTORS);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,16 +39,16 @@ export default function RubricCriteriaEditorModal({
       setDescription(criterion.description || '');
       setGuidingQuestion(criterion.guiding_question || '');
       setScoringMethod(criterion.scoring_method || '');
-      setMaxScore(criterion.max_score || 5);
-      setWeight(criterion.weight);
+      setMaxScore(criterion.max_score ?? 2.0);
+      setWeight(criterion.weight ?? 20);
       setDescriptors(criterion.descriptors?.length ? [...criterion.descriptors] : DEFAULT_DESCRIPTORS);
     } else {
       setName('');
       setDescription('');
       setGuidingQuestion('');
       setScoringMethod('');
-      setMaxScore(5);
-      setWeight(33);
+      setMaxScore(2.0);
+      setWeight(20);
       setDescriptors(DEFAULT_DESCRIPTORS);
     }
     setError(null);
@@ -165,10 +165,11 @@ export default function RubricCriteriaEditorModal({
               </label>
               <input
                 type="number"
-                min={1}
+                min={0.1}
                 max={100}
+                step={0.1}
                 value={maxScore}
-                onChange={(e) => setMaxScore(Number(e.target.value))}
+                onChange={(e) => setMaxScore(parseFloat(e.target.value) || 0)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-emerald-700 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
                 required
               />

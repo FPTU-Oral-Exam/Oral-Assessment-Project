@@ -32,6 +32,7 @@ import { EditTranscriptModal } from './components/EditTranscriptModal';
 import { ScoreOverrideModal } from './components/ScoreOverrideModal';
 import { RequestReEvalModal } from './components/RequestReEvalModal';
 import { ReEvaluationsList } from './components/ReEvaluationsList';
+import { ENTScoreAnalysisModal } from './components/ENTScoreAnalysisModal';
 import { teacherService } from '@/services';
 
 type ResultStatus = 'PENDING' | 'REVIEW_REQUIRED' | 'APPROVED' | 'REJECTED';
@@ -229,110 +230,79 @@ interface RubricGuideItem {
   levels: RubricGuideLevel[];
 }
 
-const PTE_RUBRIC_GUIDES: Record<string, RubricGuideItem> = {
-  content: {
-    key: 'content',
-    title: 'Enabling skill - Content',
-    question: 'Does your response include all the words in the reading text and only these words?',
-    scoringMethod:
-      'Content is scored by counting the number of correct words in your response. Replacements insertions and omissions of words will negatively affect your score.',
+const ENT_RUBRIC_GUIDES: Record<string, RubricGuideItem> = {
+  ideas: {
+    key: 'ideas',
+    title: 'Tiêu chí 1: Ideas (Ý tưởng & Bố cục)',
+    question: 'Thí sinh có phát triển câu trả lời có tổ chức rõ ràng, mở rộng và hỗ trợ ý liên quan đến câu hỏi không?',
+    scoringMethod: 'Đánh giá mức độ phát triển ý tưởng, cấu trúc câu trả lời và độ tập trung theo 4 Band điểm chuẩn FPTU (Thang 2.0).',
     levels: [
-      { score: 5, description: 'All words in the response from the prompt' },
-      { score: 4, description: 'At least 75% of words in the response from the prompt' },
-      { score: 3, description: 'At least 50% of words in the response from the prompt' },
-      { score: 2, description: 'At least 25% of words in the response from the prompt' },
-      { score: 1, description: 'Less than 25% of words in the response from the prompt' },
-      { score: 0, description: 'Almost nothing from the prompt in the response' },
-    ],
-  },
-  oral_fluency: {
-    key: 'oral_fluency',
-    title: 'Enabling skill - Oral fluency',
-    question: 'Does your response demonstrate a smooth, effortless and natural rate of Speech?',
-    scoringMethod:
-      'Oral fluency is scored by determining if your rhythm, phrasing and stress are smooth. The best responses are spoken at a constant and natural rate of speech with appropriate phrasing. Hesitations, repetitions and false starts will negatively affect your score.',
-    levels: [
-      {
-        score: 5,
-        description:
-          'Speech shows smooth rhythm and phrasing. There are no hesitations, repetitions, false starts or non-native phonological simplifications',
-      },
-      {
-        score: 4,
-        description:
-          'Speech has an acceptable rhythm with appropriate phrasing and word emphasis. There is no more than one hesitation, one repetition or a false start. There are no significant non-native phonological simplifications',
-      },
-      {
-        score: 3,
-        description:
-          'Speech is at an acceptable speed but may be uneven. There may be more than one hesitation, but most words are spoken in continuous phrases. There are few repetitions or false starts. There are no long pauses and speech does not sound staccato',
-      },
-      {
-        score: 2,
-        description:
-          'Speech may be uneven or staccato. Speech (if >= 6 words) has at least one smooth three-word run, and no more than two or three hesitations, repetitions or false starts. There may be one long pause, but not two or more',
-      },
-      {
-        score: 1,
-        description:
-          'Speech has irregular phrasing or sentence rhythm. Poor phrasing, staccato or syllabic timing, and/or multiple hesitations, repetitions, and/or false starts make spoken performance notably uneven or discontinuous. Long utterances may have one or two long pauses and inappropriate sentencelevel word emphasis',
-      },
-      {
-        score: 0,
-        description:
-          'Speech is slow and labored with little discernable phrase grouping, multiple hesitations, pauses, false starts, and/or major phonological simplifications. Most words are isolated, and there may be more than one long pause',
-      },
+      { score: 2.0, description: 'Exceeds standard (1.6 - 2.0): Bố cục rõ ràng, phát triển câu trả lời đầy đủ với các ý mở rộng và luận cứ hỗ trợ sắc sảo.' },
+      { score: 1.5, description: 'Meets standard (1.0 - below 1.6): Nêu được các ý liên quan nhưng một số ý phát triển chưa sâu hoặc thiếu tập trung.' },
+      { score: 0.8, description: 'Attempt made (0.6 - below 1.0): Rất ít ý, ý tưởng thiếu tổ chức, một số ý lạc đề.' },
+      { score: 0.0, description: 'Insufficient evidence (0 - below 0.6): Hoàn toàn không có ý tưởng hoặc đa phần lạc đề, không trả lời được.' },
     ],
   },
   pronunciation: {
     key: 'pronunciation',
-    title: 'Enabling skill - Pronunciation',
-    question:
-      'Does your response demonstrate your ability to produce speech sounds in a similar way to most regular speakers of the language?',
-    scoringMethod:
-      'Pronunciation is scored by determining if your speech is easily understandable to most regular speakers of the language. The best responses contain vowels and consonants pronounced in a native-like way, as well as words and phrases stressed correctly. Responses should also be immediately understandable to a regular speaker of the language.',
+    title: 'Tiêu chí 2: Pronunciation (Phát âm & Ngữ điệu)',
+    question: 'Thí sinh có phát âm rõ ràng, chuẩn xác nguyên âm, phụ âm, trọng âm từ và ngữ điệu câu tự nhiên không?',
+    scoringMethod: 'Dung hợp 60% độ tin cậy âm học Whisper với 40% đánh giá biến dạng ngữ âm LLM theo 4 Band chuẩn FPTU (Thang 2.0).',
     levels: [
-      {
-        score: 5,
-        description:
-          'All vowels and consonants are produced in a manner that is easily understood by regular speakers of the language. The speaker uses assimilation and deletions appropriate to continuous speech. Stress is placed correctly in all words and sentence-level stress is fully appropriate',
-      },
-      {
-        score: 4,
-        description:
-          'Vowels and consonants are produced clearly and unambiguously. A few minor consonant, vowel or stress distortions do not affect intelligibility. All words are easily understandable. A few consonants or consonant sequences may be distorted. Stress is placed correctly on all common words, and sentence level stress is reasonable',
-      },
-      {
-        score: 3,
-        description:
-          'Most vowels and consonants are pronounced correctly. Some consistent errors might make a few words unclear. A few consonants in certain contexts may be regularly distorted, omitted or mispronounced. Stressdependent vowel reduction may occur on a few words',
-      },
-      {
-        score: 2,
-        description:
-          'Some consonants and vowels are consistently mispronounced in a nonnative like manner. At least 2/3 of speech is intelligible, but listeners might need to adjust to the accent. Some consonants are regularly omitted, and consonant sequences may be simplified. Stress may be placed incorrectly on some words or be unclear',
-      },
-      {
-        score: 1,
-        description:
-          'Many consonants and vowels are mispronounced, resulting in a strong intrusive foreign accent. Listeners may have difficulty understanding about 1/3 of the words. Many consonants may be distorted or omitted. Consonant sequences may be non-English. Stress is placed in a non-English manner; unstressed words may be reduced or omitted and a few syllables added or missed',
-      },
-      {
-        score: 0,
-        description:
-          'Pronunciation seems completely characteristic of another language. Many consonants and vowels are mispronounced, misordered or omitted. Listeners may find more than 1/2 of the speech unintelligible. Stressed and unstressed syllables are realized in a non-English manner. Several words may have the wrong number of syllables',
-      },
+      { score: 2.0, description: 'Exceeds standard (1.6 - 2.0): Phát âm rõ ràng, gần chuẩn người bản xứ, trọng âm và ngữ điệu tự nhiên, ít ảnh hưởng tiếng mẹ đẻ.' },
+      { score: 1.5, description: 'Meets standard (1.0 - below 1.6): Giọng rõ, dễ hiểu nhưng còn âm sắc tiếng mẹ đẻ, có vài lỗi trọng âm từ và ngữ điệu.' },
+      { score: 0.8, description: 'Attempt made (0.6 - below 1.0): Khá khó hiểu do mắc nhiều lỗi phát âm và sai trọng âm từ.' },
+      { score: 0.0, description: 'Insufficient evidence (0 - below 0.6): Phát âm không thể hiểu được hoặc hoàn toàn không nói.' },
+    ],
+  },
+  grammar: {
+    key: 'grammar',
+    title: 'Tiêu chí 3: Grammar Range & Accuracy (Độ phong phú & Chính xác Ngữ pháp)',
+    question: 'Thí sinh có dùng đa dạng cấu trúc ngữ pháp linh hoạt và phần lớn câu không mắc lỗi không?',
+    scoringMethod: 'Phân tích cú pháp mệnh đề phức/ghép và tỷ lệ câu không lỗi theo 4 Band chuẩn FPTU (Thang 2.0).',
+    levels: [
+      { score: 2.0, description: 'Exceeds standard (1.6 - 2.0): Sử dụng đa dạng cấu trúc linh hoạt. Đa số câu không có lỗi, lỗi nhỏ nếu có không ảnh hưởng đến độ hiểu.' },
+      { score: 1.5, description: 'Meets standard (1.0 - below 1.6): Câu đơn chính xác. Có dùng câu phức nhưng phạm vi hạn chế và có lỗi rõ rệt.' },
+      { score: 0.8, description: 'Attempt made (0.6 - below 1.0): Chỉ dùng được câu đơn giản kèm nhiều lỗi, các lỗi ngữ pháp thường xuyên cản trở việc hiểu.' },
+      { score: 0.0, description: 'Insufficient evidence (0 - below 0.6): Không tạo được câu cơ bản hoặc quá nhiều lỗi ngữ pháp nghiêm trọng.' },
+    ],
+  },
+  vocabulary: {
+    key: 'vocabulary',
+    title: 'Tiêu chí 4: Vocabulary Range & Accuracy (Vốn từ & Độ chuẩn xác từ ngữ)',
+    question: 'Thí sinh có vốn từ vựng phong phú, dùng từ chính xác theo ngữ cảnh và biết paraphrase hiệu quả không?',
+    scoringMethod: 'Dung hợp chỉ số TTR (Type-Token Ratio) với phân tích collocation và từ vựng chuyên môn của LLM (Thang 2.0).',
+    levels: [
+      { score: 2.0, description: 'Exceeds standard (1.6 - 2.0): Vốn từ phong phú, dùng từ chuẩn xác, dùng thành thạo từ ít phổ biến và paraphrase xuất sắc.' },
+      { score: 1.5, description: 'Meets standard (1.0 - below 1.6): Vốn từ đủ thảo luận kéo dài, có thể lặp từ đôi chỗ nhưng ý nghĩa chung rất rõ ràng.' },
+      { score: 0.8, description: 'Attempt made (0.6 - below 1.0): Chỉ dùng từ đơn giản, khó khăn khi chọn từ để nói, thường xuyên dùng sai từ.' },
+      { score: 0.0, description: 'Insufficient evidence (0 - below 0.6): Chỉ nói từ đơn lẻ hoặc câu học vẹt, dùng rất ít từ thuộc chủ đề.' },
+    ],
+  },
+  fluency: {
+    key: 'fluency',
+    title: 'Tiêu chí 5: Fluency & Coherence (Độ trôi chảy & Tính liên kết ý)',
+    question: 'Thí sinh có nói trôi chảy, nhịp độ tự nhiên (WPS), ít ngập ngừng và sử dụng từ nối đa dạng không?',
+    scoringMethod: 'Đo lường tốc độ nói WPS, thời lượng khoảng lặng (≥250ms), số lần filled pauses và từ nối (Thang 2.0).',
+    levels: [
+      { score: 2.0, description: 'Exceeds standard (1.6 - 2.0): Nói trôi chảy (2.0-2.4 WPS), rất ít lặp từ/tự sửa, khoảng dừng tự nhiên để nghĩ ý, dùng đa dạng từ nối.' },
+      { score: 1.5, description: 'Meets standard (1.0 - below 1.6): Sẵn sàng nói dài, đôi lúc ngắt quãng do lặp từ hoặc tự sửa, có dùng từ nối.' },
+      { score: 0.8, description: 'Attempt made (0.6 - below 1.0): Nói chật vật, nhiều khoảng dừng dài, lặp từ liên tục, dùng rất ít từ nối.' },
+      { score: 0.0, description: 'Insufficient evidence (0 - below 0.6): Bài nói rất ngắn, ngập ngừng quá nhiều để nghĩ từ hoặc không nói được.' },
     ],
   },
 };
 
 function getRubricGuide(name: string): RubricGuideItem | null {
   const norm = name.toLowerCase().trim();
-  if (norm.includes('content') || norm.includes('nội dung')) return PTE_RUBRIC_GUIDES.content;
-  if (norm.includes('fluen') || norm.includes('trôi chảy')) return PTE_RUBRIC_GUIDES.oral_fluency;
-  if (norm.includes('pronun') || norm.includes('phát âm')) return PTE_RUBRIC_GUIDES.pronunciation;
+  if (norm.includes('idea') || norm.includes('ý tưởng') || norm.includes('content') || norm.includes('nội dung')) return ENT_RUBRIC_GUIDES.ideas;
+  if (norm.includes('pronun') || norm.includes('phát âm')) return ENT_RUBRIC_GUIDES.pronunciation;
+  if (norm.includes('gram') || norm.includes('ngữ pháp')) return ENT_RUBRIC_GUIDES.grammar;
+  if (norm.includes('vocab') || norm.includes('từ vựng') || norm.includes('lexic')) return ENT_RUBRIC_GUIDES.vocabulary;
+  if (norm.includes('fluen') || norm.includes('trôi chảy') || norm.includes('lưu loát') || norm.includes('coher')) return ENT_RUBRIC_GUIDES.fluency;
   return null;
 }
+
 
 function RubricGuideAccordionContent({ guide }: { guide: RubricGuideItem }) {
   const getBadgeStyle = (score: number) => {
@@ -463,6 +433,7 @@ export default function GradingPage() {
   // Rubric Accordion state
   const [expandedRubricKey, setExpandedRubricKey] = useState<string | null>(null);
   const [expandedAttemptRubricKey, setExpandedAttemptRubricKey] = useState<string | null>(null);
+  const [selectedDetailAttempt, setSelectedDetailAttempt] = useState<AttemptDetail | null>(null);
 
   const fetchResults = async () => {
     try {
@@ -970,16 +941,18 @@ export default function GradingPage() {
                   const isEdited = att.assessment?.transcript_edited;
                   const isOverridden = att.assessment?.manual_override;
 
-                  // Fallback rubric criteria if criteria is empty
+                  // Fallback rubric criteria if criteria is empty (5 ENTs Criteria scale 10.0 / 2.0 each)
                   const hasGradedCriteria = att.assessment?.criteria && att.assessment.criteria.length > 0;
                   const defaultCriteria = (selectedSession as any).snapshot?.criteria || [
-                    { name: 'Content', max_score: 5, weight: 1, description: 'Độ chính xác nội dung, độ bao phủ ý và từ khóa chính' },
-                    { name: 'Oral Fluency', max_score: 5, weight: 1, description: 'Độ trôi chảy, nhịp điệu phát âm, ngắt nghỉ câu tự nhiên' },
-                    { name: 'Pronunciation', max_score: 5, weight: 1, description: 'Độ chuẩn xác nguyên âm, phụ âm và trọng âm từ' },
+                    { name: 'Ideas', max_score: 2.0, weight: 20, description: 'Phát triển ý sâu, trả lời đúng trọng tâm và mở rộng luận điểm logic' },
+                    { name: 'Pronunciation', max_score: 2.0, weight: 20, description: 'Độ rõ ràng, ngữ điệu, trọng âm từ và mức độ ảnh hưởng của tiếng mẹ đẻ' },
+                    { name: 'Grammar Range and Accuracy', max_score: 2.0, weight: 20, description: 'Độ phong phú cấu trúc ngữ pháp và độ chính xác của câu' },
+                    { name: 'Vocabulary Range and Accuracy', max_score: 2.0, weight: 20, description: 'Vốn từ vựng, độ chuẩn xác ngữ nghĩa và khả năng diễn đạt linh hoạt' },
+                    { name: 'Fluency and coherence', max_score: 2.0, weight: 20, description: 'Độ trôi chảy, tốc độ nói tự nhiên, ít khoảng lặng và liên kết câu chặt chẽ' },
                   ];
                   const displayCriteria = (hasGradedCriteria ? att.assessment!.criteria! : defaultCriteria).map((c: any) => ({
                     ...c,
-                    max_score: c.name.toLowerCase().includes('content') ? 5 : (c.max_score || 5)
+                    max_score: c.max_score !== undefined ? c.max_score : 2.0
                   }));
 
                   return (
@@ -1147,8 +1120,17 @@ export default function GradingPage() {
                         </div>
                       )}
 
-                      {/* Question Action Buttons: Sửa transcript, Can thiệp điểm, Yêu cầu thẩm định */}
+                      {/* Question Action Buttons: Xem chi tiết ENTs, Sửa transcript, Can thiệp điểm, Yêu cầu thẩm định */}
                       <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200/60">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDetailAttempt(att)}
+                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Chi tiết 5 Tiêu chí ENTs</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={() =>
@@ -1281,6 +1263,36 @@ export default function GradingPage() {
           onSuccess={() => {
             setToastMessage('Đã gửi yêu cầu thẩm định chấm chéo độc lập thành công.');
             setTimeout(() => setToastMessage(null), 4000);
+          }}
+        />
+      )}
+
+      {/* ENT Score Analysis Modal */}
+      {selectedDetailAttempt && (
+        <ENTScoreAnalysisModal
+          isModal={true}
+          onClose={() => setSelectedDetailAttempt(null)}
+          data={{
+            attempt_id: selectedDetailAttempt.id,
+            sequence: selectedDetailAttempt.sequence,
+            question_title: `Câu ${selectedDetailAttempt.sequence || 1}`,
+            question_prompt: selectedDetailAttempt.question?.text,
+            transcript: selectedDetailAttempt.transcript || '',
+            stt_confidence: selectedDetailAttempt.stt_confidence,
+            score: selectedDetailAttempt.assessment?.score ?? 0,
+            review_required: selectedDetailAttempt.assessment?.review_required,
+            criteria: (selectedDetailAttempt.assessment?.criteria || []).map((c: any) => ({
+              name: c.name,
+              score: c.score,
+              max_score: c.max_score || 2.0,
+              weight: c.weight,
+              band: c.band,
+              comment: c.comment || c.feedback,
+              description: c.description,
+            })),
+            enhanced_metrics: selectedDetailAttempt.assessment?.enhanced_metrics,
+            reasoning_summary: selectedDetailAttempt.assessment?.reasoning_summary,
+            feedback: selectedDetailAttempt.assessment?.reasoning_summary,
           }}
         />
       )}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { UploadProgress, QuestionNav, CameraPreview, PTEQuestionCard } from '../components';
-import type { PTEPhase } from '../components/PTEQuestionCard';
+import { UploadProgress, QuestionNav, CameraPreview, SpeakingQuestionCard, PTEQuestionCard } from '../components';
+import type { SpeakingPhase, PTEPhase } from '../components';
 import { playPTEBeep } from '../lib/pte-audio';
 import { useRecording, createCleanAudioBlob } from '../hooks/useRecording';
 import { useChunkedUpload } from '../hooks/useChunkedUpload';

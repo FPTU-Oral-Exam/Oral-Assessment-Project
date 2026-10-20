@@ -143,7 +143,7 @@ export default function RubricsStudioPanel() {
               Thang điểm chuẩn:
             </label>
             <div className="w-full bg-slate-50 border border-slate-200 text-xs font-mono text-emerald-700 px-3 py-2 rounded-xl font-bold">
-              90 điểm chuẩn (PTE Scale)
+              Thang điểm 10.0 (5 Tiêu chí ENTs x 2.0đ)
             </div>
           </div>
 

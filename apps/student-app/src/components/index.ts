@@ -4,4 +4,5 @@ export { QuestionNav } from './QuestionNav';
 export { CameraPreview } from './CameraPreview';
 export { AudioLevel } from './AudioLevel';
 export { ExamCard } from './ExamCard';
-export { PTEQuestionCard } from './PTEQuestionCard';
+export { SpeakingQuestionCard, PTEQuestionCard } from './SpeakingQuestionCard';
+export type { SpeakingPhase, PTEPhase } from './SpeakingQuestionCard';

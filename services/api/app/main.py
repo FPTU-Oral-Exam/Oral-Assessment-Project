@@ -17,7 +17,6 @@ from . import (
     google_login,
     routes_academy,
     routes_admin,
-    routes_demo_grading,
     routes_exam,
     routes_examiner,
     routes_teacher,
@@ -249,7 +248,6 @@ app.include_router(routes_teacher.router, tags=["Teacher Portal"])
 app.include_router(routes_teacher.router, prefix="/api", include_in_schema=False)
 app.include_router(stt.router, tags=["Speech to text"])
 app.include_router(speech.router, tags=["Speech configuration"])
-app.include_router(routes_demo_grading.router, prefix="/demo", tags=["Demo Grading"])
 
 app.include_router(runtime_settings.router, tags=["Platform settings"])
 app.include_router(google_login.router, tags=["Google sign in"])

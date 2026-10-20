@@ -84,8 +84,18 @@ def test_grading_schema_creates_bound_model_for_ents():
     assert schema is not None
 
 
+def test_resolve_criterion_band_thresholds():
+    assert ai.resolve_criterion_band(1.8, 2.0) == "Exceeds standard"
+    assert ai.resolve_criterion_band(1.6, 2.0) == "Exceeds standard"
+    assert ai.resolve_criterion_band(1.4, 2.0) == "Meets standard"
+    assert ai.resolve_criterion_band(1.0, 2.0) == "Meets standard"
+    assert ai.resolve_criterion_band(0.8, 2.0) == "Attempt made"
+    assert ai.resolve_criterion_band(0.6, 2.0) == "Attempt made"
+    assert ai.resolve_criterion_band(0.4, 2.0) == "Insufficient evidence"
+    assert ai.resolve_criterion_band(0.0, 2.0) == "Insufficient evidence"
+
+
 def test_ai_grade_demo_mode(monkeypatch):
-    # In demo mode, ai.grade returns structured assessment with rubric criteria
     chunks = [{"id": "c1", "heading": "Activities", "content": "Going to school and reading books."}]
     question = {"text": "What is your typical day like?"}
     transcript = "I usually wake up at 7 AM and go to university with my friends."
@@ -93,3 +103,4 @@ def test_ai_grade_demo_mode(monkeypatch):
     assert res["status"] in ["NOT_GRADED", "COMPLETED"]
     assert "rubric_criteria" in res
     assert len(res["rubric_criteria"]) == 5
+

@@ -3,7 +3,6 @@
 import { FluencyMetricsPanel } from './FluencyMetricsPanel';
 import { PronunciationMetricsPanel } from './PronunciationMetricsPanel';
 import { LexicalMetricsPanel } from './LexicalMetricsPanel';
-import { PTEScoreAnalysisModal } from './PTEScoreAnalysisModal';
 import {
   Activity,
   Mic2,
@@ -52,10 +51,8 @@ interface EnhancedMetrics {
     vocabulary_level: string;
     vocabulary_description: string;
   } | null;
-  pte_read_aloud?: any;
-  pte_repeat_sentence?: any;
-  pte_describe_image?: any;
 }
+
 
 interface EnhancedMetricsPanelProps {
   metrics: EnhancedMetrics | null;
@@ -116,63 +113,6 @@ export function EnhancedMetricsPanel({
 
   return (
     <div className="space-y-4">
-      {/* Official PTE Repeat Sentence Card */}
-      {metrics.pte_repeat_sentence && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-              Đánh giá chuẩn PTE Academic: Part 2 (Repeat Sentence)
-            </span>
-          </div>
-          <PTEScoreAnalysisModal
-            data={{
-              ...metrics.pte_repeat_sentence,
-              student_audio_url: studentAudioUrl,
-              real_audio_url: metrics.pte_repeat_sentence.real_audio_url || realAudioUrl || '/audio/pte_rs_prompt.wav',
-            }}
-          />
-        </div>
-      )}
-
-      {/* Official PTE Describe Image Card */}
-      {metrics.pte_describe_image && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-              Đánh giá chuẩn PTE Academic: Part 3 (Describe Image)
-            </span>
-          </div>
-          <PTEScoreAnalysisModal
-            data={{
-              ...metrics.pte_describe_image,
-              student_audio_url: studentAudioUrl,
-              image_url: metrics.pte_describe_image.image_url || '/images/air_composition_pie_chart.svg',
-            }}
-          />
-        </div>
-      )}
-
-      {/* Official PTE Read Aloud Card */}
-      {metrics.pte_read_aloud && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-              Đánh giá chuẩn PTE Academic: Part 1 (Read Aloud)
-            </span>
-          </div>
-          <PTEScoreAnalysisModal
-            data={{
-              ...metrics.pte_read_aloud,
-              student_audio_url: studentAudioUrl,
-              real_audio_url: metrics.pte_read_aloud.real_audio_url || realAudioUrl || '/audio/pte_ra_prompt.wav',
-            }}
-          />
-        </div>
-      )}
-
       {/* Header with Radar Chart */}
       <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200">
         <div className="flex items-center justify-between mb-3">

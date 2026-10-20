@@ -15,11 +15,6 @@ from . import (
     fluency,
     metrics,
     pronunciation_wer,
-    pte_describe_image,
-    pte_group_discussion,
-    pte_read_aloud,
-    pte_repeat_sentence,
-    pte_retell_lecture,
     runtime_settings,
     speech,
     storage,
@@ -146,168 +141,16 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
     )
     expected_points = q_dict.get('expected_points', []) if isinstance(q_dict.get('expected_points'), list) else []
 
-    # If this question is a PTE task, evaluate with appropriate PTE Engine
-    pte_result = None
-    pte_rs_result = None
-    pte_sgd_result = None
-    pte_di_result = None
-    pte_rts_result = None
-    pte_rl_result = None
-
-    q_part_type = (
-        q_dict.get("part_type") or 
-        q_dict.get("type") or 
-        q_dict.get("question_type") or 
-        ""
-    ).upper()
-    q_part_num = q_dict.get("part") or q_dict.get("part_number") or 0
-    q_title = (q_dict.get("title") or "").lower()
-    q_instruction = (q_dict.get("instruction") or "").lower()
-    seq_num = getattr(attempt, "sequence", 0)
-
-    is_part_1 = (
-        q_part_type in ["READ_ALOUD", "PTE_READ_ALOUD", "RA", "PART_1", "PART1"] or
-        q_part_num == 1 or
-        seq_num == 1 or
-        "read aloud" in q_title or
-        "read aloud" in q_instruction
-    )
-
-    is_part_2 = (
-        q_part_type in ["REPEAT_SENTENCE", "PTE_REPEAT_SENTENCE", "RS", "PART_2", "PART2"] or
-        q_part_num == 2 or
-        seq_num == 2 or
-        "repeat sentence" in q_title or
-        "repeat sentence" in q_instruction or
-        "repeat after" in q_instruction
-    )
-
-    is_part_3 = (
-        q_part_type in ["SUMMARIZE_GROUP_DISCUSSION", "GROUP_DISCUSSION", "PTE_GROUP_DISCUSSION", "SGD", "PART_3", "PART3"] or
-        q_part_num == 3 or
-        seq_num == 3 or
-        "group discussion" in q_title or
-        "group discussion" in q_instruction or
-        "having a discussion" in q_instruction
-    )
-
-    is_part_4 = (
-        q_part_type in ["DESCRIBE_IMAGE", "PTE_DESCRIBE_IMAGE", "DI", "PART_4", "PART4"] or
-        q_part_num == 4 or
-        seq_num == 4 or
-        "describe image" in q_title or
-        "describe image" in q_instruction or
-        "describe picture" in q_title or
-        "describe picture" in q_instruction or
-        bool(q_dict.get("image_url")) or
-        bool(q_dict.get("prompt_image")) or
-        bool(q_dict.get("image"))
-    )
-
-    is_part_5 = (
-        q_part_type in ["RESPOND_TO_SITUATION", "PTE_RESPOND_TO_SITUATION", "SITUATION", "RTS", "PART_5", "PART5"] or
-        q_part_num == 5 or
-        seq_num == 5 or
-        "situation" in q_title or
-        "situation" in q_instruction
-    )
-
-    is_part_6 = (
-        q_part_type in ["RETELL_LECTURE", "PTE_RETELL_LECTURE", "LECTURE", "RL", "PART_6", "PART6"] or
-        q_part_num == 6 or
-        seq_num == 6 or
-        "retell lecture" in q_title or
-        "retell lecture" in q_instruction or
-        "lecture" in q_title or
-        "lecture" in q_instruction
-    )
-
-    if is_part_4 and transcript:
-        try:
-            di_keywords = q_dict.get("keywords") or q_dict.get("expected_concepts") or q_dict.get("key_terms") or ["Nitrogen", "Oxygen"]
-            di_sample = q_dict.get("sample_answer") or reference_text or ""
-            di_image = q_dict.get("prompt_image") or q_dict.get("image_url") or q_dict.get("image") or ""
-            pte_di_result = pte_describe_image.evaluate_pte_describe_image(
-                student_transcript=transcript,
-                keywords=di_keywords,
-                sample_answer=di_sample,
-                image_url=di_image,
-                segments=segments,
-                duration_seconds=duration_seconds,
-                stt_confidence=confidence or 0.85
-            )
-        except Exception as e:
-            log.warning("pte_di_scoring_failed attempt=%s error=%s", attempt.id, str(e))
-    elif is_part_3 and transcript:
-        try:
-            pte_sgd_result = pte_group_discussion.calculate_pte_group_discussion_score(
-                student_transcript=transcript,
-                discussion_text=reference_text or pte_group_discussion.DEFAULT_SGD_DISCUSSION_TEXT,
-                duration_sec=duration_seconds or 40.0,
-                audio_confidence=confidence or 0.85,
-            )
-        except Exception as e:
-            log.warning("pte_sgd_scoring_failed attempt=%s error=%s", attempt.id, str(e))
-    elif is_part_6 and transcript:
-        try:
-            pte_rl_result = pte_retell_lecture.evaluate_pte_retell_lecture(
-                student_transcript=transcript,
-                lecture_transcript=reference_text or pte_retell_lecture.DEFAULT_RETELL_LECTURE_TEXT,
-                duration_seconds=duration_seconds or 40.0,
-                stt_confidence=confidence or 0.85,
-            )
-        except Exception as e:
-            log.warning("pte_rl_scoring_failed attempt=%s error=%s", attempt.id, str(e))
-    elif is_part_5 and transcript:
-        try:
-            exp_kws = q_dict.get("expected_concepts") or q_dict.get("key_terms") or ["apologize", "wallet", "banking", "payment"]
-            lower_tr = transcript.lower()
-            matched = [kw for kw in exp_kws if kw.lower() in lower_tr]
-            matched_ratio = len(matched) / max(1, len(exp_kws))
-            c_score = 5.0 if matched_ratio >= 0.6 else (4.0 if matched_ratio >= 0.4 else (3.0 if matched_ratio >= 0.2 else (2.0 if len(transcript.split()) >= 5 else 1.0)))
-            f_score = min(5.0, max(1.0, round(((fluency_result.get('fluency_score', 70) if fluency_result else 75) / 100) * 5, 1)))
-            p_score = min(5.0, max(1.0, round((confidence or 0.85) * 5, 1)))
-            tot = c_score + f_score + p_score
-            pte_rts_result = {
-                "overall": {
-                    "score_10": round((tot / 15.0) * 10.0, 1),
-                    "score_90": round(10.0 + (tot / 15.0) * 80.0, 1),
-                    "total_points": round(tot, 1),
-                },
-                "scores": {
-                    "content": {"score": c_score, "max_score": 5, "comment": f"Đã thể hiện {len(matched)}/{len(exp_kws)} ý chính của tình huống."},
-                    "oral_fluency": {"score": f_score, "max_score": 5, "comment": "Tốc độ nói và ngắt nghỉ tự nhiên khi phản xạ tình huống."},
-                    "pronunciation": {"score": p_score, "max_score": 5, "comment": "Độ rõ ràng của phát âm và trọng âm từ."},
-                },
-                "feedback": f"Respond to Situation: {round(10.0 + (tot / 15.0) * 80.0, 1)}/90 ({round(tot, 1)}/15 pts). Content ({c_score}/5), Fluency ({f_score}/5), Pronunciation ({p_score}/5)"
-            }
-        except Exception as e:
-            log.warning("pte_rts_scoring_failed attempt=%s error=%s", attempt.id, str(e))
-    elif reference_text and transcript:
+    # Analyze pronunciation alignment if reference text is present
+    if reference_text and transcript:
         try:
             pronunciation_result = pronunciation_wer.grade_reading_aloud(
                 reference_text=reference_text,
                 hypothesis_text=transcript,
-                avg_logprob=confidence
+                avg_logprob=confidence,
             )
-            if is_part_2:
-                pte_rs_result = pte_repeat_sentence.evaluate_pte_repeat_sentence(
-                    reference_text=reference_text,
-                    student_transcript=transcript,
-                    segments=segments,
-                    duration_seconds=duration_seconds,
-                    stt_confidence=confidence or 0.9
-                )
-            else:
-                pte_result = pte_read_aloud.evaluate_pte_read_aloud(
-                    reference_text=reference_text,
-                    student_transcript=transcript,
-                    segments=segments,
-                    duration_seconds=duration_seconds,
-                    stt_confidence=confidence or 0.9
-                )
         except Exception as e:
-            log.warning("pte_scoring_failed attempt=%s error=%s", attempt.id, str(e))
+            log.warning("pronunciation_wer_failed attempt=%s error=%s", attempt.id, str(e))
 
     # ============================================================
     # EVIDENCE RETRIEVAL
@@ -323,6 +166,12 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
                 "heading": "Ý trả lời cốt lõi (Expected Points)",
                 "content": "\n".join(f"- {pt}" for pt in q.get("expected_points", []))
             })
+        if q.get("key_points"):
+            chunks.append({
+                "id": f"guiding-{q.get('item_id', 'ans')}",
+                "heading": "Câu hỏi / Gợi ý định hướng (Guiding Points)",
+                "content": "\n".join(f"- {pt}" for pt in q.get("key_points", []))
+            })
         if q.get("key_terms"):
             chunks.append({
                 "id": f"terms-{q.get('item_id', 'ans')}",
@@ -333,7 +182,7 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
             chunks.append({
                 "id": f"prompt-{q.get('item_id', 'q')}",
                 "heading": "Nội dung câu hỏi",
-                "content": q.get("text", "")
+                "content": q.get("text", "") or q.get("prompt", "")
             })
     else:
         chunks = ai.retrieve(
@@ -346,10 +195,9 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
         )
 
     # ============================================================
-    # ENHANCED LLM GRADING
+    # ENHANCED LLM GRADING & METRICS
     # ============================================================
 
-    # Build enhanced prompt with metrics if available
     enhanced_metrics = None
     if fluency_result:
         try:
@@ -358,11 +206,7 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
                 pronunciation_result=pronunciation_result,
                 transcript=transcript or ""
             )
-
-            # Get transcript with pauses
             transcript_with_pauses = fluency_result.get('transcript_with_pauses', transcript or '')
-
-            # Build calibrated prompt
             prompt_data = metrics.build_calibrated_prompt(
                 transcript=transcript or "",
                 transcript_with_pauses=transcript_with_pauses,
@@ -370,7 +214,6 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
                 metrics=grading_metrics,
                 context_chunks=chunks[:3] if chunks else None
             )
-
             enhanced_metrics = {
                 "fluency": fluency_result,
                 "pronunciation": pronunciation_result,
@@ -381,10 +224,6 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
         except Exception as e:
             log.warning("enhanced_prompt_failed attempt=%s error=%s", attempt.id, str(e))
 
-    # ============================================================
-    # STANDARD LLM GRADING
-    # ============================================================
-
     if db is not None:
         attempt.status = "GRADING"
         try:
@@ -392,181 +231,93 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
         except Exception:
             pass
 
-    is_ents_rubric = any(
-        c.get("name") in [
-            "Ideas",
-            "Grammar Range and Accuracy",
-            "Vocabulary Range and Accuracy",
-            "Fluency and coherence",
-        ]
-        for c in snapshot.get("criteria", [])
-    )
-
-    active_pte = None if is_ents_rubric else (pte_di_result or pte_rs_result or pte_result or pte_sgd_result or pte_rts_result or pte_rl_result)
-
-    if active_pte:
-        assessment = {
-            "model": "pte-standard-engine",
-            "prompt_version": 1,
-            "retrieved_chunks": chunks,
-            "rubric_criteria": snapshot.get("criteria", []),
-            "review_required": False,
-            "score": active_pte["overall"]["score_10"],
-            "pte_score_90": active_pte["overall"]["score_90"],
-            "pte_total_points": active_pte["overall"]["total_points"],
-            "status": "COMPLETED",
+    try:
+        assessment = ai.grade(
+            attempt.question,
+            transcript,
+            snapshot["criteria"],
+            chunks,
+            confidence if attempt.finished_at <= session.started_at + exam.time_limit else 0,
+        ) | {
             "rubric_version": snapshot.get("rubric_version", 1),
             "knowledge_version": snapshot.get("knowledge_version", "item-bank-v1"),
         }
-    else:
-        try:
-            assessment = ai.grade(
-                attempt.question,
-                transcript,
-                snapshot["criteria"],
-                chunks,
-                confidence if attempt.finished_at <= session.started_at + exam.time_limit else 0,
-            ) | {
-                "rubric_version": snapshot.get("rubric_version", 1),
-                "knowledge_version": snapshot.get("knowledge_version", "item-bank-v1"),
-            }
-        except Exception as e:
-            log.warning("llm_grading_skipped_or_failed attempt=%s error=%s", attempt.id, str(e))
-            assessment = {
-                "model": "rule-fallback",
-                "rubric_version": snapshot.get("rubric_version", 1),
-                "knowledge_version": snapshot.get("knowledge_version", "item-bank-v1"),
-                "status": "COMPLETED",
-                "score": 5.0,
-                "review_required": False,
-                "criteria": [],
-            }
-
-
-    # ============================================================
-    # MERGE ENHANCED METRICS & PTE STANDARDIZED SCORES
-    # ============================================================
-
-    if enhanced_metrics or pte_di_result or pte_rs_result or pte_result or pte_sgd_result or pte_rts_result or pte_rl_result or pronunciation_result:
-        fluency_obj = (enhanced_metrics or {}).get("fluency", {})
-        assessment["enhanced_metrics"] = {
-            "fluency": {
-                "score": fluency_obj.get('fluency_score'),
-                "speech_rate_wps": fluency_obj.get('speech_rate_wps'),
-                "speech_rate_status": fluency_obj.get('speech_rate_status'),
-                "pause_count": fluency_obj.get('pause_count'),
-                "pause_ratio": fluency_obj.get('pause_ratio_per_word'),
-                "filled_pause_count": fluency_obj.get('filled_pause_count'),
-                "transcript_with_pauses": fluency_obj.get('transcript_with_pauses')
-            } if fluency_obj else None,
-            "pronunciation": pronunciation_result if pronunciation_result else None,
-            "lexical": (enhanced_metrics or {}).get("lexical"),
-            "pte_read_aloud": pte_result if pte_result else None,
-            "pte_repeat_sentence": pte_rs_result if pte_rs_result else None,
-            "pte_describe_image": pte_di_result if pte_di_result else None,
-            "pte_group_discussion": pte_sgd_result if pte_sgd_result else None,
-            "pte_respond_situation": pte_rts_result if pte_rts_result else None,
-            "pte_retell_lecture": pte_rl_result if pte_rl_result else None,
+    except Exception as e:
+        log.warning("llm_grading_skipped_or_failed attempt=%s error=%s", attempt.id, str(e))
+        fallback_criteria = []
+        for c in snapshot.get("criteria", []):
+            max_s = float(c.get("max_score", 2.0))
+            fallback_score = round(max_s * 0.5, 1)
+            fallback_criteria.append({
+                "name": c["name"],
+                "score": fallback_score,
+                "max_score": max_s,
+                "weight": float(c.get("weight", 20.0)),
+                "band": ai.resolve_criterion_band(fallback_score, max_s, c.get("descriptors")),
+                "comment": "Chấm tự động mặc định khi LLM gián đoạn. Cần Giảng viên xem lại.",
+            })
+        tot_fallback = sum(c["score"] for c in fallback_criteria)
+        assessment = {
+            "model": "rule-fallback",
+            "rubric_version": snapshot.get("rubric_version", 1),
+            "knowledge_version": snapshot.get("knowledge_version", "item-bank-v1"),
+            "status": "COMPLETED",
+            "score": round(tot_fallback, 1),
+            "review_required": True,
+            "criteria": fallback_criteria,
+            "feedback": "Bài thi đang chờ Giảng viên chấm duyệt lại do mô hình AI gián đoạn.",
+            "reasoning_summary": "Rule fallback due to LLM error",
         }
 
-        if is_ents_rubric and assessment.get("criteria"):
-            for crit in assessment["criteria"]:
-                c_name = crit.get("name", "")
-                if c_name == "Fluency and coherence" and fluency_obj:
-                    wps = fluency_obj.get("speech_rate_wps") or 2.0
-                    pauses = fluency_obj.get("pause_count") or 0
-                    if (wps < 1.2 or pauses > 6) and crit.get("score", 0) > 0.95:
-                        crit["score"] = 0.9
-                        crit["band"] = ai.resolve_criterion_band(crit["score"], 2.0)
-                        crit["comment"] = (crit.get("comment", "") + " (Tốc độ nói còn chậm hoặc nhiều khoảng dừng dài).").strip()
-                elif c_name == "Pronunciation" and confidence is not None:
-                    blended_p = round(min(2.0, max(0.0, 0.6 * (confidence * 2.0) + 0.4 * crit.get("score", 1.0))), 2)
-                    crit["score"] = blended_p
-                    crit["band"] = ai.resolve_criterion_band(crit["score"], 2.0)
+    # ============================================================
+    # HYBRID CALIBRATION: ACOUSTIC & SPEECH METRICS
+    # ============================================================
 
-            tot = sum(c.get("score", 0.0) for c in assessment["criteria"])
-            assessment["score"] = round(min(10.0, max(0.0, tot)), 1)
-            assessment["status"] = "COMPLETED"
-            assessment["review_required"] = bool(
-                (confidence is not None and confidence < 0.40) or
-                any(c.get("band") == "Insufficient evidence" for c in assessment["criteria"])
-            )
-            assessment["feedback"] = " | ".join(f"{c['name']} ({c['score']}/2): {c.get('band', '')}" for c in assessment["criteria"])
-            assessment["reasoning_summary"] = assessment["feedback"]
-        elif active_pte:
-            assessment['score'] = active_pte["overall"]["score_10"]
-            assessment['pte_score_90'] = active_pte["overall"]["score_90"]
-            assessment['pte_total_points'] = active_pte["overall"]["total_points"]
-            assessment['status'] = "COMPLETED"
-            assessment['review_required'] = bool(confidence is not None and confidence < 0.40)
+    fluency_obj = (enhanced_metrics or {}).get("fluency") or fluency_result
+    assessment["enhanced_metrics"] = {
+        "fluency": {
+            "score": fluency_obj.get('fluency_score') if fluency_obj else None,
+            "speech_rate_wps": fluency_obj.get('speech_rate_wps') if fluency_obj else None,
+            "speech_rate_status": fluency_obj.get('speech_rate_status') if fluency_obj else None,
+            "pause_count": fluency_obj.get('pause_count') if fluency_obj else None,
+            "pause_ratio": fluency_obj.get('pause_ratio_per_word') if fluency_obj else None,
+            "filled_pause_count": fluency_obj.get('filled_pause_count') if fluency_obj else None,
+            "transcript_with_pauses": fluency_obj.get('transcript_with_pauses') if fluency_obj else None,
+        } if fluency_obj else None,
+        "pronunciation": {
+            "acoustic_confidence": confidence,
+            "details": pronunciation_result,
+        } if (confidence is not None or pronunciation_result) else None,
+        "lexical": (enhanced_metrics or {}).get("lexical"),
+    }
 
-            raw_c = active_pte["scores"]["content"]["score"]
-            raw_c_max = active_pte["scores"]["content"].get("max_score", 5)
-            scaled_c = round(min(5.0, (raw_c / raw_c_max) * 5.0), 1) if raw_c_max > 0 else 0.0
+    if assessment.get("criteria"):
+        for crit in assessment["criteria"]:
+            c_name = crit.get("name", "")
+            c_max = float(crit.get("max_score", 2.0))
+            if c_name == "Fluency and coherence" and fluency_obj:
+                wps = fluency_obj.get("speech_rate_wps") or 2.0
+                pauses = fluency_obj.get("pause_count") or 0
+                if (wps < 1.2 or pauses > 6) and crit.get("score", 0) > (c_max * 0.48):
+                    crit["score"] = round(c_max * 0.45, 1)  # e.g. 0.9 / 2.0
+                    crit["band"] = ai.resolve_criterion_band(crit["score"], c_max)
+                    crit["comment"] = (crit.get("comment", "") + " (Tốc độ nói còn chậm hoặc nhiều khoảng dừng dài).").strip()
+            elif c_name == "Pronunciation" and confidence is not None:
+                blended_p = round(min(c_max, max(0.0, 0.6 * (confidence * c_max) + 0.4 * crit.get("score", c_max * 0.5))), 2)
+                crit["score"] = blended_p
+                crit["band"] = ai.resolve_criterion_band(crit["score"], c_max)
 
-            raw_f = round(float(active_pte["scores"]["oral_fluency"]["score"]), 1)
-            raw_p = round(float(active_pte["scores"]["pronunciation"]["score"]), 1)
-
-            assessment['criteria'] = [
-                {
-                    "name": "Content",
-                    "score": scaled_c,
-                    "max_score": 5,
-                    "weight": 1,
-                    "comment": active_pte["scores"]["content"].get("comment", "")
-                },
-                {
-                    "name": "Oral Fluency",
-                    "score": raw_f,
-                    "max_score": 5,
-                    "weight": 1,
-                    "comment": active_pte["scores"]["oral_fluency"].get("comment", "")
-                },
-                {
-                    "name": "Pronunciation",
-                    "score": raw_p,
-                    "max_score": 5,
-                    "weight": 1,
-                    "comment": active_pte["scores"]["pronunciation"].get("comment", "")
-                }
-            ]
-            feedback_str = active_pte.get("feedback") or (
-                f"Content ({scaled_c}/5): {active_pte['scores']['content'].get('comment', '')} | "
-                f"Fluency ({raw_f}/5): {active_pte['scores']['oral_fluency'].get('comment', '')} | "
-                f"Pronunciation ({raw_p}/5): {active_pte['scores']['pronunciation'].get('comment', '')}"
-            )
-            assessment['feedback'] = feedback_str
-            assessment['reasoning_summary'] = feedback_str
-        elif pronunciation_result and pronunciation_result.get('is_valid', True):
-            p_score = round(min(5.0, (pronunciation_result.get('score', 50) / 100) * 5), 1)
-            f_score = round(min(5.0, ((fluency_obj.get('fluency_score', 60) if fluency_obj else 60) / 100) * 5), 1)
-            c_score = 4.0 if transcript and len(transcript.split()) >= 4 else 2.5
-            tot = c_score + f_score + p_score
-            assessment['score'] = round((tot / 15.0) * 10.0, 1)
-            assessment['pte_score_90'] = round(10.0 + (tot / 15.0) * 80.0, 1)
-            assessment['status'] = "COMPLETED"
-            assessment['review_required'] = bool(confidence is not None and confidence < 0.40)
-            assessment['criteria'] = [
-                {"name": "Content", "score": c_score, "max_score": 5, "weight": 1, "comment": "Đạt nội dung theo nhận diện âm thanh."},
-                {"name": "Oral Fluency", "score": f_score, "max_score": 5, "weight": 1, "comment": "Tốc độ và độ trôi chảy khi nói."},
-                {"name": "Pronunciation", "score": p_score, "max_score": 5, "weight": 1, "comment": "Phát âm dựa trên độ tương đồng ngữ âm."},
-            ]
-            assessment['reasoning_summary'] = f"Chấm tự động: Content {c_score}/5, Fluency {f_score}/5, Pronunciation {p_score}/5."
-        elif fluency_obj:
-            f_score = round(min(5.0, (fluency_obj.get('fluency_score', 60) / 100) * 5), 1)
-            p_score = round(min(5.0, (confidence or 0.8) * 5), 1)
-            c_score = 3.5
-            tot = c_score + f_score + p_score
-            assessment['score'] = round((tot / 15.0) * 10.0, 1)
-            assessment['pte_score_90'] = round(10.0 + (tot / 15.0) * 80.0, 1)
-            assessment['status'] = "COMPLETED"
-            assessment['review_required'] = bool(confidence is not None and confidence < 0.40)
-            assessment['criteria'] = [
-                {"name": "Content", "score": c_score, "max_score": 5, "weight": 1, "comment": "Độ bao phủ nội dung trả lời."},
-                {"name": "Oral Fluency", "score": f_score, "max_score": 5, "weight": 1, "comment": "Độ trôi chảy từ tín hiệu giọng nói."},
-                {"name": "Pronunciation", "score": p_score, "max_score": 5, "weight": 1, "comment": "Phát âm theo độ tin cậy nhận diện."},
-            ]
-            assessment['reasoning_summary'] = f"Chấm tự động: Content {c_score}/5, Fluency {f_score}/5, Pronunciation {p_score}/5."
+        tot = sum(c.get("score", 0.0) for c in assessment["criteria"])
+        assessment["score"] = round(min(10.0, max(0.0, tot)), 1)
+        assessment["status"] = "COMPLETED"
+        has_insufficient = any(c.get("band") == "Insufficient evidence" for c in assessment["criteria"])
+        assessment["review_required"] = bool(
+            (confidence is not None and confidence < 0.40) or
+            has_insufficient or
+            assessment.get("review_required", False)
+        )
+        assessment["feedback"] = " | ".join(f"{c['name']} ({c['score']}/{int(c.get('max_score', 2))}): {c.get('band', '')}" for c in assessment["criteria"])
+        assessment["reasoning_summary"] = assessment["feedback"]
 
     # Check confidence threshold
     if confidence is not None and confidence < 0.40:
