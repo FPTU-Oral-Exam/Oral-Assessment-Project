@@ -1,5 +1,5 @@
 import React from 'react';
-import ItemBankClient from './ItemBankClient';
+import { ItemBankManager } from '@/components/academic';
 
 export const metadata = {
   title: 'Ngân hàng Đề thi & Câu hỏi ENTs · OralAI Academic',
@@ -7,5 +7,5 @@ export const metadata = {
 };
 
 export default function ItemBankPage() {
-  return <ItemBankClient />;
+  return <ItemBankManager />;
 }

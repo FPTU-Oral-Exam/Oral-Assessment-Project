@@ -1,5 +1,5 @@
 import React from 'react';
-import ExamMatrixPanel from '@/components/academic/ExamMatrixPanel';
+import { ExamMatrixPanel } from '@/components/academic';
 
 export const metadata = {
   title: 'Ma trận Đề thi & Ra đề · OralAI Academic',

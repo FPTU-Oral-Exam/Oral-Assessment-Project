@@ -1,5 +1,5 @@
 import React from 'react';
-import RubricsStudioPanel from '@/components/academic/RubricsStudioPanel';
+import { RubricsStudioPanel } from '@/components/academic';
 
 export const metadata = {
   title: 'Tiêu chuẩn Rubrics · OralAI Academic',

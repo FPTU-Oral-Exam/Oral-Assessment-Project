@@ -2,15 +2,15 @@
 
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
-import ItemBankHeader from '@/components/academic/ItemBankHeader';
-import QuestionTypeGrid from '@/components/academic/QuestionTypeGrid';
-import QuestionCard from '@/components/academic/QuestionCard';
-import QuestionDetailModal from '@/components/academic/QuestionDetailModal';
-import QuestionEditorModal from '@/components/academic/QuestionEditorModal';
+import ItemBankHeader from './ItemBankHeader';
+import QuestionTypeGrid from './QuestionTypeGrid';
+import QuestionCard from './QuestionCard';
+import QuestionDetailModal from './QuestionDetailModal';
+import QuestionEditorModal from './QuestionEditorModal';
 import { useAcademic } from '@/context/AcademicContext';
 import { AcademicQuestionItem } from '@/types/academic';
 
-export default function ItemBankClient() {
+export default function ItemBankManager() {
   const { filteredQuestions, resetFilters } = useAcademic();
 
   const [previewQuestion, setPreviewQuestion] = useState<AcademicQuestionItem | null>(null);

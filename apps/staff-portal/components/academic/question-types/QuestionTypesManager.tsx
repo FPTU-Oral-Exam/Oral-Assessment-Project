@@ -20,8 +20,8 @@ import {
 } from 'lucide-react';
 import { useAcademic } from '@/context/AcademicContext';
 import { QuestionTypeConfig, DEFAULT_QUESTION_TYPE_CONFIGS } from '@/types/academic';
-import CreateQuestionTypeModal from '@/components/academic/CreateQuestionTypeModal';
-import SyncScopeConfirmDialog from '@/components/academic/SyncScopeConfirmDialog';
+import CreateQuestionTypeModal from './CreateQuestionTypeModal';
+import SyncScopeConfirmDialog from '../shared/SyncScopeConfirmDialog';
 
 const TYPE_LIGHT_THEME: Record<
   string,
@@ -47,7 +47,7 @@ const DEFAULT_THEME = {
   badgeBg: 'bg-slate-600',
 };
 
-export default function QuestionTypesClient() {
+export default function QuestionTypesManager() {
   const {
     questionTypeConfigs,
     questions,

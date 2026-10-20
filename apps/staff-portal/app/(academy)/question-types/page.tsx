@@ -1,5 +1,5 @@
 import React from 'react';
-import QuestionTypesClient from './QuestionTypesClient';
+import { QuestionTypesManager } from '@/components/academic';
 
 export const metadata = {
   title: 'Cấu hình Dạng bài Speaking | OralAI Staff Portal',
@@ -7,5 +7,5 @@ export const metadata = {
 };
 
 export default function QuestionTypesPage() {
-  return <QuestionTypesClient />;
+  return <QuestionTypesManager />;
 }
