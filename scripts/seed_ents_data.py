@@ -633,13 +633,13 @@ def seed_database():
         print(f"  + Rubric ID: {rubric.id} | Criteria: 5 tiêu chí thang điểm 2 (Tổng 10.0)")
 
         # 5. Dọn sạch câu hỏi cũ và nạp câu hỏi mẫu Guidelines vào Item Bank
-        print("\n[5/7] Dọn sạch câu hỏi PTE cũ và nạp 12 câu hỏi ENTs vào Ngân hàng câu hỏi...")
-        PTE_TYPES = ["RA", "RS", "GD", "DI", "SI", "RL", "ASQ"]
-        del_q = db.execute(delete(AcademicQuestion).where(AcademicQuestion.type.in_(PTE_TYPES))).rowcount
-        del_cfg = db.execute(delete(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type.in_(PTE_TYPES))).rowcount
+        print("\n[5/7] Dọn sạch câu hỏi cũ (legacy types) và nạp 12 câu hỏi ENTs vào Ngân hàng câu hỏi...")
+        LEGACY_TYPES = ["RA", "RS", "GD", "DI", "SI", "RL", "ASQ"]
+        del_q = db.execute(delete(AcademicQuestion).where(AcademicQuestion.type.in_(LEGACY_TYPES))).rowcount
+        del_cfg = db.execute(delete(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type.in_(LEGACY_TYPES))).rowcount
         db.flush()
         if del_q or del_cfg:
-            print(f"  + Đã dọn sạch {del_q} câu hỏi PTE cũ và {del_cfg} cấu hình dạng bài PTE cũ khỏi Database.")
+            print(f"  + Đã dọn sạch {del_q} câu hỏi cũ và {del_cfg} cấu hình dạng bài cũ (legacy) khỏi Database.")
 
         # Nạp câu hỏi ENTs
         for q_data in SAMPLE_QUESTIONS:

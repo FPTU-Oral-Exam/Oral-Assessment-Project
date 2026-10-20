@@ -25,18 +25,18 @@ const App: React.FC = () => {
 
     try {
       const availableExams = await api.getAvailableExams();
-      // Tìm bài thi PTE Speaking Practice Test 1 (hoặc theo mã nếu có)
-      const pteExam = availableExams.find((e) => {
+      // Tìm bài thi ENTs Speaking (hoặc theo mã nếu có)
+      const targetExam = availableExams.find((e) => {
         const examName = (e.name || (e as any).title || '').toLowerCase();
-        const titleMatch = examName.includes('pte');
+        const titleMatch = examName.includes('ent') || examName.includes('speaking');
         const codeMatch = examCode ? e.id.toLowerCase().includes(examCode.toLowerCase()) || examName.includes(examCode.toLowerCase()) : false;
         return codeMatch || titleMatch;
       }) || availableExams[0];
 
-      if (pteExam) {
-        setSelectedExam(pteExam);
+      if (targetExam) {
+        setSelectedExam(targetExam);
         // Tạo attempt mới để vào thi ngay
-        const session = await api.createSession(pteExam.id, true);
+        const session = await api.createSession(targetExam.id, true);
         if (session && session.id) {
           setSessionId(session.id);
           setCurrentPage('exam-room');

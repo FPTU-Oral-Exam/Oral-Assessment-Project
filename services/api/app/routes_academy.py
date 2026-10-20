@@ -3,7 +3,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from .db import get_db
@@ -612,45 +612,15 @@ def delete_rubric(key: str, db: Session = Depends(get_db), user=Depends(academy)
 # 3. QUY CHUẨN DẠNG BÀI (QUESTION TYPE CONFIGS) — TASK 4
 # ============================================================================
 
-# Default 7 question types
+# Default 4 question types for ENTs FPTU Speaking Assessment
 _QUESTION_TYPE_DEFAULTS = [
     {
-        "type": "RA",
-        "name": "Read Aloud",
-        "vietnamese_name": "Đọc to văn bản học thuật",
-        "description": "Thí sinh quan sát đoạn văn bản trên màn hình và đọc to rõ ràng, chuẩn phát âm và nhịp điệu.",
-        "default_prep_time": 35,
-        "default_response_time": 40,
-        "max_score": 10.0,
-        "is_active": True,
-        "requires_image": False,
-        "requires_audio_prompt": False,
-        "requires_audio_script": False,
-        "requires_key_points": False,
-        "recommended_question_count": 2,
-    },
-    {
-        "type": "RS",
-        "name": "Repeat Sentence",
-        "vietnamese_name": "Lặp lại câu nguyên bản",
-        "description": "Lắng nghe một câu ngắn học thuật và lặp lại chính xác từng từ với ngữ điệu tự nhiên.",
-        "default_prep_time": 3,
-        "default_response_time": 15,
-        "max_score": 10.0,
-        "is_active": True,
-        "requires_image": False,
-        "requires_audio_prompt": True,
-        "requires_audio_script": False,
-        "requires_key_points": False,
-        "recommended_question_count": 3,
-    },
-    {
-        "type": "GD",
-        "name": "Summarize Group Discussion",
-        "vietnamese_name": "Tóm tắt thảo luận nhóm",
-        "description": "Lắng nghe đoạn thảo luận nhóm học thuật và phát biểu tóm tắt các luận điểm trọng yếu.",
-        "default_prep_time": 10,
-        "default_response_time": 60,
+        "type": "GENERAL_INTERVIEW",
+        "name": "General Interview",
+        "vietnamese_name": "Phỏng vấn tổng quan",
+        "description": "Thí sinh trả lời các câu hỏi về thông tin bản thân, thói quen sinh hoạt và động lực học tập.",
+        "default_prep_time": 0,
+        "default_response_time": 45,
         "max_score": 10.0,
         "is_active": True,
         "requires_image": False,
@@ -660,64 +630,49 @@ _QUESTION_TYPE_DEFAULTS = [
         "recommended_question_count": 1,
     },
     {
-        "type": "DI",
-        "name": "Describe Image",
-        "vietnamese_name": "Miêu tả hình ảnh / biểu đồ",
-        "description": "Quan sát biểu đồ, sơ đồ hoặc hình ảnh học thuật và trình bày phân tích các xu hướng chính.",
-        "default_prep_time": 25,
-        "default_response_time": 40,
+        "type": "PICTURE_DESCRIPTION",
+        "name": "Picture Description",
+        "vietnamese_name": "Miêu tả hình ảnh / Biểu đồ",
+        "description": "Quan sát hình ảnh hoặc sơ đồ thực tế và mô tả các chi tiết, hành động, không gian.",
+        "default_prep_time": 15,
+        "default_response_time": 45,
         "max_score": 10.0,
         "is_active": True,
         "requires_image": True,
         "requires_audio_prompt": False,
         "requires_audio_script": False,
         "requires_key_points": True,
-        "recommended_question_count": 3,
+        "recommended_question_count": 1,
     },
     {
-        "type": "SI",
-        "name": "Respond to a Situation",
-        "vietnamese_name": "Ứng đáp tình huống học thuật",
-        "description": "Đọc tình huống giả định giao tiếp đại học và đưa ra phản hồi giải quyết thấu đáo, lịch thiệp.",
-        "default_prep_time": 20,
-        "default_response_time": 40,
+        "type": "TOPIC_MONOLOGUE",
+        "name": "Topic Monologue",
+        "vietnamese_name": "Độc thoại theo chủ đề",
+        "description": "Trình bày bài nói độc thoại liền mạch về một chủ đề học thuật hoặc tình huống cụ thể.",
+        "default_prep_time": 30,
+        "default_response_time": 60,
         "max_score": 10.0,
         "is_active": True,
         "requires_image": False,
         "requires_audio_prompt": False,
         "requires_audio_script": False,
         "requires_key_points": True,
-        "recommended_question_count": 2,
+        "recommended_question_count": 1,
     },
     {
-        "type": "RL",
-        "name": "Re-tell Lecture",
-        "vietnamese_name": "Thuyết trình lại bài giảng",
-        "description": "Lắng nghe bài giảng học thuật ngắn (60-90s) và thuyết trình tóm tắt lại nội dung cốt lõi.",
-        "default_prep_time": 10,
-        "default_response_time": 40,
+        "type": "DEEP_DISCUSSION",
+        "name": "Deep Discussion",
+        "vietnamese_name": "Thảo luận chuyên sâu & Phản biện",
+        "description": "Lắng nghe vấn đề và phản hồi phân tích đa chiều, lập luận phản biện học thuật.",
+        "default_prep_time": 15,
+        "default_response_time": 60,
         "max_score": 10.0,
         "is_active": True,
         "requires_image": False,
         "requires_audio_prompt": True,
         "requires_audio_script": False,
         "requires_key_points": True,
-        "recommended_question_count": 2,
-    },
-    {
-        "type": "ASQ",
-        "name": "Answer Short Question",
-        "vietnamese_name": "Trả lời câu hỏi ngắn",
-        "description": "Lắng nghe câu hỏi vấn đáp ngắn và trả lời bằng một hoặc vài từ súc tích, chính xác.",
-        "default_prep_time": 3,
-        "default_response_time": 10,
-        "max_score": 10.0,
-        "is_active": True,
-        "requires_image": False,
-        "requires_audio_prompt": True,
-        "requires_audio_script": False,
-        "requires_key_points": False,
-        "recommended_question_count": 4,
+        "recommended_question_count": 1,
     },
 ]
 
@@ -745,13 +700,30 @@ def _serialize_question_type(row: QuestionTypeConfigModel, question_count: int =
 
 
 def _ensure_default_question_types(db: Session) -> None:
-    """Khởi tạo 7 dạng bài mặc định nếu bảng question_type_configs trống."""
-    existing_count = db.query(QuestionTypeConfigModel).count()
-    if existing_count == 0:
-        now = time.time()
-        for defaults in _QUESTION_TYPE_DEFAULTS:
+    """Khởi tạo 4 dạng bài Speaking ENTs FPTU mặc định và dọn dẹp các dạng bài cũ (legacy types)."""
+    legacy_types = ["RA", "RS", "GD", "DI", "SI", "RL", "ASQ"]
+    # Dọn sạch các dạng bài cũ nếu còn sót trong DB
+    db.execute(delete(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type.in_(legacy_types)))
+
+    now = time.time()
+    for defaults in _QUESTION_TYPE_DEFAULTS:
+        row = db.scalar(select(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type == defaults["type"]))
+        if not row:
             db.add(QuestionTypeConfigModel(**defaults, created_at=now, updated_at=now))
-        db.commit()
+        else:
+            row.name = defaults["name"]
+            row.vietnamese_name = defaults["vietnamese_name"]
+            row.description = defaults["description"]
+            row.default_prep_time = defaults["default_prep_time"]
+            row.default_response_time = defaults["default_response_time"]
+            row.max_score = defaults["max_score"]
+            row.is_active = defaults["is_active"]
+            row.requires_image = defaults["requires_image"]
+            row.requires_audio_prompt = defaults["requires_audio_prompt"]
+            row.requires_key_points = defaults["requires_key_points"]
+            row.recommended_question_count = defaults["recommended_question_count"]
+            row.updated_at = now
+    db.commit()
 
 
 @router.get("/question-types", response_model=List[QuestionTypeConfigOut])

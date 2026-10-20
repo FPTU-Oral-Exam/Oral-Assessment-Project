@@ -24,7 +24,7 @@ ACCOUNTS = [
         "name": "Ban Học thuật (Master Curators)",
         "role": "ACADEMY",
         "password": "Admin@123456",
-        "description": "Cán bộ Học thuật: Quản lý Kho câu hỏi PTE Speaking, Cấu hình Dạng bài, Ma trận Đề thi, Rubrics",
+        "description": "Cán bộ Học thuật: Quản lý Kho câu hỏi ENTs Speaking, Cấu hình Dạng bài, Ma trận Đề thi, Rubrics",
     },
     {
         "username": "examiner",

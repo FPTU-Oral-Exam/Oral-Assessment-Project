@@ -20,7 +20,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
 
-  // PTE State Machine
+  // ENTs Speaking State Machine
   const [ptePhase, setPtePhase] = useState<PTEPhase>('PREPARING');
   const [prepRemaining, setPrepRemaining] = useState<number>(0);
   const [speakRemaining, setSpeakRemaining] = useState<number>(40);
@@ -128,7 +128,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     }
   }, [stopRecording]);
 
-  // Submit audio file directly (used for both manual submit and PTE auto-submit)
+  // Submit audio file directly (used for both manual submit and ENTs auto-submit)
   const submitAudioBlob = useCallback(async (blob: Blob) => {
     if (!currentAttempt) return;
     setSubmitError(null);
@@ -207,7 +207,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     currentAttempt?.type && currentAttempt.type !== 'OPEN_RESPONSE'
   );
 
-  // Start recording with Beep sound for PTE
+  // Start recording with Beep sound for ENTs
   const triggerStartPTERecording = useCallback(async (speakTime: number) => {
     setPtePhase('RECORDING');
     setSpeakRemaining(speakTime);
@@ -222,7 +222,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
   // Track last question attempt ID that was initialized
   const lastInitializedAttemptIdRef = useRef<string | null>(null);
 
-  // When question changes, reset timers and initiate PTE phase
+  // When question changes, reset timers and initiate ENTs phase
   useEffect(() => {
     if (!currentAttempt) return;
     const isPte = Boolean(
@@ -289,7 +289,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                 await submitAudioBlob(blob);
               }
             } catch (err) {
-              console.error('PTE auto-submit on timeout failed:', err);
+              console.error('ENTS auto-submit on timeout failed:', err);
             }
           })();
           return 0;
@@ -313,13 +313,13 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     void triggerStartPTERecording(speak);
   }, [currentAttempt?.speak_time, triggerStartPTERecording]);
 
-  // Immediate recording trigger for PTE (skip listening audio or preparation)
+  // Immediate recording trigger for ENTs (skip listening audio or preparation)
   const handleImmediatePTERecording = useCallback(async () => {
     const speak = currentAttempt?.speak_time ?? 40;
     await triggerStartPTERecording(speak);
   }, [currentAttempt?.speak_time, triggerStartPTERecording]);
 
-  // Early finish and submit for PTE
+  // Early finish and submit for ENTs
   const handlePTEFinishAndSubmit = useCallback(async () => {
     try {
       const blobs = await stopRecording();
@@ -328,17 +328,17 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
         await submitAudioBlob(blob);
       }
     } catch (err) {
-      console.error('PTE early submit failed:', err);
+      console.error('ENTS early submit failed:', err);
     }
   }, [stopRecording, submitAudioBlob]);
 
-  // Early stop recording for PTE (allows review before manual submit)
+  // Early stop recording for ENTs (allows review before manual submit)
   const handlePTEStopRecording = useCallback(async () => {
     setPtePhase('RECORDED');
     await handleStopRecordingClick();
   }, [handleStopRecordingClick]);
 
-  // Re-record for PTE
+  // Re-record for ENTs
   const handlePTERerecord = useCallback(() => {
     handleRerecord();
     const speak = currentAttempt?.speak_time ?? 40;
@@ -443,7 +443,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
 
           {!isAllAnswered && (
             <div style={styles.recordingArea}>
-              {/* Timer Display (Standard non-PTE questions only) */}
+              {/* Timer Display (Legacy fallback only) */}
               {!isPTE && (
                 <div style={styles.timerDisplay}>
                   <span style={styles.timerLabel}>
@@ -455,7 +455,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                 </div>
               )}
 
-              {/* State 1: Ready to record (Non-PTE questions only) */}
+              {/* State 1: Ready to record (Legacy fallback only) */}
               {!isPTE && !isRecording && !recordedAudio && !isUploading && (
                 <div style={styles.actionCenter}>
                   <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 16px 0' }}>
@@ -468,7 +468,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                 </div>
               )}
 
-              {/* Ready to record for PTE questions (Before audio finishes or during preparation) */}
+              {/* Ready to record for ENTs questions (Before audio finishes or during preparation) */}
               {isPTE && !isRecording && !recordedAudio && !isUploading && (
                 <div style={styles.actionCenter}>
                   <div style={styles.pteMicBanner}>

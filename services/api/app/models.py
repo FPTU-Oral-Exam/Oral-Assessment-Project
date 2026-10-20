@@ -403,7 +403,7 @@ class AcademicQuestion(Entity, Base):
     __tablename__ = "academic_questions"
     code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     skill: Mapped[str] = mapped_column(String(30), default="SPEAKING")
-    type: Mapped[str] = mapped_column(String(20), index=True)  # RA, RS, GD, DI, SI, RL
+    type: Mapped[str] = mapped_column(String(20), index=True)  # GENERAL_INTERVIEW, PICTURE_DESCRIPTION, TOPIC_MONOLOGUE, DEEP_DISCUSSION
     title: Mapped[str] = mapped_column(String(250))
     prompt: Mapped[str] = mapped_column(Text)
     media_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -436,7 +436,7 @@ class AcademicMatrix(Entity, Base):
 
 class QuestionTypeConfigModel(Entity, Base):
     __tablename__ = "question_type_configs"
-    type: Mapped[str] = mapped_column(String(20), unique=True, index=True)  # RA, RS, GD, DI, SI, RL, ASQ...
+    type: Mapped[str] = mapped_column(String(20), unique=True, index=True)  # GENERAL_INTERVIEW, PICTURE_DESCRIPTION, TOPIC_MONOLOGUE, DEEP_DISCUSSION
     name: Mapped[str] = mapped_column(String(100))
     vietnamese_name: Mapped[str | None] = mapped_column(String(100), default="", nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")

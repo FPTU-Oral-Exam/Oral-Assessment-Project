@@ -113,8 +113,6 @@ def course_access(db, course_id, user):
         user.role not in {"SYSTEM_ADMIN", "ADMIN", "EXAMINER", "REVIEWER", "ACADEMY"}
         and user.id not in {course.owner_id, course.teacher_id}
         and course.code != "ORAL-PRACTICE"
-        and course.code != "PTE-CORE"
-        and not (course.code and course.code.startswith("PTE"))
     ):
         from .models import Exam, ExamBatch, Section
 

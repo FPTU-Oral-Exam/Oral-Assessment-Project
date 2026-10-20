@@ -1201,8 +1201,6 @@ def results(db: Session = Depends(get_db), user=Depends(staff)):
                     select(Section.course_id).where(Section.teacher_id == user.id)
                 ),
                 Course.code == "ORAL-PRACTICE",
-                Course.code == "PTE-CORE",
-                Course.code.like("PTE%"),
             )
         )
     session_rows = []

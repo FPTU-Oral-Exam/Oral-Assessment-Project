@@ -134,122 +134,101 @@ def ensure_practice(db):
     ensure_default_matrix(db)
 
 
-def ensure_default_pte_rubric(db):
+def ensure_default_ents_rubric(db):
     import time
     from .models import Rubric
 
-    rubric_name = "PTE Academic Speaking Official Rubric"
+    rubric_name = "Rubric Chuẩn ENTs Speaking Test (5 Tiêu chí - Thang 10)"
     rubric = db.scalar(
         select(Rubric).where(Rubric.name == rubric_name).limit(1)
     )
 
     criteria = [
         {
-            "id": "content",
-            "name": "Content",
-            "description": "Độ chính xác nội dung, độ bao phủ ý và từ khóa chính",
-            "max_score": 5.0,
-            "weight": 34.0,
-            "guiding_question": "Does your response include all the words in the reading text and only these words?",
-            "scoring_method": "Content is scored by counting the number of correct words in your response. Replacements insertions and omissions of words will negatively affect your score.",
+            "id": "ideas",
+            "name": "Ideas",
+            "max_score": 2.0,
+            "weight": 20.0,
+            "description": "Mức độ phát triển ý tưởng, tính mạch lạc và độ tập trung vào chủ đề.",
             "descriptors": [
-                {"level": "5 điểm", "score_range": "5 đ", "description": "All words in the response from the prompt"},
-                {"level": "4 điểm", "score_range": "4 đ", "description": "At least 75% of words in the response from the prompt"},
-                {"level": "3 điểm", "score_range": "3 đ", "description": "At least 50% of words in the response from the prompt"},
-                {"level": "2 điểm", "score_range": "2 đ", "description": "At least 25% of words in the response from the prompt"},
-                {"level": "1 điểm", "score_range": "1 đ", "description": "Less than 25% of words in the response from the prompt"},
-                {"level": "0 điểm", "score_range": "0 đ", "description": "Almost nothing from the prompt in the response"},
-            ],
-        },
-        {
-            "id": "oral_fluency",
-            "name": "Oral Fluency",
-            "description": "Độ trôi chảy, nhịp điệu phát âm, ngắt nghỉ câu tự nhiên",
-            "max_score": 5.0,
-            "weight": 33.0,
-            "guiding_question": "Does your response demonstrate a smooth, effortless and natural rate of Speech?",
-            "scoring_method": "Oral fluency is scored by determining if your rhythm, phrasing and stress are smooth. The best responses are spoken at a constant and natural rate of speech with appropriate phrasing. Hesitations, repetitions and false starts will negatively affect your score.",
-            "descriptors": [
-                {
-                    "level": "5 điểm",
-                    "score_range": "5 đ",
-                    "description": "Speech shows smooth rhythm and phrasing. There are no hesitations, repetitions, false starts or non-native phonological simplifications",
-                },
-                {
-                    "level": "4 điểm",
-                    "score_range": "4 đ",
-                    "description": "Speech has an acceptable rhythm with appropriate phrasing and word emphasis. There is no more than one hesitation, one repetition or a false start. There are no significant non-native phonological simplifications",
-                },
-                {
-                    "level": "3 điểm",
-                    "score_range": "3 đ",
-                    "description": "Speech is at an acceptable speed but may be uneven. There may be more than one hesitation, but most words are spoken in continuous phrases. There are few repetitions or false starts. There are no long pauses and speech does not sound staccato",
-                },
-                {
-                    "level": "2 điểm",
-                    "score_range": "2 đ",
-                    "description": "Speech may be uneven or staccato. Speech (if >= 6 words) has at least one smooth three-word run, and no more than two or three hesitations, repetitions or false starts. There may be one long pause, but not two or more",
-                },
-                {
-                    "level": "1 điểm",
-                    "score_range": "1 đ",
-                    "description": "Speech has irregular phrasing or sentence rhythm. Poor phrasing, staccato or syllabic timing, and/or multiple hesitations, repetitions, and/or false starts make spoken performance notably uneven or discontinuous. Long utterances may have one or two long pauses and inappropriate sentencelevel word emphasis",
-                },
-                {
-                    "level": "0 điểm",
-                    "score_range": "0 đ",
-                    "description": "Speech is slow and labored with little discernable phrase grouping, multiple hesitations, pauses, false starts, and/or major phonological simplifications. Most words are isolated, and there may be more than one long pause",
-                },
+                {"level": "Exceeds standard", "score_range": "1.6 - 2.0", "description": "Presents a well-developed response with clear organization to the question with relevant, extended and supported ideas."},
+                {"level": "Meets standard", "score_range": "1.0 - below 1.6", "description": "Presents relevant ideas but some may be inadequately developed or unclear, or some supporting ideas may lack focus."},
+                {"level": "Attempt made", "score_range": "0.6 - below 1.0", "description": "Has few ideas but ideas are not organized. Some ideas are off-topic."},
+                {"level": "Insufficient evidence", "score_range": "0 - below 0.6", "description": "Has no ideas at all, or all or most ideas are off-topic."},
             ],
         },
         {
             "id": "pronunciation",
             "name": "Pronunciation",
-            "description": "Độ chuẩn xác nguyên âm, phụ âm và trọng âm từ",
-            "max_score": 5.0,
-            "weight": 33.0,
-            "guiding_question": "Does your response demonstrate your ability to produce speech sounds in a similar way to most regular speakers of the language?",
-            "scoring_method": "Pronunciation is scored by determining if your speech is easily understandable to most regular speakers of the language. The best responses contain vowels and consonants pronounced in a native-like way, as well as words and phrases stressed correctly. Responses should also be immediately understandable to a regular speaker of the language.",
+            "max_score": 2.0,
+            "weight": 20.0,
+            "description": "Độ rõ ràng của phát âm, nguyên âm/phụ âm, trọng âm từ và ngữ điệu câu.",
             "descriptors": [
-                {
-                    "level": "5 điểm",
-                    "score_range": "5 đ",
-                    "description": "All vowels and consonants are produced in a manner that is easily understood by regular speakers of the language. The speaker uses assimilation and deletions appropriate to continuous speech. Stress is placed correctly in all words and sentence-level stress is fully appropriate",
-                },
-                {
-                    "level": "4 điểm",
-                    "score_range": "4 đ",
-                    "description": "Vowels and consonants are produced clearly and unambiguously. A few minor consonant, vowel or stress distortions do not affect intelligibility. All words are easily understandable. A few consonants or consonant sequences may be distorted. Stress is placed correctly on all common words, and sentence level stress is reasonable",
-                },
-                {
-                    "level": "3 điểm",
-                    "score_range": "3 đ",
-                    "description": "Most vowels and consonants are pronounced correctly. Some consistent errors might make a few words unclear. A few consonants in certain contexts may be regularly distorted, omitted or mispronounced. Stressdependent vowel reduction may occur on a few words",
-                },
-                {
-                    "level": "2 điểm",
-                    "score_range": "2 đ",
-                    "description": "Some consonants and vowels are consistently mispronounced in a nonnative like manner. At least 2/3 of speech is intelligible, but listeners might need to adjust to the accent. Some consonants are regularly omitted, and consonant sequences may be simplified. Stress may be placed incorrectly on some words or be unclear",
-                },
-                {
-                    "level": "1 điểm",
-                    "score_range": "1 đ",
-                    "description": "Many consonants and vowels are mispronounced, resulting in a strong intrusive foreign accent. Listeners may have difficulty understanding about 1/3 of the words. Many consonants may be distorted or omitted. Consonant sequences may be non-English. Stress is placed in a non-English manner; unstressed words may be reduced or omitted and a few syllables added or missed",
-                },
-                {
-                    "level": "0 điểm",
-                    "score_range": "0 đ",
-                    "description": "Pronunciation seems completely characteristic of another language. Many consonants and vowels are mispronounced, misordered or omitted. Listeners may find more than 1/2 of the speech unintelligible. Stressed and unstressed syllables are realized in a non-English manner. Several words may have the wrong number of syllables",
-                },
+                {"level": "Exceeds standard", "score_range": "1.6 - 2.0", "description": "Speaks with a clear voice and near-native pronunciation, stress and intonation. L1 accent has minimal effects."},
+                {"level": "Meets standard", "score_range": "1.0 - below 1.6", "description": "Speaks with a clear voice but still in L1 accent. Speech is understandable. Some errors in word pronunciation, stress and sentence intonation may be found."},
+                {"level": "Attempt made", "score_range": "0.6 - below 1.0", "description": "Speech is a little hard to be understood due to lots of errors in pronunciation."},
+                {"level": "Insufficient evidence", "score_range": "0 - below 0.6", "description": "Pronunciation makes it impossible to understand speech. Or speaks nothing."},
+            ],
+        },
+        {
+            "id": "grammar_range_accuracy",
+            "name": "Grammar Range and Accuracy",
+            "max_score": 2.0,
+            "weight": 20.0,
+            "description": "Độ đa dạng cấu trúc ngữ pháp và độ chính xác của câu.",
+            "descriptors": [
+                {"level": "Exceeds standard", "score_range": "1.6 - 2.0", "description": "Uses a wide range of structures flexibly. The majority of sentences are error free."},
+                {"level": "Meets standard", "score_range": "1.0 - below 1.6", "description": "Simple sentences are mostly accurate. Some complex sentences are used with noticeable mistakes."},
+                {"level": "Attempt made", "score_range": "0.6 - below 1.0", "description": "Uses only simple sentences with errors. Errors prevent understanding frequently."},
+                {"level": "Insufficient evidence", "score_range": "0 - below 0.6", "description": "Cannot produce basic sentence forms with grammar mistakes that make it hard to understand."},
+            ],
+        },
+        {
+            "id": "vocabulary_range_accuracy",
+            "name": "Vocabulary Range and Accuracy",
+            "max_score": 2.0,
+            "weight": 20.0,
+            "description": "Vốn từ vựng, độ chính xác của từ ngữ, ngữ cảnh sử dụng và paraphrase.",
+            "descriptors": [
+                {"level": "Exceeds standard", "score_range": "1.6 - 2.0", "description": "Uses a wide vocabulary resource readily and flexibly to convey precise meaning."},
+                {"level": "Meets standard", "score_range": "1.0 - below 1.6", "description": "Vocabulary use is sufficient to discuss topics at length with clear overall meaning."},
+                {"level": "Attempt made", "score_range": "0.6 - below 1.0", "description": "Manages to talk about the topic using mainly simple vocabulary with frequent inappropriacies."},
+                {"level": "Insufficient evidence", "score_range": "0 - below 0.6", "description": "Speaks nothing or only produces isolated words or memorized utterances."},
+            ],
+        },
+        {
+            "id": "fluency_coherence",
+            "name": "Fluency and coherence",
+            "max_score": 2.0,
+            "weight": 20.0,
+            "description": "Độ trôi chảy, nhịp điệu bài nói, ngắt nghỉ hợp lý và từ nối liên kết.",
+            "descriptors": [
+                {"level": "Exceeds standard", "score_range": "1.6 - 2.0", "description": "Speaks fluently with no or occasional repetition or self-correction."},
+                {"level": "Meets standard", "score_range": "1.0 - below 1.6", "description": "Can speak for a while and shows readiness to talk at length with linking words."},
+                {"level": "Attempt made", "score_range": "0.6 - below 1.0", "description": "Speaks with noticeable effort. Pauses and self-correction often happen."},
+                {"level": "Insufficient evidence", "score_range": "0 - below 0.6", "description": "Maintains a short speech with simple words and lots of hesitation, or speaks nothing."},
             ],
         },
     ]
 
     now = time.time()
+    legacy_rubric = db.scalar(
+        select(Rubric).where(Rubric.name == "PTE Academic Speaking Official Rubric").limit(1)
+    )
+    if legacy_rubric:
+        legacy_rubric.name = rubric_name
+        legacy_rubric.description = "Bộ tiêu chuẩn đánh giá Vấn đáp Tiếng Anh FPTU gồm 5 tiêu chí: Ideas, Pronunciation, Grammar, Vocabulary, Fluency (Thang điểm 10)."
+        legacy_rubric.criteria = criteria
+        legacy_rubric.version = (legacy_rubric.version or 1) + 1
+        legacy_rubric.updated_at = now
+        db.commit()
+        db.refresh(legacy_rubric)
+        return legacy_rubric
+
     if not rubric:
         rubric = Rubric(
             name=rubric_name,
-            description="Bộ Tiêu chuẩn Chấm điểm Speaking chuẩn hóa PTE Academic (Thang điểm 5, gồm 3 tiêu chí: Content, Oral Fluency, Pronunciation với đầy đủ 6 mức điểm chi tiết).",
+            description="Bộ tiêu chuẩn đánh giá Vấn đáp Tiếng Anh FPTU gồm 5 tiêu chí: Ideas, Pronunciation, Grammar, Vocabulary, Fluency (Thang điểm 10).",
             criteria=criteria,
             version=1,
             updated_at=now,
@@ -260,39 +239,59 @@ def ensure_default_pte_rubric(db):
     return rubric
 
 
+ensure_default_pte_rubric = ensure_default_ents_rubric
+
+
 def ensure_default_matrix(db):
     import time
     from .models import AcademicMatrix
 
-    pte_rubric = ensure_default_pte_rubric(db)
+    ents_rubric = ensure_default_ents_rubric(db)
 
-    exists = db.scalar(
+    legacy_matrix = db.scalar(
         select(AcademicMatrix).where(
             AcademicMatrix.code == "PTE-STD-SPEAKING",
             AcademicMatrix.deleted_at.is_(None),
         )
     )
+
+    ents_rules = [
+        {"type": "GENERAL_INTERVIEW", "question_count": 1, "prep_time": 0, "response_time": 45, "target_difficulty": "EASY", "weight_percentage": 25.0},
+        {"type": "PICTURE_DESCRIPTION", "question_count": 1, "prep_time": 15, "response_time": 45, "target_difficulty": "MEDIUM", "weight_percentage": 25.0},
+        {"type": "TOPIC_MONOLOGUE", "question_count": 1, "prep_time": 30, "response_time": 60, "target_difficulty": "HARD", "weight_percentage": 25.0},
+        {"type": "DEEP_DISCUSSION", "question_count": 1, "prep_time": 15, "response_time": 60, "target_difficulty": "HARD", "weight_percentage": 25.0},
+    ]
+
+    if legacy_matrix:
+        legacy_matrix.code = "ENTS-STD-SPEAKING"
+        legacy_matrix.name = "Ma trận Chuẩn ENTs Speaking (4 Dạng bài)"
+        legacy_matrix.description = "Quy chuẩn cấu trúc 4 dạng bài Speaking chuẩn ENTs FPTU: 1 General Interview, 1 Picture Description, 1 Topic Monologue, 1 Deep Discussion (Tổng 4 câu, 100% trọng số)"
+        legacy_matrix.rubric_id = ents_rubric.id if ents_rubric else None
+        legacy_matrix.rules = ents_rules
+        legacy_matrix.difficulty_ratio = {"easy": 25, "medium": 25, "hard": 50}
+        legacy_matrix.updated_at = time.time()
+        db.commit()
+        return
+
+    exists = db.scalar(
+        select(AcademicMatrix).where(
+            AcademicMatrix.code == "ENTS-STD-SPEAKING",
+            AcademicMatrix.deleted_at.is_(None),
+        )
+    )
     if not exists:
-        rules = [
-            {"type": "RA", "question_count": 3, "prep_time": 35, "response_time": 40, "target_difficulty": "MEDIUM", "weight_percentage": 20.0},
-            {"type": "RS", "question_count": 8, "prep_time": 3, "response_time": 15, "target_difficulty": "MEDIUM", "weight_percentage": 30.0},
-            {"type": "GD", "question_count": 1, "prep_time": 30, "response_time": 60, "target_difficulty": "MEDIUM", "weight_percentage": 10.0},
-            {"type": "DI", "question_count": 2, "prep_time": 25, "response_time": 40, "target_difficulty": "MEDIUM", "weight_percentage": 15.0},
-            {"type": "SI", "question_count": 1, "prep_time": 20, "response_time": 40, "target_difficulty": "MEDIUM", "weight_percentage": 10.0},
-            {"type": "RL", "question_count": 1, "prep_time": 10, "response_time": 40, "target_difficulty": "MEDIUM", "weight_percentage": 15.0},
-        ]
         m = AcademicMatrix(
-            code="PTE-STD-SPEAKING",
-            name="Ma trận Chuẩn PTE Speaking (6 Dạng bài)",
-            description="Quy chuẩn cấu trúc 6 dạng bài Speaking chuẩn PTE Academic: 3 RA, 8 RS, 1 GD, 2 DI, 1 SI, 1 RL (Tổng 16 câu, 100% trọng số)",
-            rubric_id=pte_rubric.id if pte_rubric else None,
-            rules=rules,
-            difficulty_ratio={"easy": 30, "medium": 50, "hard": 20},
+            code="ENTS-STD-SPEAKING",
+            name="Ma trận Chuẩn ENTs Speaking (4 Dạng bài)",
+            description="Quy chuẩn cấu trúc 4 dạng bài Speaking chuẩn ENTs FPTU: 1 General Interview, 1 Picture Description, 1 Topic Monologue, 1 Deep Discussion (Tổng 4 câu, 100% trọng số)",
+            rubric_id=ents_rubric.id if ents_rubric else None,
+            rules=ents_rules,
+            difficulty_ratio={"easy": 25, "medium": 25, "hard": 50},
             updated_at=time.time(),
         )
         db.add(m)
         db.commit()
-    elif exists and not exists.rubric_id and pte_rubric:
-        exists.rubric_id = pte_rubric.id
+    elif exists and not exists.rubric_id and ents_rubric:
+        exists.rubric_id = ents_rubric.id
         exists.updated_at = time.time()
         db.commit()

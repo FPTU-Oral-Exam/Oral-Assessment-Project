@@ -48,7 +48,7 @@ export const CongratulationsPage: React.FC<CongratulationsPageProps> = ({ onExit
         <div style={styles.icon}>🎉</div>
         <h1 style={styles.title}>Chúc mừng bạn đã hoàn thành bài thi!</h1>
         <p style={styles.message}>
-          Toàn bộ các câu trả lời của bài thi <strong>PTE Speaking Practice Test 1</strong> đã được nộp thành công vào hệ thống OralAI và đang được AI chấm điểm.
+          Toàn bộ các câu trả lời của <strong>kỳ thi Vấn đáp Tiếng Anh ENTs</strong> đã được nộp thành công vào hệ thống OralAI và đang được AI chấm điểm.
         </p>
 
         <div style={styles.countdownBadge}>

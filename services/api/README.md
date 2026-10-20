@@ -23,7 +23,7 @@ services/api/app/
 ├── routes_exam.py                 # 👤 Student: thi, upload audio, xem điểm
 ├── routes_examiner.py             # 🧑‍⚖️ Examiner: quản lý ca thi, kết quả, xuất FAP
 ├── routes_admin.py                # 🏛️  Admin: courses, rubrics, exams, user management
-├── routes_academy.py              # 🎓 Academy: ngân hàng câu hỏi PTE, ma trận đề
+├── routes_academy.py              # 🎓 Academy: ngân hàng câu hỏi ENTs Speaking, ma trận đề
 ├── routes_demo_grading.py         # 🧪  Demo grading endpoints
 │
 ├── stt.py                        # 🎤  Speech-to-text endpoint
@@ -32,13 +32,6 @@ services/api/app/
 ├── ai.py                          # 🤖  AI adapter: embedding, RAG retrieval, LLM grading
 ├── grading.py                     # 📊  Grading availability & review logic
 ├── worker.py                      # ⚙️  Background worker: transcribe → grade → finalize
-│
-│── pte_read_aloud.py             # 📖  PTE Read Aloud scoring engine
-│── pte_repeat_sentence.py        # 🔁  PTE Repeat Sentence scoring engine
-│── pte_describe_image.py         # 🖼️  PTE Describe Image scoring engine
-│── pte_retell_lecture.py         # 🎧  PTE Re-tell Lecture (stub)
-│── pte_group_discussion.py       # 👥  PTE Summarize Group Discussion (stub)
-│── pte_answer_short_question.py # ❓  PTE Answer Short Question (stub)
 │
 ├── fluency.py                    # 🗣️  Fluency metrics (speech rate, pauses)
 ├── pronunciation_wer.py          # 🔊  Pronunciation WER scoring
@@ -62,12 +55,6 @@ services/api/app/
 ├── course_deletion.py            # 🗑️  Safe course deletion cascade
 ├── retakes.py                    # 🔄  Retake policy & allowance logic
 ├── practice.py                   # 🏋️  Practice session course ID
-│
-├── static/                       # 🔊  Audio prompts cho PTE tasks
-│   ├── pte_ra_prompt.wav
-│   ├── pte_rs_prompt.wav
-│   ├── pte_rl_prompt.mp3
-│   └── pte_sgd_prompt.mp3
 │
 └── migrations/
     └── rbac_migration_v2_to_standard_roles.py
@@ -187,16 +174,16 @@ admin    = roles("SYSTEM_ADMIN", "ADMIN")
 
 | Endpoint | Method | Mô tả |
 |----------|--------|--------|
-| `/academy/questions` | GET/POST | Ngân hàng câu hỏi PTE-style (RA, RS, GD, DI, SI, RL, ASQ) |
+| `/academy/questions` | GET/POST | Ngân hàng câu hỏi ENTs Speaking (GENERAL_INTERVIEW, PICTURE_DESCRIPTION, TOPIC_MONOLOGUE, DEEP_DISCUSSION) |
 | `/academy/questions/{key}` | GET/PUT/DELETE | CRUD câu hỏi |
 | `/academy/questions/{key}/approve` | POST | Duyệt câu hỏi |
 | `/academy/matrices` | GET/POST | Ma trận đề thi (Exam Blueprint) |
 | `/academy/matrices/{key}` | GET/PUT/DELETE | CRUD ma trận |
 | `/academy/matrices/{key}/stock-health` | GET | Kiểm tra tồn kho câu hỏi (HEALTHY/WARNING/CRITICAL) |
 | `/academy/matrices/{key}/generate-sample` | POST | Generate sample exam từ ma trận |
-| `/academy/rubrics` | GET/POST | Rubrics Studio |
+| `/academy/rubrics` | GET/POST | Rubrics Studio (Thang điểm 10.0, 5 tiêu chí) |
 | `/academy/rubrics/{key}` | GET/PUT/DELETE | CRUD Rubrics |
-| `/academy/question-types` | GET | 6 dạng bài mặc định (RA, RS, GD, DI, SI, RL, ASQ) |
+| `/academy/question-types` | GET | 4 dạng bài mặc định (GENERAL_INTERVIEW, PICTURE_DESCRIPTION, TOPIC_MONOLOGUE, DEEP_DISCUSSION) |
 | `/academy/question-types/{type}` | GET/PUT | Xem / cập nhật cấu hình dạng bài |
 
 ---
@@ -207,7 +194,7 @@ admin    = roles("SYSTEM_ADMIN", "ADMIN")
 - **`embed(text, task)`**: Tạo vector embedding (demo hash / Ollama / Gemini)
 - **`retrieve(db, course_id, topic_id, query)`**: RAG retrieval, trả về top-k chunks
 - **`structured(instruction, data, schema)`**: Gọi LLM với structured output (Pydantic schema)
-- **`grade(question, transcript, criteria, chunks, stt_confidence)`**: Chấm điểm với LLM, bound rubric
+- **`grade(question, transcript, criteria, chunks, stt_confidence)`**: Chấm điểm với LLM, bound rubric 5 tiêu chí
 
 ### `grading.py`
 - **`check_config(exam)`**: Đảm bảo exam snapshot khớp AI config hiện tại
@@ -222,44 +209,30 @@ tick() loop:
   3. Process PENDING documents (PDF → chunks → embeddings)
   4. Process SUBMITTED attempts:
      a. transcribe_attempt_if_needed() — Whisper server-side STT
-     b. grade_answer() — enhanced metrics pipeline
+     b. grade_answer() — enhanced ENTs metrics pipeline
      c. finalize() — compute final_score, set status
 ```
 
-### `grade_answer()` pipeline
-1. **Fluency analysis** — speech rate, pauses, filled pauses từ word timestamps
-2. **Pronunciation WER** — cho Read Aloud / Repeat Sentence
-3. **PTE standardized scoring** — RA, RS, DI theo thang PTE 90
-4. **RAG retrieval** — chunks từ Item Bank (expected_points, key_terms)
-5. **LLM grading** — calibrated prompt với metrics + evidence
-6. **Score merge** — PTE score override hoặc weighted average
+### `grade_answer()` pipeline (ENTs Speaking Assessment)
+1. **Fluency analysis** — speech rate (WPS), pause count, pause ratio, filled pauses từ word timestamps
+2. **Pronunciation WER & Acoustic Confidence** — phân tích độ tin cậy âm học Whisper & WER từ reference/prompt
+3. **5 Criteria Rubric Evaluation** — chấm 5 tiêu chí thang điểm 10.0 (*Ideas*, *Pronunciation*, *Grammar*, *Vocabulary*, *Fluency* mỗi tiêu chí 2.0đ)
+4. **Band Descriptors Injection** — tiêm 4 Band Descriptors (*Exceeds standard*, *Meets standard*, *Attempt made*, *Insufficient evidence*) vào LLM prompt
+5. **Acoustic-LLM Hybrid Calibration** — dung hợp chỉ số âm học thực tế hiệu chuẩn điểm phát âm & trôi chảy
 
 ---
 
-## 4. PTE Scoring Engines
-
-| File | Dạng bài | Scoring |
-|------|----------|---------|
-| `pte_read_aloud.py` | Read Aloud | WER + content + fluency + pronunciation → score 90 |
-| `pte_repeat_sentence.py` | Repeat Sentence | Exact match + partial + timing → score 90 |
-| `pte_describe_image.py` | Describe Image | Keywords + content + fluency + pronunciation → score 90 |
-| `pte_retell_lecture.py` | Re-tell Lecture | Stub (待完成) |
-| `pte_group_discussion.py` | Summarize GD | Stub (待完成) |
-| `pte_answer_short_question.py` | Answer Short Question | Stub (待完成) |
-
----
-
-## 5. Metrics & Analysis
+## 4. ENTs Scoring & Acoustic Metrics
 
 | File | Mô tả |
 |------|--------|
 | `fluency.py` | Speech rate (WPS), pause count, pause ratio, filled pauses |
-| `pronunciation_wer.py` | Word Error Rate từ reference text |
-| `metrics.py` | `aggregate_grading_metrics()` — kết hợp fluency + pronunciation |
+| `pronunciation_wer.py` | Word Error Rate & acoustic alignment từ reference text |
+| `metrics.py` | `aggregate_grading_metrics()` — kết hợp fluency + pronunciation WER |
 
 ---
 
-## 6. Storage & Audio
+## 5. Storage & Audio
 
 ### `storage.py`
 - Backend: **Local filesystem** (default) hoặc **S3/MinIO**

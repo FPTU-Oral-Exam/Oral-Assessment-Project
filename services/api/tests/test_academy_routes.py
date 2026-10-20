@@ -36,7 +36,7 @@ def test_matrix_rules_validation():
     m_in = AcademicMatrixIn(
         code="MATRIX-01",
         name="Standard Speaking Matrix",
-        description="PTE Speaking blueprint",
+        description="ENTS Speaking blueprint",
         rubric_id=None,
         rules=[
             {
@@ -155,7 +155,7 @@ class TestAcademicRubrics:
 
         # 1. Rubric Invariant: Sum of weights must equal 100%
         valid_payload = {
-            "name": "PTE Speaking Official Rubric",
+            "name": "ENTS Speaking Official Rubric",
             "description": "5 standard dimensions",
             "course_id": None,
             "criteria": [
@@ -168,7 +168,7 @@ class TestAcademicRubrics:
         res_create = academy.post("/api/academy/rubrics", json=valid_payload)
         assert res_create.status_code in (200, 201), f"Create failed: {res_create.text}"
         rubric_data = res_create.json()
-        assert rubric_data["name"] == "PTE Speaking Official Rubric"
+        assert rubric_data["name"] == "ENTS Speaking Official Rubric"
         assert rubric_data["version"] == 1
         rubric_id = rubric_data["id"]
 
@@ -181,13 +181,13 @@ class TestAcademicRubrics:
         # 3. Get Rubric Detail
         res_get = academy.get(f"/api/academy/rubrics/{rubric_id}")
         assert res_get.status_code == 200
-        assert res_get.json()["name"] == "PTE Speaking Official Rubric"
+        assert res_get.json()["name"] == "ENTS Speaking Official Rubric"
 
         # 4. Update Rubric (add criterion)
         res_update = academy.put(
             f"/api/academy/rubrics/{rubric_id}",
             json={
-                "name": "PTE Speaking Updated Rubric",
+                "name": "ENTS Speaking Updated Rubric",
                 "criteria": [
                     {"name": "Content", "max_score": 10.0, "weight": 25.0, "description": "Topic relevance"},
                     {"name": "Pronunciation", "max_score": 10.0, "weight": 25.0, "description": "Phoneme clarity"},
@@ -198,7 +198,7 @@ class TestAcademicRubrics:
             },
         )
         assert res_update.status_code == 200
-        assert res_update.json()["name"] == "PTE Speaking Updated Rubric"
+        assert res_update.json()["name"] == "ENTS Speaking Updated Rubric"
         assert len(res_update.json()["criteria"]) == 5
 
         # 5. Invalid Rubric: Sum of weights != 100 should fail with 400/422
@@ -396,8 +396,8 @@ class TestAcademicMatrices:
 
         # 3. Create Matrix
         matrix_payload = {
-            "code": "MATRIX-PTE-STD-01",
-            "name": "PTE Standard Speaking Blueprint",
+            "code": "MATRIX-ENTS-STD-01",
+            "name": "ENTS Standard Speaking Blueprint",
             "description": "Cấu trúc đề chuẩn 2 phần RA và RS",
             "rules": [
                 {
@@ -423,7 +423,7 @@ class TestAcademicMatrices:
         assert res_create.status_code in (200, 201), f"Create failed: {res_create.text}"
         matrix_data = res_create.json()
         matrix_id = matrix_data["id"]
-        assert matrix_data["code"] == "MATRIX-PTE-STD-01"
+        assert matrix_data["code"] == "MATRIX-ENTS-STD-01"
         assert len(matrix_data["rules"]) == 2
 
         # 4. List Matrices
@@ -435,15 +435,15 @@ class TestAcademicMatrices:
         # 5. Get Matrix Detail
         res_get = academy.get(f"/api/academy/matrices/{matrix_id}")
         assert res_get.status_code == 200
-        assert res_get.json()["name"] == "PTE Standard Speaking Blueprint"
+        assert res_get.json()["name"] == "ENTS Standard Speaking Blueprint"
 
         # 6. Update Matrix
         res_update = academy.put(
             f"/api/academy/matrices/{matrix_id}",
-            json={"name": "PTE Updated Speaking Blueprint"},
+            json={"name": "ENTS Updated Speaking Blueprint"},
         )
         assert res_update.status_code == 200
-        assert res_update.json()["name"] == "PTE Updated Speaking Blueprint"
+        assert res_update.json()["name"] == "ENTS Updated Speaking Blueprint"
 
         # 7. Check Stock Health
         res_health = academy.get(f"/api/academy/matrices/{matrix_id}/stock-health")

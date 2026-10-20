@@ -131,7 +131,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               value={examCode}
               onChange={(e) => setExamCode(e.target.value)}
               disabled={isLoading}
-              placeholder="Nhập mã kỳ thi (VD: PTE-01) hoặc để trống"
+              placeholder="Nhập mã kỳ thi (VD: ENT104) hoặc để trống"
               style={{
                 width: '100%',
                 padding: '12px',

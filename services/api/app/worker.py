@@ -128,7 +128,7 @@ def grade_answer(db, exam, session, attempt, transcript, confidence, segments=No
         except Exception as e:
             log.warning("fluency_analysis_failed attempt=%s error=%s", attempt.id, str(e))
 
-    # Analyze pronunciation and PTE standardized tasks
+    # Analyze pronunciation and ENTs speaking tasks
     pronunciation_result = None
     q_dict = attempt.question if isinstance(attempt.question, dict) else {}
     reference_text = (
