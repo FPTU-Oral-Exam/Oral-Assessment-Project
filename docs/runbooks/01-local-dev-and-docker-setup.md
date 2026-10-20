@@ -24,6 +24,7 @@ Copy-Item .env.example .env
 ```
 
 Các biến môi trường quan trọng cần lưu ý:
+
 * `DATABASE_URL`: `postgresql+asyncpg://oraluser:oralpass@localhost:5432/oraldb`
 * `REDIS_URL`: `redis://localhost:6379/0`
 * `MINIO_ENDPOINT`: `localhost:9000`
@@ -87,6 +88,7 @@ pip install -r requirements.txt
 # Chạy API server có hot-reload
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
 *Kiểm tra Swagger Docs:* Truy cập `http://localhost:8000/docs`.
 
 ### 5.3. Chạy Celery Background Worker (Cửa sổ terminal mới):
@@ -105,29 +107,33 @@ celery -A app.worker.celery_app worker --loglevel=info -P solo
 ## 6. Bước 5: Khởi chạy Dual-Frontend Clients
 
 ### 6.1. Khởi chạy Staff Portal (Web Next.js):
+
 Mở một cửa sổ PowerShell mới tại thư mục gốc:
 
 ```powershell
 npm.cmd run dev -w apps/staff-portal
 ```
+
 *Truy cập Web Portal:* Mở trình duyệt tại `http://localhost:3000`.
 
 ### 6.2. Khởi chạy Student App (Desktop Electron):
+
 Mở một cửa sổ PowerShell mới tại thư mục gốc:
 
 ```powershell
 npm.cmd run dev -w apps/student-app
 ```
+
 *Cửa sổ ứng dụng Electron sẽ tự động bật lên.*
 
 ---
 
 ## 7. Bảng Kiểm tra Sức khỏe Dịch vụ (Health Check Matrix)
 
-| Điểm truy cập / Dịch vụ | URL | Thông tin xác thực mặc định |
-| :--- | :--- | :--- |
-| **Staff Portal (Web)** | `http://localhost:3000` | Các tài khoản demo (Xem RUNBOOK-03) |
-| **Backend REST API** | `http://localhost:8000/docs` | Swagger Interactive Documentation |
-| **MinIO Console** | `http://localhost:9001` | User: `oralstorage` / Pass: `oralstorage123` |
-| **PostgreSQL** | `localhost:5432` | User: `oraluser` / Pass: `oralpass` / DB: `oraldb` |
-| **Redis** | `localhost:6379` | Không mật khẩu |
+| Điểm truy cập / Dịch vụ | URL                            | Thông tin xác thực mặc định                        |
+| :--------------------------- | :----------------------------- | :------------------------------------------------------- |
+| **Staff Portal (Web)** | `http://localhost:3000`      | Các tài khoản demo (Xem RUNBOOK-03)                   |
+| **Backend REST API**   | `http://localhost:8000/docs` | Swagger Interactive Documentation                        |
+| **MinIO Console**      | `http://localhost:9001`      | User: `oralstorage` / Pass: `oralstorage123`         |
+| **PostgreSQL**         | `localhost:5432`             | User: `oraluser` / Pass: `oralpass` / DB: `oraldb` |
+| **Redis**              | `localhost:6379`             | Không mật khẩu                                        |

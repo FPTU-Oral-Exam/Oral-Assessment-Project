@@ -218,6 +218,10 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
   const typeCounts = useMemo(() => {
     const counts: Record<QuestionType | 'ALL', number> = {
       ALL: questions.length,
+      GENERAL_INTERVIEW: questions.filter((q) => q.type === 'GENERAL_INTERVIEW').length,
+      PICTURE_DESCRIPTION: questions.filter((q) => q.type === 'PICTURE_DESCRIPTION').length,
+      TOPIC_MONOLOGUE: questions.filter((q) => q.type === 'TOPIC_MONOLOGUE').length,
+      DEEP_DISCUSSION: questions.filter((q) => q.type === 'DEEP_DISCUSSION').length,
       RA: questions.filter((q) => q.type === 'RA').length,
       RS: questions.filter((q) => q.type === 'RS').length,
       GD: questions.filter((q) => q.type === 'GD').length,

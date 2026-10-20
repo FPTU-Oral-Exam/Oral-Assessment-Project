@@ -1,4 +1,9 @@
-# PTE Academic Speaking Question Bank
+# PTE Academic Speaking Question Bank (Archived Benchmark Dataset)
+
+> [!NOTE]
+> **TÀI LIỆU LƯU TRỮ (ARCHIVED DATASET):**
+> Bộ dữ liệu 1,254 câu hỏi PTE này được lưu trữ phục vụ mục đích nghiên cứu, benchmark và đối sánh kỹ thuật.
+> Kể từ phiên bản chuẩn hóa khảo thí FPTU (ENTs 5-criteria grading), hệ thống đã chuyển sang sử dụng Ngân hàng câu hỏi chuẩn hóa ENTs FPTU (4 dạng bài: `GENERAL_INTERVIEW`, `PICTURE_DESCRIPTION`, `TOPIC_MONOLOGUE`, `DEEP_DISCUSSION`). Bảng câu hỏi khảo thí trực tiếp trong database không còn nạp dữ liệu PTE này.
 
 ## 1. Overview
 This directory contains the cleaned, standardized, and verified dataset of **1,254** PTE Academic Speaking test items scraped and prepared for the **FPTU Oral Assessment Platform**.

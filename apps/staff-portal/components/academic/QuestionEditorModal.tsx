@@ -32,7 +32,7 @@ export default function QuestionEditorModal({
 }: QuestionEditorModalProps) {
   const { addQuestion, updateQuestion, questionTypeConfigs } = useAcademic();
 
-  const [type, setType] = useState<QuestionType>('RA');
+  const [type, setType] = useState<QuestionType>('GENERAL_INTERVIEW');
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -156,7 +156,12 @@ export default function QuestionEditorModal({
 
   if (!isOpen) return null;
 
-  const questionTypes: QuestionType[] = ['RA', 'RS', 'GD', 'DI', 'SI', 'RL'];
+  const questionTypes: QuestionType[] = [
+    'GENERAL_INTERVIEW',
+    'PICTURE_DESCRIPTION',
+    'TOPIC_MONOLOGUE',
+    'DEEP_DISCUSSION',
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -168,7 +173,7 @@ export default function QuestionEditorModal({
               {initialQuestion ? 'Chỉnh sửa câu hỏi khảo thí' : 'Thêm mới câu hỏi vào Ngân hàng đề'}
             </h2>
             <p className="text-xs text-slate-500">
-              Quy chuẩn 6 dạng bài Vấn đáp học thuật PTE / Oral Assessment (Kỹ năng Speaking)
+              Quy chuẩn 4 dạng bài Vấn đáp học thuật ENTs / Oral Assessment (Kỹ năng Speaking)
             </p>
           </div>
           <button
@@ -192,7 +197,7 @@ export default function QuestionEditorModal({
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
               Dạng bài Speaking:
             </label>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {questionTypes.map((t) => {
                 const meta = QUESTION_TYPES_META[t];
                 const isSelected = type === t;
@@ -207,9 +212,9 @@ export default function QuestionEditorModal({
                         : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
                     }`}
                   >
-                    <div>{t}</div>
+                    <div className="truncate text-[11px]">{t}</div>
                     <div className="text-[10px] font-normal truncate mt-0.5 opacity-80">
-                      {meta.badge}
+                      {meta?.badge || t}
                     </div>
                   </button>
                 );
@@ -227,7 +232,7 @@ export default function QuestionEditorModal({
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="VD: RA-105"
+                placeholder="VD: GI-101"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
                 required
               />

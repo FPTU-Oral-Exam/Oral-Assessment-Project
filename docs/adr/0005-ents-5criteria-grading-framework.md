@@ -1,8 +1,9 @@
+
 # ADR-0005: Chuyển Đổi Khung Chấm Điểm Speaking Sang Chuẩn ENTs 5 Tiêu Chí Thang Điểm 10
 
-> **Trạng thái:** ACCEPTED *(SUPERSEDES Cơ chế Chấm điểm PTE Speaking 3 Tiêu chí cũ)*  
-> **Ngày phê duyệt:** 2026-10-20  
-> **Người quyết định:** Bình (Lead Engineer) & AI Pair-Programming Mentor  
+> **Trạng thái:** ACCEPTED *(SUPERSEDES Cơ chế Chấm điểm PTE Speaking 3 Tiêu chí cũ)*
+> **Ngày phê duyệt:** 2026-10-20
+> **Người quyết định:** Bình (Lead Engineer) & AI Pair-Programming Mentor
 > **Phạm vi:** `services/api` (AI Engine, Worker, Rubric Models, Schemas), `apps/staff-portal` (Rubrics Studio, Teacher Grading)
 
 ---
@@ -12,6 +13,7 @@
 Ban đầu, hệ thống kế thừa mô hình đánh giá của bài thi PTE Speaking quốc tế với 3 tiêu chí chính: *Content, Oral Fluency, Pronunciation* với thang điểm 5 cho mỗi tiêu chí (tổng điểm 15).
 
 Tuy nhiên, khi đối chiếu với chương trình đào tạo thực tế tại Trường Đại học FPT cho chuỗi 6 môn Tiếng Anh học thuật (`ENT001`, `ENT104`, `ENT203`, `ENT303`, `ENT403`, `ENT503`), Hội đồng Khảo thí và Bộ môn áp dụng khung đánh giá riêng biệt gồm **5 tiêu chí độc lập** thang điểm 10:
+
 1. *Ideas* (Ý tưởng & Khả năng phát triển nội dung)
 2. *Pronunciation* (Phát âm, trọng âm, ngữ điệu)
 3. *Grammar Range and Accuracy* (Độ phong phú và Độ chính xác Ngữ pháp)
@@ -43,9 +45,11 @@ Chúng tôi quyết định chuẩn hóa toàn diện hệ sinh thái chấm thi
 ## 3. Hệ quả & Đánh đổi (Consequences & Trade-offs)
 
 ### Tích cực:
+
 * **Khớp 100% với Chương trình Thực tế:** Bảng điểm sinh ra có thể nhập trực tiếp vào hệ thống quản lý đào tạo FAP mà không cần qua bước quy đổi điểm trung gian.
 * **Độ giải thích cao (High Explainability):** Điểm số luôn đi kèm tên Band cụ thể và nhận xét chi tiết từng lỗi ngữ pháp, từ vựng, giúp sinh viên và giảng viên dễ dàng tra cứu, phúc khảo.
 
 ### Đánh đổi (Trade-offs):
+
 * Cần cập nhật lại dữ liệu mẫu (Seeder) và kịch bản kiểm thử (Pytest) cho toàn bộ 5 tiêu chí.
 * Prompt của LLM dài hơn do phải nhúng toàn bộ mô tả của 4 band điểm, làm tăng nhẹ token usage nhưng đổi lại độ chính xác chấm điểm cao hơn rõ rệt.

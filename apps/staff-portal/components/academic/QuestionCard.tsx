@@ -16,6 +16,10 @@ import { AcademicQuestionItem, QuestionType } from '@/types/academic';
 import { useAcademic } from '@/context/AcademicContext';
 
 const TYPE_META: Record<QuestionType, { label: string; bg: string; text: string; dot: string }> = {
+  GENERAL_INTERVIEW: { label: 'Phỏng vấn chung', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  PICTURE_DESCRIPTION: { label: 'Mô tả hình ảnh', bg: 'bg-amber-50', text: 'text-amber-800', dot: 'bg-amber-500' },
+  TOPIC_MONOLOGUE: { label: 'Thuyết trình độc thoại', bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
+  DEEP_DISCUSSION: { label: 'Thảo luận chuyên sâu', bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
   RA: { label: 'Đọc to', bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
   RS: { label: 'Lặp câu', bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
   GD: { label: 'Thảo luận', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
@@ -31,9 +35,18 @@ const DIFFICULTY_META = {
   HARD: { label: 'Khó', bg: 'bg-rose-50 text-rose-700' },
 };
 
-const HAS_IMAGE: QuestionType[] = ['DI'];
-const HAS_AUDIO: QuestionType[] = ['RS', 'GD', 'RL', 'SI'];
-const HAS_TEXT_PROMPT: QuestionType[] = ['RA', 'ASQ', 'SI', 'DI'];
+const HAS_IMAGE: QuestionType[] = ['DI', 'PICTURE_DESCRIPTION'];
+const HAS_AUDIO: QuestionType[] = ['RS', 'GD', 'RL', 'SI', 'GENERAL_INTERVIEW', 'DEEP_DISCUSSION'];
+const HAS_TEXT_PROMPT: QuestionType[] = [
+  'RA',
+  'ASQ',
+  'SI',
+  'DI',
+  'GENERAL_INTERVIEW',
+  'PICTURE_DESCRIPTION',
+  'TOPIC_MONOLOGUE',
+  'DEEP_DISCUSSION',
+];
 
 export function resolveMediaUrl(url?: string): string {
   if (!url) return '';
@@ -202,7 +215,7 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
                 Audio Prompt
               </p>
               <p className="text-[10px] text-slate-500 truncate">
-                {isPlayingAudio ? 'Đang phát âm thanh...' : (question.media_url ? 'Âm thanh gốc PTE' : 'Giọng đọc chuẩn AI')}
+                {isPlayingAudio ? 'Đang phát âm thanh...' : (question.media_url ? 'Âm thanh mẫu' : 'Giọng đọc chuẩn AI')}
               </p>
             </div>
           </div>

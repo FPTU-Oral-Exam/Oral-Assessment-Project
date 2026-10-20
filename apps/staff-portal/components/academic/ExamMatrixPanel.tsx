@@ -29,12 +29,21 @@ import {
 import StockHealthIndicator from './StockHealthIndicator';
 import SampleExamPreviewModal from './SampleExamPreviewModal';
 
-const SPEAKING_TYPES: QuestionType[] = ['RA', 'RS', 'GD', 'DI', 'SI', 'RL'];
+const SPEAKING_TYPES: QuestionType[] = [
+  'GENERAL_INTERVIEW',
+  'PICTURE_DESCRIPTION',
+  'TOPIC_MONOLOGUE',
+  'DEEP_DISCUSSION',
+];
 
 const TYPE_LIGHT_THEME: Record<
   QuestionType,
   { bg: string; text: string; border: string; badgeBg: string }
 > = {
+  GENERAL_INTERVIEW: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badgeBg: 'bg-emerald-600' },
+  PICTURE_DESCRIPTION: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badgeBg: 'bg-amber-600' },
+  TOPIC_MONOLOGUE: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badgeBg: 'bg-indigo-600' },
+  DEEP_DISCUSSION: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badgeBg: 'bg-purple-600' },
   RA: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badgeBg: 'bg-blue-600' },
   RS: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badgeBg: 'bg-purple-600' },
   GD: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badgeBg: 'bg-emerald-600' },
@@ -45,6 +54,10 @@ const TYPE_LIGHT_THEME: Record<
 };
 
 const DEFAULT_RULE_SPECS: Record<QuestionType, { count: number; weight: number }> = {
+  GENERAL_INTERVIEW: { count: 2, weight: 20 },
+  PICTURE_DESCRIPTION: { count: 1, weight: 20 },
+  TOPIC_MONOLOGUE: { count: 1, weight: 30 },
+  DEEP_DISCUSSION: { count: 2, weight: 30 },
   RA: { count: 3, weight: 20 },
   RS: { count: 8, weight: 30 },
   GD: { count: 1, weight: 10 },
@@ -107,9 +120,9 @@ export default function ExamMatrixPanel() {
   // Đồng bộ form khi activeMatrix thay đổi hoặc khi chuyển chế độ
   useEffect(() => {
     if (isCreatingNew) {
-      setMatrixCode(`PTE-MATRIX-${Date.now().toString().slice(-4)}`);
+      setMatrixCode(`ENTS-MATRIX-${Date.now().toString().slice(-4)}`);
       setMatrixName('Ma trận Đề thi Mới');
-      setMatrixDesc('Cấu hình phân bổ 6 dạng bài Speaking chuẩn PTE/Oral');
+      setMatrixDesc('Cấu hình phân bổ 4 dạng bài Speaking chuẩn ENTs FPTU');
       setRubricId(rubrics[0]?.id || '');
       setRules(createDefaultRules());
       setEasyRatio(30);
@@ -220,7 +233,7 @@ export default function ExamMatrixPanel() {
     const trimmedName = matrixName.trim();
 
     if (!trimmedCode) {
-      setErrorMsg('Vui lòng nhập Mã ma trận đề thi (ví dụ: PTE-STD-SPEAKING)');
+      setErrorMsg('Vui lòng nhập Mã ma trận đề thi (ví dụ: ENTS-STD-SPEAKING)');
       return;
     }
     if (!trimmedName) {
@@ -368,7 +381,7 @@ export default function ExamMatrixPanel() {
                   Thiết lập Ma trận Đề thi (Exam Matrix Blueprint)
                 </h1>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Quy định cấu trúc số lượng câu hỏi, thời lượng và tỷ lệ phân bổ của 6 dạng đề thi Speaking chuẩn PTE/Oral
+                  Quy định cấu trúc số lượng câu hỏi, thời lượng và tỷ lệ phân bổ của 4 dạng đề thi Speaking chuẩn ENTs FPTU
                 </p>
               </div>
             </div>
@@ -467,7 +480,7 @@ export default function ExamMatrixPanel() {
               type="text"
               value={matrixCode}
               onChange={(e) => setMatrixCode(e.target.value)}
-              placeholder="VD: PTE-STD-SPEAKING"
+              placeholder="VD: ENTS-STD-SPEAKING"
               className="w-full bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-slate-900 px-3 py-2 rounded-xl focus:border-blue-500 focus:bg-white focus:outline-none"
             />
           </div>
@@ -480,7 +493,7 @@ export default function ExamMatrixPanel() {
               type="text"
               value={matrixName}
               onChange={(e) => setMatrixName(e.target.value)}
-              placeholder="VD: Ma trận Chuẩn PTE Academic Speaking (6 Dạng bài)"
+              placeholder="VD: Ma trận Chuẩn ENTs Speaking (4 Dạng bài)"
               className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-900 px-3 py-2 rounded-xl focus:border-blue-500 focus:bg-white focus:outline-none font-semibold"
             />
           </div>

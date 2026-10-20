@@ -300,7 +300,23 @@ ENT_RUBRIC_CRITERIA = [
 # 5. CÂU HỎI MẪU BÓC TÁCH TỪ GUIDELINES (ITEM BANK)
 # ============================================================================
 SAMPLE_QUESTIONS = [
-    # --- ENT104 Part 1: General Interview ---
+    # --- GENERAL INTERVIEW ---
+    {
+        "code": "ENT001_INT_01",
+        "skill": "SPEAKING",
+        "type": "GENERAL_INTERVIEW",
+        "title": "General Interview - Self Introduction & Daily Routine",
+        "prompt": "Please introduce yourself briefly. What is your daily routine on a typical weekday? What do you usually do in your free time, and why?",
+        "prep_time": 0,
+        "response_time": 45,
+        "difficulty": "EASY",
+        "key_points": [
+            "State full name, age, and major/studies clearly",
+            "Describe morning and afternoon daily routine",
+            "Mention leisure activities and reasons for choosing them",
+        ],
+        "tags": ["ENT001", "Interview", "SelfIntroduction"],
+    },
     {
         "code": "ENT104_INT_01",
         "skill": "SPEAKING",
@@ -318,7 +334,41 @@ SAMPLE_QUESTIONS = [
         ],
         "tags": ["ENT104", "Interview", "Personal"],
     },
-    # --- ENT104 Part 2: Picture Description ---
+    {
+        "code": "ENT203_INT_01",
+        "skill": "SPEAKING",
+        "type": "GENERAL_INTERVIEW",
+        "title": "General Interview - Travel Experiences & Hobbies",
+        "prompt": "Tell me about a memorable trip you took recently. Why did you choose that destination? What hobbies do you enjoy the most, and how did you start them?",
+        "prep_time": 0,
+        "response_time": 60,
+        "difficulty": "MEDIUM",
+        "key_points": [
+            "Describe travel destination, companions, and key experiences",
+            "Explain personal reasons for choosing the trip",
+            "Elaborate on current hobbies and their beginnings",
+        ],
+        "tags": ["ENT203", "Interview", "Travel"],
+    },
+
+    # --- PICTURE DESCRIPTION ---
+    {
+        "code": "ENT001_PICT_01",
+        "skill": "SPEAKING",
+        "type": "PICTURE_DESCRIPTION",
+        "title": "Picture Description - University Campus Life",
+        "prompt": "Look at the picture showing students on a modern university campus. Describe what you see in 2 minutes: where they are, what they are doing, and how they appear to feel.",
+        "media_url": "/images/office_meeting_team.svg",
+        "prep_time": 90,
+        "response_time": 120,
+        "difficulty": "EASY",
+        "key_points": [
+            "Describe the overall setting and campus surroundings",
+            "Identify the number of students and their primary actions",
+            "Describe facial expressions, mood, and interactions",
+        ],
+        "tags": ["ENT001", "PictureDescription", "CampusLife"],
+    },
     {
         "code": "ENT104_PICT_01",
         "skill": "SPEAKING",
@@ -337,7 +387,41 @@ SAMPLE_QUESTIONS = [
         ],
         "tags": ["ENT104", "PictureDescription", "Workplace"],
     },
-    # --- ENT403 Part 1: Topic Monologue ---
+    {
+        "code": "ENT203_PICT_01",
+        "skill": "SPEAKING",
+        "type": "PICTURE_DESCRIPTION",
+        "title": "Picture Description - Collaborative Tech Workshop",
+        "prompt": "Look at the picture showing a team of engineers collaborating on a software design session. Describe their roles, tools, and collaboration dynamics.",
+        "media_url": "/images/office_meeting_team.svg",
+        "prep_time": 120,
+        "response_time": 150,
+        "difficulty": "MEDIUM",
+        "key_points": [
+            "Identify key team members and their roles",
+            "Describe equipment, screens, and technical documents",
+            "Evaluate team collaboration dynamics and engagement",
+        ],
+        "tags": ["ENT203", "PictureDescription", "Collaboration"],
+    },
+
+    # --- TOPIC MONOLOGUE ---
+    {
+        "code": "ENT303_MONO_01",
+        "skill": "SPEAKING",
+        "type": "TOPIC_MONOLOGUE",
+        "title": "Topic Monologue - An Important Technological Innovation",
+        "prompt": "Describe an important technological innovation that has changed modern life. Explain what it is, how it works, and whether its overall impact is positive or negative.",
+        "prep_time": 60,
+        "response_time": 150,
+        "difficulty": "HARD",
+        "key_points": [
+            "Name the innovation and when it emerged",
+            "Explain core functionalities and how people use it",
+            "Analyze benefits vs potential societal drawbacks",
+        ],
+        "tags": ["ENT303", "Monologue", "Innovation"],
+    },
     {
         "code": "ENT403_MONO_01",
         "skill": "SPEAKING",
@@ -355,7 +439,41 @@ SAMPLE_QUESTIONS = [
         ],
         "tags": ["ENT403", "Monologue", "Personality"],
     },
-    # --- ENT403 Part 2: Deep Discussion ---
+    {
+        "code": "ENT503_MONO_01",
+        "skill": "SPEAKING",
+        "type": "TOPIC_MONOLOGUE",
+        "title": "Topic Monologue - Artificial Intelligence in Higher Education",
+        "prompt": "Discuss the impact of generative artificial intelligence on higher education. Present arguments on academic integrity, personalized learning, and future career readiness.",
+        "prep_time": 60,
+        "response_time": 150,
+        "difficulty": "HARD",
+        "key_points": [
+            "Overview of AI adoption in modern university classrooms",
+            "Key benefits for personalized learning and accessibility",
+            "Challenges regarding academic integrity and critical thinking",
+            "Recommendations for university policy and students",
+        ],
+        "tags": ["ENT503", "Monologue", "ArtificialIntelligence"],
+    },
+
+    # --- DEEP DISCUSSION ---
+    {
+        "code": "ENT203_DISC_01",
+        "skill": "SPEAKING",
+        "type": "DEEP_DISCUSSION",
+        "title": "Deep Discussion - Remote Working vs Office Presence",
+        "prompt": "Do you believe remote work increases employee productivity or degrades team cohesion? What are the key psychological and organizational factors?",
+        "prep_time": 15,
+        "response_time": 90,
+        "difficulty": "MEDIUM",
+        "key_points": [
+            "Evaluate productivity metrics in remote vs in-office settings",
+            "Discuss communication barriers and team trust",
+            "Conclude with recommendations for hybrid workplace models",
+        ],
+        "tags": ["ENT203", "DeepDiscussion", "Workplace"],
+    },
     {
         "code": "ENT403_DISC_01",
         "skill": "SPEAKING",
@@ -371,6 +489,22 @@ SAMPLE_QUESTIONS = [
             "Analyze realistic vs optimistic mindset in overcoming adversity",
         ],
         "tags": ["ENT403", "DeepDiscussion", "CriticalThinking"],
+    },
+    {
+        "code": "ENT503_DISC_01",
+        "skill": "SPEAKING",
+        "type": "DEEP_DISCUSSION",
+        "title": "Deep Discussion - Ethical Dilemmas in Autonomous Systems",
+        "prompt": "When autonomous machines or algorithms cause harm, who bears moral and legal responsibility? How should regulators balance technological innovation with public safety?",
+        "prep_time": 15,
+        "response_time": 90,
+        "difficulty": "HARD",
+        "key_points": [
+            "Analyze moral accountability between developer, user, and AI",
+            "Discuss real-world scenarios (self-driving cars, automated grading)",
+            "Propose regulatory governance frameworks",
+        ],
+        "tags": ["ENT503", "DeepDiscussion", "Ethics"],
     },
 ]
 
@@ -499,8 +633,15 @@ def seed_database():
         print(f"  + Rubric ID: {rubric.id} | Criteria: 5 tiêu chí thang điểm 2 (Tổng 10.0)")
 
         # 5. Dọn sạch câu hỏi cũ và nạp câu hỏi mẫu Guidelines vào Item Bank
-        print("\n[5/7] Nạp câu hỏi mẫu bóc tách từ Guidelines vào Ngân hàng câu hỏi...")
-        # Xóa câu hỏi demo cũ nếu có mã trùng
+        print("\n[5/7] Dọn sạch câu hỏi PTE cũ và nạp 12 câu hỏi ENTs vào Ngân hàng câu hỏi...")
+        PTE_TYPES = ["RA", "RS", "GD", "DI", "SI", "RL", "ASQ"]
+        del_q = db.execute(delete(AcademicQuestion).where(AcademicQuestion.type.in_(PTE_TYPES))).rowcount
+        del_cfg = db.execute(delete(QuestionTypeConfigModel).where(QuestionTypeConfigModel.type.in_(PTE_TYPES))).rowcount
+        db.flush()
+        if del_q or del_cfg:
+            print(f"  + Đã dọn sạch {del_q} câu hỏi PTE cũ và {del_cfg} cấu hình dạng bài PTE cũ khỏi Database.")
+
+        # Nạp câu hỏi ENTs
         for q_data in SAMPLE_QUESTIONS:
             existing = db.scalar(select(AcademicQuestion).where(AcademicQuestion.code == q_data["code"]))
             if existing:
