@@ -75,6 +75,7 @@ graph TD
 *Tài liệu thiết kế chi tiết từng tính năng lớn trước khi triển khai mã nguồn:*
 * [**`docs/specs/README.md`**](file:///c:/Users/admin/Documents/A_FPT/Tempory_Project/AI-Oral-Assessment-Platform/docs/specs/README.md): Mục lục và nguyên tắc duy trì Technical Specs.
 * [**Spec Chấm điểm ENTs Speaking 5 Tiêu chí**](file:///c:/Users/admin/Documents/A_FPT/Tempory_Project/AI-Oral-Assessment-Platform/docs/superpowers/specs/2026-10-20-ents-speaking-5criteria-grading-design.md): Phân tích công thức điểm, 4 band điểm, thuật toán Whisper logprobs và LLM Prompting.
+* [**Kế hoạch Triển khai ENTs Speaking 5 Tiêu chí**](file:///c:/Users/admin/Documents/A_FPT/Tempory_Project/AI-Oral-Assessment-Platform/docs/superpowers/plans/2026-10-20-ents-speaking-5criteria-grading.md): Kế hoạch dọn dẹp, phát triển AI Hybrid Calibration, Seeder 6 môn và lộ trình kiểm thử E2E.
 * [**Spec Ngân hàng Câu hỏi & Ma trận Đề thi**](file:///c:/Users/admin/Documents/A_FPT/Tempory_Project/AI-Oral-Assessment-Platform/docs/superpowers/plans/2026-10-12-academic-exam-bank-and-matrix.md): CSDL Item Bank, Blueprint Matrix, Stock Health Validator.
 * [**Spec Examiner Exam Management**](file:///c:/Users/admin/Documents/A_FPT/Tempory_Project/AI-Oral-Assessment-Platform/docs/superpowers/specs/2026-10-06-examiner-exam-management-design.md): Quy trình tổ chức thi từ FAP Import đến Xuất điểm.
 * [**Spec Luồng Thi Nói Tiếng Anh**](file:///c:/Users/admin/Documents/A_FPT/Tempory_Project/AI-Oral-Assessment-Platform/docs/specs/demo-flow-english-speaking.md): Luồng tương tác của thí sinh trong phòng thi.
