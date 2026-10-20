@@ -222,13 +222,6 @@ export function AcademicProvider({ children }: { children: ReactNode }) {
       PICTURE_DESCRIPTION: questions.filter((q) => q.type === 'PICTURE_DESCRIPTION').length,
       TOPIC_MONOLOGUE: questions.filter((q) => q.type === 'TOPIC_MONOLOGUE').length,
       DEEP_DISCUSSION: questions.filter((q) => q.type === 'DEEP_DISCUSSION').length,
-      RA: questions.filter((q) => q.type === 'RA').length,
-      RS: questions.filter((q) => q.type === 'RS').length,
-      GD: questions.filter((q) => q.type === 'GD').length,
-      DI: questions.filter((q) => q.type === 'DI').length,
-      SI: questions.filter((q) => q.type === 'SI').length,
-      RL: questions.filter((q) => q.type === 'RL').length,
-      ASQ: questions.filter((q) => q.type === 'ASQ').length,
     };
     return counts;
   }, [questions]);

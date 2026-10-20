@@ -20,13 +20,6 @@ const TYPE_META: Record<QuestionType, { label: string; bg: string; text: string;
   PICTURE_DESCRIPTION: { label: 'Mô tả hình ảnh', bg: 'bg-amber-50', text: 'text-amber-800', dot: 'bg-amber-500' },
   TOPIC_MONOLOGUE: { label: 'Thuyết trình độc thoại', bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
   DEEP_DISCUSSION: { label: 'Thảo luận chuyên sâu', bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
-  RA: { label: 'Đọc to', bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
-  RS: { label: 'Lặp câu', bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
-  GD: { label: 'Thảo luận', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  DI: { label: 'Mô tả ảnh', bg: 'bg-amber-50', text: 'text-amber-800', dot: 'bg-amber-500' },
-  SI: { label: 'Chỉ dẫn', bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
-  RL: { label: 'Kể lại', bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
-  ASQ: { label: 'Trả lời ngắn', bg: 'bg-cyan-50', text: 'text-cyan-700', dot: 'bg-cyan-500' },
 };
 
 const DIFFICULTY_META = {
@@ -35,13 +28,9 @@ const DIFFICULTY_META = {
   HARD: { label: 'Khó', bg: 'bg-rose-50 text-rose-700' },
 };
 
-const HAS_IMAGE: QuestionType[] = ['DI', 'PICTURE_DESCRIPTION'];
-const HAS_AUDIO: QuestionType[] = ['RS', 'GD', 'RL', 'SI', 'GENERAL_INTERVIEW', 'DEEP_DISCUSSION'];
+const HAS_IMAGE: QuestionType[] = ['PICTURE_DESCRIPTION'];
+const HAS_AUDIO: QuestionType[] = ['GENERAL_INTERVIEW', 'DEEP_DISCUSSION'];
 const HAS_TEXT_PROMPT: QuestionType[] = [
-  'RA',
-  'ASQ',
-  'SI',
-  'DI',
   'GENERAL_INTERVIEW',
   'PICTURE_DESCRIPTION',
   'TOPIC_MONOLOGUE',
@@ -63,7 +52,7 @@ interface QuestionCardProps {
 
 export default function QuestionCard({ question, onPreview, onEdit }: QuestionCardProps) {
   const { deleteQuestion } = useAcademic();
-  const meta = TYPE_META[question.type] || TYPE_META.RA;
+  const meta = TYPE_META[question.type] || TYPE_META.GENERAL_INTERVIEW;
   const diff = DIFFICULTY_META[question.difficulty] || DIFFICULTY_META.MEDIUM;
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -150,7 +139,7 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-300 hover:shadow-sm transition-all flex flex-col">
-      {/* ===== MEDIA BLOCK (image for DI) ===== */}
+      {/* ===== MEDIA BLOCK (image for PICTURE_DESCRIPTION) ===== */}
       {showImage && resolvedImageUrl && (
         <div
           className="relative bg-slate-100 h-32 cursor-pointer group overflow-hidden"
@@ -163,7 +152,7 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
           />
           <div className="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur text-[10px] text-amber-300 px-2 py-0.5 rounded flex items-center gap-1 border border-amber-500/30 font-semibold">
             <ImageIcon className="w-3 h-3" />
-            Biểu đồ / Hình ảnh
+            Hình ảnh mô tả
           </div>
         </div>
       )}
@@ -190,7 +179,7 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
           {cleanTitle(question.title, question.type)}
         </h3>
 
-        {/* Audio Player for RS/RL/GD/SI */}
+        {/* Audio Player if audio prompt available */}
         {showAudio && (
           <div className="mb-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2.5">
             <button
@@ -221,7 +210,7 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
           </div>
         )}
 
-        {/* Text prompt for RA/SI/DI/ASQ */}
+        {/* Text prompt */}
         {showText && question.prompt && (
           <p className="text-xs text-slate-600 leading-relaxed mb-3 line-clamp-3">
             {question.prompt}
@@ -258,7 +247,7 @@ export default function QuestionCard({ question, onPreview, onEdit }: QuestionCa
         </div>
       </div>
 
-      {/* Lightbox for DI image */}
+      {/* Lightbox for image */}
       {lightboxOpen && resolvedImageUrl && (
         <div
           className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur flex items-center justify-center p-4 animate-in fade-in"

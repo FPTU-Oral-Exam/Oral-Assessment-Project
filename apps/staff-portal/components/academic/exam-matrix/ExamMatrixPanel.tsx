@@ -44,13 +44,6 @@ const TYPE_LIGHT_THEME: Record<
   PICTURE_DESCRIPTION: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badgeBg: 'bg-amber-600' },
   TOPIC_MONOLOGUE: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badgeBg: 'bg-indigo-600' },
   DEEP_DISCUSSION: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badgeBg: 'bg-purple-600' },
-  RA: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badgeBg: 'bg-blue-600' },
-  RS: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badgeBg: 'bg-purple-600' },
-  GD: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badgeBg: 'bg-emerald-600' },
-  DI: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200', badgeBg: 'bg-amber-600' },
-  SI: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', badgeBg: 'bg-rose-600' },
-  RL: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', badgeBg: 'bg-indigo-600' },
-  ASQ: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200', badgeBg: 'bg-cyan-600' },
 };
 
 const DEFAULT_RULE_SPECS: Record<QuestionType, { count: number; weight: number }> = {
@@ -58,13 +51,6 @@ const DEFAULT_RULE_SPECS: Record<QuestionType, { count: number; weight: number }
   PICTURE_DESCRIPTION: { count: 1, weight: 20 },
   TOPIC_MONOLOGUE: { count: 1, weight: 30 },
   DEEP_DISCUSSION: { count: 2, weight: 30 },
-  RA: { count: 3, weight: 20 },
-  RS: { count: 8, weight: 30 },
-  GD: { count: 1, weight: 10 },
-  DI: { count: 2, weight: 15 },
-  SI: { count: 1, weight: 10 },
-  RL: { count: 1, weight: 15 },
-  ASQ: { count: 0, weight: 0 },
 };
 
 export default function ExamMatrixPanel() {
@@ -506,7 +492,7 @@ export default function ExamMatrixPanel() {
               type="text"
               value={matrixDesc}
               onChange={(e) => setMatrixDesc(e.target.value)}
-              placeholder="VD: Cấu trúc chuẩn 6 dạng bài Speaking: 3 RA, 8 RS, 1 GD, 2 DI, 1 SI, 1 RL"
+              placeholder="VD: Cấu trúc ma trận chuẩn 4 dạng bài Speaking ENTs FPTU (General Interview, Picture Description, Topic Monologue, Deep Discussion)..."
               className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-700 px-3 py-2 rounded-xl focus:border-blue-500 focus:bg-white focus:outline-none"
             />
           </div>
@@ -577,7 +563,7 @@ export default function ExamMatrixPanel() {
             <tbody className="divide-y divide-slate-100">
               {SPEAKING_TYPES.map((t) => {
                 const meta = QUESTION_TYPES_META[t];
-                const typeStyle = TYPE_LIGHT_THEME[t] || TYPE_LIGHT_THEME.RA;
+                const typeStyle = TYPE_LIGHT_THEME[t] || TYPE_LIGHT_THEME.GENERAL_INTERVIEW;
                 const cfg = questionTypeConfigs?.[t];
                 const rule = rules.find((r) => r.type === t) || {
                   type: t,

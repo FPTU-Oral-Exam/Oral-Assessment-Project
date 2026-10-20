@@ -59,8 +59,8 @@ export default function QuestionEditorModal({
       setKeyPointsText((initialQuestion.key_points || []).join('\n'));
       setTagsText((initialQuestion.tags || []).join(', '));
     } else {
-      setType('RA');
-      setCode(`RA-${Math.floor(100 + Math.random() * 900)}`);
+      setType('GENERAL_INTERVIEW');
+      setCode(`GI-${Math.floor(100 + Math.random() * 900)}`);
       setTitle('');
       setPrompt('');
       setDifficulty('MEDIUM');
@@ -289,18 +289,18 @@ export default function QuestionEditorModal({
               rows={4}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Nhập đoạn văn bản để đọc (RA), yêu cầu tình huống (SI), hoặc prompt mô tả hình ảnh..."
+              placeholder="Nhập câu hỏi hoặc gợi ý cho bài thi nói ENTs (VD: Giới thiệu bản thân, miêu tả hình ảnh, chủ đề độc thoại...)..."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-all leading-relaxed"
               required
             />
           </div>
 
-          {/* 5. Dành cho DI: Image URL */}
-          {type === 'DI' && (
+          {/* 5. Dành cho dạng bài có hình ảnh (PICTURE_DESCRIPTION) */}
+          {currentConfig?.requires_image && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
                 <ImageIcon className="w-3.5 h-3.5 text-amber-600" />
-                <span>URL Hình ảnh / Biểu đồ (Describe Image)</span>
+                <span>URL Hình ảnh / Biểu đồ (Picture Description)</span>
               </label>
               <input
                 type="text"
@@ -312,8 +312,8 @@ export default function QuestionEditorModal({
             </div>
           )}
 
-          {/* 6. Dành cho RS, RL, GD, SI: Audio Script */}
-          {(type === 'RS' || type === 'RL' || type === 'GD' || type === 'SI') && (
+          {/* 6. Dành cho dạng bài có âm thanh đề bài */}
+          {currentConfig?.requires_audio_script && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
                 <Volume2 className="w-3.5 h-3.5 text-blue-600" />
