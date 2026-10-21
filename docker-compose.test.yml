@@ -92,7 +92,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/admin-web/Dockerfile
+      dockerfile: apps/staff-portal/Dockerfile
     ports:
       - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     depends_on:

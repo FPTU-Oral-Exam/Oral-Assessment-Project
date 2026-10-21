@@ -13,7 +13,7 @@
     "student": "npm run electron:dev -w apps/student-app",
     "student:web": "npm run dev -w apps/student-app",
     "desktop": "npm run electron:dev -w apps/student-app",
-    "typecheck": "npm run typecheck -w packages/shared && npm run typecheck -w apps/student-app",
+    "typecheck": "npm run typecheck -w packages/shared && npm run typecheck -w apps/student-app && npm run typecheck -w apps/staff-portal",
     "build": "npm run build -w apps/student-app",
     "test": "npm run test:run -w packages/shared && npm run test:run -w apps/student-app",
     "test:e2e": "playwright test --config=playwright.config.ts"

@@ -16,7 +16,7 @@ Tài liệu này quy định các convention cho frontend code trong dự án AI
 Dự án sử dụng ESLint với các config có sẵn:
 
 ```javascript
-// apps/admin-web/eslint.config.mjs
+// apps/staff-portal/eslint.config.mjs
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";

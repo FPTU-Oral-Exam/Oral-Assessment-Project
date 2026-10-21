@@ -275,7 +275,7 @@ npm run dev
 
 ```bash
 # Frontend
-cd apps/admin-web
+cd apps/staff-portal
 npm run lint
 npm run typecheck
 npm run test

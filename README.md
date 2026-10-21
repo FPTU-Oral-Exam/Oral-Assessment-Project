@@ -1,28 +1,29 @@
 # OralAI — Nền Tảng Thi Vấn Đáp Tự Động Bằng AI
 
 Hệ thống kiến trúc **Dual-Frontend** chuẩn hóa:
+
 - **Student App (Thin-Client):** Ghi audio/video raw, tích hợp bộ lọc nhiễu real-time RNNoise (WASM AudioWorklet), tải bản ghi minh chứng theo chunk 4MB lên MinIO (Server là Source of Truth).
 - **Backend & AI Worker:** Celery Worker tự động phiên âm audio từ MinIO bằng **PhoWhisper**, chấm bài theo Rubric & RAG bằng **Ollama local hoặc Gemini**, lưu vết kiểm toán và trả kết quả cho **Staff Portal** (Web Next.js) và Student App.
 
 ## Hướng dẫn theo nhu cầu
 
-| Bạn muốn làm gì? | Tài liệu |
-| --- | --- |
+| Bạn muốn làm gì?                                                      | Tài liệu                                                                                               |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Tạo môn, sinh câu hỏi/thuật ngữ, giao bài, làm bài và xóa môn | [Hướng dẫn sử dụng cho 4 vai trò (Admin, Khảo thí, Giảng viên, Sinh viên)](docs/user-guide.md) |
-| Cài desktop, chọn server, kiểm tra mic và làm bài | [Hướng dẫn OralAI Desktop](readme-desktop.md) |
-| Chọn đúng lệnh mở desktop từ source hoặc server | [Bắt đầu nhanh](readme-desktop.md#bắt-đầu-nhanh) |
-| Kiến trúc tổng quan hệ thống & phân định 4 Actor | [Tổng quan kiến trúc](docs/specifications/01-system-overview.md) |
-| Quy tắc phòng thi, chống gian lận & Server-Side STT | [Quy tắc phòng thi & Chống gian lận (Anti-Tampering)](docs/specifications/06-business-rules.md) |
-| Thu thử/nghe lại, chỉnh gain hoặc thoát app | [Mic và thoát desktop](docs/microphone-desktop.md) |
-| Hiểu luồng nhận dạng giọng nói PhoWhisper và LLM chấm bài | [Kiến trúc STT/LLM Server-Side](docs/architecture/knowledge-speech.md) |
-| Quản lý tài khoản, môn học và đăng nhập Google | [Tài khoản, OAuth và desktop](docs/architecture/accounts-courses-desktop.md) |
-| Quản lý dữ liệu, kiểm tra mic và lọc nhiễu RNNoise | [CRUD và kiểm tra tiếng ồn](docs/architecture/crud-noise-check.md) |
-| Cấu hình số lần thi, cấp thêm lượt và xem lịch sử | [Làm lại bài thi](docs/architecture/exam-retakes.md) |
-| Hiểu độ tin cậy AI và thao tác chấm lại | [Độ tin cậy và chấm lại](docs/architecture/grading-confidence.md) |
-| Xem thiết kế CSDL, sơ đồ ERD và từ điển dữ liệu | [Thiết kế CSDL & ERD](docs/architecture/database-schema.md) |
-| Nạp bộ câu hỏi mẫu môn Kiểm thử phần mềm | [Bộ dữ liệu Software Testing](data/software-testing-istqb/README.md) |
-| Kiến trúc chi tiết Dual-Frontend & Master Specs | [Kiến trúc Dual-Frontend](docs/superpowers/specs/2026-09-30-dual-frontend-architecture.md) |
-| Tra cứu tài liệu và quy trình cũ đã lưu trữ | [Thư mục lưu trữ tài liệu cũ (Legacy MVP Archive)](docs/archive/legacy-mvp/README.md) |
+| Ứng dụng thi Thin-Client dành cho sinh viên                           | [Student App](apps/student-app/) (`npm run student`)                                                    |
+| Giao diện Web Portal dành cho Cán bộ & Giảng viên                   | [Staff Portal](apps/staff-portal/) (`npm run dev:staff`)                                                |
+| Kiến trúc tổng quan hệ thống & phân định 4 Actor                  | [Tổng quan kiến trúc](docs/specifications/01-system-overview.md)                                       |
+| Quy tắc phòng thi, chống gian lận & Server-Side STT                   | [Quy tắc phòng thi &amp; Chống gian lận (Anti-Tampering)](docs/specifications/06-business-rules.md)   |
+| Thu thử/nghe lại, chỉnh gain hoặc thoát app                          | [Mic và thoát desktop](docs/microphone-desktop.md)                                                      |
+| Hiểu luồng nhận dạng giọng nói PhoWhisper và LLM chấm bài        | [Kiến trúc STT/LLM Server-Side](docs/architecture/knowledge-speech.md)                                  |
+| Quản lý tài khoản, môn học và đăng nhập Google                  | [Tài khoản, OAuth và desktop](docs/architecture/accounts-courses-desktop.md)                           |
+| Quản lý dữ liệu, kiểm tra mic và lọc nhiễu RNNoise                | [CRUD và kiểm tra tiếng ồn](docs/architecture/crud-noise-check.md)                                    |
+| Cấu hình số lần thi, cấp thêm lượt và xem lịch sử              | [Làm lại bài thi](docs/architecture/exam-retakes.md)                                                   |
+| Hiểu độ tin cậy AI và thao tác chấm lại                           | [Độ tin cậy và chấm lại](docs/architecture/grading-confidence.md)                                   |
+| Xem thiết kế CSDL, sơ đồ ERD và từ điển dữ liệu                | [Thiết kế CSDL &amp; ERD](docs/architecture/database-schema.md)                                         |
+| Nạp bộ câu hỏi mẫu môn Kiểm thử phần mềm                        | [Bộ dữ liệu Software Testing](data/software-testing-istqb/README.md)                                   |
+| Kiến trúc chi tiết Dual-Frontend & Master Specs                        | [Kiến trúc Dual-Frontend](docs/superpowers/specs/2026-09-30-dual-frontend-architecture.md)              |
+| Tra cứu tài liệu và quy trình cũ đã lưu trữ                     | [Thư mục lưu trữ tài liệu cũ (Legacy MVP Archive)](docs/archive/legacy-mvp/README.md)              |
 
 Để bắt đầu: chạy server theo mục bên dưới, sau đó làm theo hướng dẫn desktop. Project Guide và biên bản kiểm thử có các phần lịch sử; đọc ghi chú cập nhật trước khi áp dụng.
 
@@ -76,37 +77,23 @@ docker compose up -d --no-deps --force-recreate api worker
 
 `AI_CONFIG_SOURCE=env` ưu tiên cấu hình AI trong `.env`, bỏ qua AI cũ lưu trên web. `admin` chỉ dành cho triển khai cũ muốn tiếp tục chỉnh AI trên web. OAuth và cấu hình ngôn ngữ STT vẫn chỉnh trên web. Đề đã công bố giữ snapshot AI/rubric; đổi provider/model thì xử lý lại tài liệu và công bố đề mới.
 
-## Desktop và kiểm tra mic
+## Student App (Thin-Client Desktop) & Kiểm tra Mic
 
-Đang sửa source trên Linux/macOS: chạy **`./run-desktop.sh`**. Script chỉ mở UI dev cổng 3001 và Electron, dùng server bạn đã chạy tại localhost:3000; không gọi Docker. Sửa giao diện tự cập nhật. Cần bundle STT đã build; xem [hướng dẫn](readme-desktop.md).
+Ứng dụng làm bài thi dành cho sinh viên được xây dựng theo mô hình **Thin-Client** chuẩn hóa (`apps/student-app/` — Electron + React + TypeScript):
 
-Cài bộ OralAI từ workflow **Desktop installers**. Bộ cài chứa **PhoWhisper-small INT8, runtime STT và FFmpeg**; máy học viên không cần Python hoặc tải thêm model để nhận dạng. App vẫn cần kết nối server để đăng nhập, lấy đề, nộp bài và nhận điểm.
+- **Khởi chạy ứng dụng:**
+  ```powershell
+  npm run student          # Khởi chạy Electron Desktop App
+  npm run dev:student      # Hoặc chạy Web Dev Server tại http://localhost:5173
+  ```
+- **Quy trình làm bài & Kiểm tra thiết bị:**
+  1. Đăng nhập tài khoản sinh viên (hoặc đăng nhập Google OIDC).
+  2. Cấp quyền microphone/camera và thực hiện kiểm tra độ ồn (Noise Check).
+  3. Lọc nhiễu thời gian thực bằng bộ xử lý **RNNoise WASM AudioWorklet**.
+  4. Trả lời 4 dạng bài Speaking ENTs FPTU (`GENERAL_INTERVIEW`, `PICTURE_DESCRIPTION`, `TOPIC_MONOLOGUE`, `DEEP_DISCUSSION`).
+  5. Audio/Video bằng chứng được phân mảnh thành các chunk 4MB và đẩy thẳng lên **MinIO Storage** (có mã băm SHA-256 đối soát).
 
-1. Chọn server tại **OralAI → Cấu hình máy chủ…**.
-2. Mở bài, cấp quyền và chọn microphone/camera trong danh sách **Chọn thiết bị**.
-3. Để **Gain microphone** ở 0 dB rồi bấm **Kiểm tra độ ồn**: giữ im lặng 3 giây đầu, nói thử 7 giây sau.
-4. Phát lại bản thử, bật/tắt **Nghe bản đã lọc nhiễu RNNoise** để so sánh. Bản thử không upload.
-5. Chọn bật/tắt **Lọc nhiễu RNNoise khi nhận dạng câu trả lời**, bắt đầu thi và hoàn thành các câu hỏi. Audio minh chứng được chia chunk và tải trực tiếp lên MinIO storage.
-
-Giọng nhỏ có thể tăng gain từng ít một; âm rè/gần −1 dBFS thì giảm gain và thu lại. Gain áp dụng cho bản thu thử, audio/video và STT của lần ghi mới. Bấm **Thoát ứng dụng** hoặc X để đóng; nếu còn bản chưa nộp, chọn **Ở lại** hoặc xác nhận **Rời trang / thoát**. Xem [hướng dẫn mic và thoát app](docs/microphone-desktop.md).
-
-> **Bảo mật phòng thi & Anti-Tampering:** Theo nguyên tắc bảo mật, học viên tuyệt đối không tạo, sửa đổi transcript trên máy cá nhân. Sau khi nộp bài, Celery Worker trên server sẽ tự động phiên âm bằng PhoWhisper trực tiếp từ file audio minh chứng lưu trên MinIO và chấm điểm khách quan. (Tài liệu cơ chế sửa tay cũ đã được lưu trữ tại [legacy-mvp archive](docs/archive/legacy-mvp/transcript-correction.md)).
-
-## Thuật ngữ tiếng Anh và xóa môn học
-
-Khi bấm **Sinh câu hỏi & công bố**, AI gợi ý thuật ngữ tiếng Anh kèm nghĩa tiếng Việt cho từng câu hỏi. Admin xem ngay trong **Môn học & đề thi → Bài thi & giao bài → Câu hỏi & thuật ngữ tiếng Anh gợi ý**. Gợi ý được lưu cùng phiên bản đề; đề cũ không tự sinh lại, chế độ demo không tạo thuật ngữ. Đây là gợi ý để giảng viên kiểm tra, chưa tự truyền làm hotwords cho STT.
-
-Thao tác từng bước từ chuẩn bị giáo trình đến giao đề: [hướng dẫn admin/giảng viên](docs/user-guide.md#admin-và-giảng-viên-chuẩn-bị-bài-thi). Hiện chưa sửa trực tiếp thuật ngữ; sao chép đề thành bản nháp rồi công bố để sinh bộ câu hỏi/gợi ý mới.
-
-Admin vào **Môn học → Cài đặt → Xóa môn học**, nhập đúng mã môn để xóa vĩnh viễn toàn bộ tài liệu, chủ đề, rubric, đề thi, lượt thi, kết quả và bản ghi, kể cả bài đang làm. Tài khoản người dùng và môn khác được giữ lại. Worker dọn tệp sau khi giao dịch xóa thành công, tự thử lại nếu storage lỗi. Nếu môn đang được worker xử lý, chờ rồi thử xóa lại. Giảng viên chỉ xóa được môn trống do mình quản lý.
-
-## Số lần làm bài và kết quả
-
-**Độ tin cậy AI:** lỗi chấm, demo và bài không tính điểm hiện “Chưa có độ tin cậy AI”, không hiển thị 0% giả. Số phần trăm khi chấm thành công do LLM tự báo, chưa được hiệu chuẩn. Nếu gặp `AI_CONFIG_MISMATCH`, cần tài liệu và phiên bản đề khớp cấu hình AI hiện tại. Admin có thể chọn **Chấm lại transcript đã nộp** với phiên bản giữ nguyên câu hỏi/rubric; lưu lịch sử và luôn yêu cầu xem lại. Xem [độ tin cậy và chấm lại](docs/architecture/grading-confidence.md).
-
-Admin mở **Môn học & đề thi → chọn môn → Bài thi & giao bài → Cấu hình số lần làm lại**: không cho làm lại, cho làm lại N lần hoặc không giới hạn. Ví dụ cho làm lại 1 lần là tổng cộng 2 lượt.
-
-**Kết quả & xem lại** hiển thị từng lần thi. Mở **Quản lý lượt thi** để cấp thêm lượt riêng cho sinh viên hoặc xóa lần thi được chọn. Sinh viên xem lịch sử và bấm **Làm lại bài thi** khi còn lượt. [Chi tiết và nâng cấp database](docs/architecture/exam-retakes.md).
+> **Bảo mật phòng thi & Anti-Tampering:** Theo nguyên tắc bất biến số 2, Student App tuyệt đối **KHÔNG chạy PhoWhisper local**, **KHÔNG sinh transcript** và **KHÔNG cho phép chỉnh sửa transcript** trên máy cá nhân. Sau khi nộp bài, Celery Worker trên server sẽ tự động phiên âm bằng PhoWhisper trực tiếp từ file audio minh chứng lưu trên MinIO và chấm điểm khách quan theo Rubric 5 tiêu chí FPTU.
 
 ## Admin chọn STT trên server
 

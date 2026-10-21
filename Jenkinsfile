@@ -31,7 +31,7 @@ docker compose version
 docker info --format '{{.ServerVersion}}'
 docker network inspect nginx-network --format '{{.Name}}'
 test -f docker-compose.yml
-test -f apps/admin-web/Dockerfile
+test -f apps/staff-portal/Dockerfile
 test -f services/api/Dockerfile
 # Never include an accidental real env file in the backend build context.
 test ! -f services/api/.env
@@ -59,9 +59,9 @@ docker cp services/api/tests "$ORAL_TEST_CONTAINER:/app/tests"
         stage('Build and check web') {
             steps {
                 sh '''set -eu
-docker build --target build -t "$ORAL_WEB_CHECK_IMAGE" -f apps/admin-web/Dockerfile .
-docker run --rm --network none "$ORAL_WEB_CHECK_IMAGE" sh -c 'npm run lint --workspace apps/admin-web && npm run typecheck --workspace apps/admin-web'
-docker build -t "$ORAL_WEB_IMAGE" -f apps/admin-web/Dockerfile .
+docker build -t "$ORAL_WEB_IMAGE" -f apps/staff-portal/Dockerfile .
+docker tag "$ORAL_WEB_IMAGE" "$ORAL_WEB_CHECK_IMAGE"
+docker run --rm --network none "$ORAL_WEB_IMAGE" sh -c 'npm run lint -w apps/staff-portal && npm run typecheck -w apps/staff-portal'
 '''
             }
         }
@@ -126,7 +126,7 @@ def configure(config, api_image, web_image):
     if enabled(env.get(\'GOOGLE_LOGIN_ENABLED\')) and not (env.get(\'GOOGLE_CLIENT_ID\') and env.get(\'GOOGLE_CLIENT_SECRET\')):
         abort(\'Google login is enabled but its Client ID/Secret is incomplete.\')
     if env.get(\'GOOGLE_STT_CREDENTIALS_FILE\') or env.get(\'GOOGLE_STT_CREDENTIALS_HOST_FILE\'):
-        abort(\'Leave legacy Google STT path variables empty. Desktop uses local STT; Gemini re-transcription uses GEMINI_API_KEY.\')
+        abort(\'Leave legacy Google STT path variables empty. STT is handled on server worker; Gemini re-transcription uses GEMINI_API_KEY.\')
     for svc, port, target in [(\'web\', WEB_PORT, 3000), (\'minio\', CONSOLE_PORT, 9001)]:
         ports = services[svc].get(\'ports\', [])
         if len(ports) != 1 or str(ports[0].get(\'published\')) != port or ports[0].get(\'host_ip\') != \'127.0.0.1\' or int(ports[0][\'target\']) != target:

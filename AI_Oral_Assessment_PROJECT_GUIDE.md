@@ -11,7 +11,7 @@
 > 3. **Chuẩn hóa 4 Vai trò:** `SYSTEM_ADMIN` (Quản trị kỹ thuật), `EXAMINER` (Cán bộ Khảo thí - thay mã cũ `ADMIN`), `TEACHER` (Giảng viên) và `STUDENT` (Sinh viên).
 > Chi tiết xem [Kiến trúc Dual-Frontend](docs/superpowers/specs/2026-09-30-dual-frontend-architecture.md) và [Quy tắc phòng thi](docs/specifications/06-business-rules.md). Các tài liệu MVP cũ đã được chuyển vào [docs/archive/legacy-mvp/](docs/archive/legacy-mvp/README.md).
 
-Hướng dẫn thao tác hiện hành: [4 vai trò hệ thống](docs/user-guide.md), [hướng dẫn desktop](readme-desktop.md#bắt-đầu-nhanh). Các phần thiết kế và ghi chú theo ngày bên dưới có nội dung lịch sử; dùng các hướng dẫn này để xác định chức năng đã triển khai.
+Hướng dẫn thao tác hiện hành: [4 vai trò hệ thống](docs/user-guide.md), [Student App](apps/student-app/). Các phần thiết kế và ghi chú theo ngày bên dưới có nội dung lịch sử; dùng các hướng dẫn này để xác định chức năng đã triển khai.
 
 > **Cập nhật 23/09/2026 (Lưu trữ):** Đã gỡ sửa chính tả bằng LLM khỏi desktop. PhoWhisper STT vẫn đi kèm bộ cài cũ; AI gợi ý thuật ngữ tiếng Anh khi sinh câu hỏi; admin có thể xóa cả môn học cùng dữ liệu liên quan. Xem [hướng dẫn](README.md#thuật-ngữ-tiếng-anh-và-xóa-môn-học).
 
