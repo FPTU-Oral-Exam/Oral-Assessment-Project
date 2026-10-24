@@ -6,3 +6,4 @@ export { AudioLevel } from './AudioLevel';
 export { ExamCard } from './ExamCard';
 export { SpeakingQuestionCard, PTEQuestionCard } from './SpeakingQuestionCard';
 export type { SpeakingPhase, PTEPhase } from './SpeakingQuestionCard';
+export { RolePlayCard } from './RolePlayCard';

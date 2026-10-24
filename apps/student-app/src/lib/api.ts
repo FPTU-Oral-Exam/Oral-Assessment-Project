@@ -139,6 +139,24 @@ class StudentApiClient {
     }>(`/api/student/results/${sessionKey}`);
   }
 
+  // Interactive Role-play with Local AI
+  async roleplayChat(data: {
+    session_id: string;
+    scenario_code?: string;
+    user_message?: string;
+    history?: Array<{ role: string; content: string }>;
+    turn_index?: number;
+  }) {
+    return this.client.post<{
+      persona: string;
+      reply: string;
+      turn_index: number;
+      is_final_turn: boolean;
+      tasks: Array<{ id: string; label: string }>;
+      completed_task_ids: string[];
+    }>('/api/roleplay/chat', data);
+  }
+
   // Upload endpoints (using ChunkedUploader directly in hook)
   getUploadInitUrl() {
     return `${API_BASE_URL}/api/uploads/init`;

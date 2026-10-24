@@ -351,3 +351,11 @@ class QuestionBankItemIn(Input):
 
 class QuestionBankItemImportIn(Input):
     items: list[QuestionBankItemIn]
+
+
+class RoleplayChatIn(BaseModel):
+    session_id: str
+    scenario_code: str = "ENT203_ROLE_01"
+    user_message: str = ""
+    history: list[dict] = Field(default_factory=list)
+    turn_index: int = 0
