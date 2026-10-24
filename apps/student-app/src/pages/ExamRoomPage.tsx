@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { UploadProgress, QuestionNav, CameraPreview, SpeakingQuestionCard, PTEQuestionCard } from '../components';
+import { UploadProgress, QuestionNav, CameraPreview, SpeakingQuestionCard, PTEQuestionCard, RolePlayCard } from '../components';
 import type { SpeakingPhase, PTEPhase } from '../components';
 import { playPTEBeep } from '../lib/pte-audio';
 import { useRecording, createCleanAudioBlob } from '../hooks/useRecording';
@@ -203,9 +203,23 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
     }
   }, [session, isLoading, currentAttempt, handleFinish]);
 
-  const isPTE = Boolean(
-    currentAttempt?.type && currentAttempt.type !== 'OPEN_RESPONSE'
+  const isRolePlay = Boolean(
+    currentAttempt?.type && (currentAttempt.type === 'ROLE_PLAY' || currentAttempt.type.includes('ROLE'))
   );
+  const isPTE = Boolean(
+    !isRolePlay && currentAttempt?.type && currentAttempt.type !== 'OPEN_RESPONSE'
+  );
+
+  const handleFinishRolePlay = useCallback(async () => {
+    try {
+      const emptyBuffer = new Uint8Array(200);
+      const dummyBlob = new Blob([emptyBuffer], { type: 'audio/webm' });
+      await submitAudioBlob(dummyBlob);
+    } catch (err) {
+      console.warn('Roleplay advance notice:', err);
+      await refreshSession(sessionId);
+    }
+  }, [submitAudioBlob, refreshSession, sessionId]);
 
   // Start recording with Beep sound for ENTs
   const triggerStartPTERecording = useCallback(async (speakTime: number) => {
@@ -384,6 +398,28 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
       {/* Header */}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
+          {(() => {
+            const name = session.exam_name || '';
+            const lvl = name.includes('ENT001') ? 'Level 1 (A1)' :
+              name.includes('ENT104') ? 'Level 2 (A2)' :
+              name.includes('ENT203') ? 'Level 3 (B1)' :
+              name.includes('ENT303') ? 'Level 4 (B1+)' :
+              name.includes('ENT403') ? 'Level 5 (B2)' :
+              name.includes('ENT503') ? 'Level 6 (B2+)' : null;
+            return lvl ? (
+              <span style={{
+                backgroundColor: '#1d4ed8',
+                color: '#ffffff',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                letterSpacing: '0.02em',
+              }}>
+                {lvl}
+              </span>
+            ) : null;
+          })()}
           <h1 style={styles.examName}>{session.exam_name}</h1>
           {session.practice && <span style={styles.practiceTag}>Luyện tập</span>}
         </div>
@@ -415,6 +451,12 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
                 Hoàn thành &amp; Nộp bài
               </button>
             </div>
+          ) : isRolePlay && currentAttempt ? (
+            <RolePlayCard
+              attempt={currentAttempt}
+              sessionId={sessionId}
+              onFinishRolePlay={handleFinishRolePlay}
+            />
           ) : isPTE && currentAttempt ? (
             <PTEQuestionCard
               attempt={currentAttempt}
@@ -441,7 +483,7 @@ export const ExamRoomPage: React.FC<ExamRoomPageProps> = ({ sessionId, onFinish 
             </div>
           )}
 
-          {!isAllAnswered && (
+          {!isAllAnswered && !isRolePlay && (
             <div style={styles.recordingArea}>
               {/* Timer Display (Legacy fallback only) */}
               {!isPTE && (

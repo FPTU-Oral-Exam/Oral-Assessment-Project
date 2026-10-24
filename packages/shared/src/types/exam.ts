@@ -84,6 +84,18 @@ export interface Exam {
   published_at?: number | null;
 }
 
+export interface StudentExamSlotInfo {
+  slot_id: string;
+  slot_number: number;
+  batch_name: string;
+  room: string;
+  date: number;
+  start_time: string;
+  end_time: string;
+  teacher_name: string;
+  status: string;
+}
+
 export interface StudentExam extends Omit<Exam, "status"> {
   session_id?: string | null;
   status: SessionStatus;
@@ -91,6 +103,13 @@ export interface StudentExam extends Omit<Exam, "status"> {
   remaining_attempts?: number | null;
   can_start_new: boolean;
   history?: Sitting[];
+  level_number?: string;
+  cefr_level?: string;
+  level_title?: string;
+  format_summary?: string;
+  class_code?: string;
+  course_code?: string;
+  slot_info?: StudentExamSlotInfo | null;
 }
 
 export interface Sitting {

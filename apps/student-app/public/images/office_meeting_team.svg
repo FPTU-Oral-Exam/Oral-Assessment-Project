@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="wallGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="tableGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="boardGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Office Background -->
+  <rect width="800" height="500" fill="url(#wallGrad)"/>
+  
+  <!-- Floor -->
+  <polygon points="0,380 800,380 800,500 0,500" fill="#cbd5e1" opacity="0.6"/>
+
+  <!-- Large Office Window -->
+  <rect x="50" y="40" width="220" height="200" rx="8" fill="#e0f2fe" stroke="#94a3b8" stroke-width="4"/>
+  <line x1="160" y1="40" x2="160" y2="240" stroke="#94a3b8" stroke-width="4"/>
+  <line x1="50" y1="140" x2="270" y2="140" stroke="#94a3b8" stroke-width="4"/>
+  <!-- City silhouettes through window -->
+  <rect x="70" y="110" width="30" height="130" fill="#bae6fd"/>
+  <rect x="110" y="80" width="40" height="160" fill="#7dd3fc"/>
+  <rect x="170" y="100" width="35" height="140" fill="#bae6fd"/>
+  <rect x="215" y="70" width="45" height="170" fill="#7dd3fc"/>
+
+  <!-- Presentation Whiteboard / Monitor -->
+  <rect x="320" y="30" width="430" height="230" rx="12" fill="#ffffff" stroke="#64748b" stroke-width="6"/>
+  <rect x="340" y="50" width="390" height="190" rx="8" fill="#f8fafc"/>
+  
+  <!-- Chart on Monitor -->
+  <rect x="360" y="70" width="160" height="20" rx="4" fill="url(#boardGrad)"/>
+  <text x="370" y="85" font-family="sans-serif" font-size="12" font-weight="bold" fill="#ffffff">QUARTERLY PERFORMANCE</text>
+  
+  <!-- Bar chart graphics -->
+  <rect x="370" y="170" width="25" height="50" rx="3" fill="#3b82f6"/>
+  <rect x="410" y="140" width="25" height="80" rx="3" fill="#10b981"/>
+  <rect x="450" y="110" width="25" height="110" rx="3" fill="#f59e0b"/>
+  <rect x="490" y="95" width="25" height="125" rx="3" fill="#6366f1"/>
+  <line x1="360" y1="220" x2="530" y2="220" stroke="#94a3b8" stroke-width="2"/>
+
+  <!-- Key points bullets on Monitor -->
+  <circle cx="565" cy="115" r="5" fill="#2563eb"/>
+  <rect x="580" y="110" width="130" height="10" rx="3" fill="#cbd5e1"/>
+  <circle cx="565" cy="145" r="5" fill="#10b981"/>
+  <rect x="580" y="140" width="115" height="10" rx="3" fill="#cbd5e1"/>
+  <circle cx="565" cy="175" r="5" fill="#f59e0b"/>
+  <rect x="580" y="170" width="140" height="10" rx="3" fill="#cbd5e1"/>
+
+  <!-- Meeting Table -->
+  <ellipse cx="400" cy="410" rx="360" ry="70" fill="url(#tableGrad)"/>
+  <ellipse cx="400" cy="405" rx="355" ry="65" fill="#f1f5f9"/>
+
+  <!-- Laptops on table -->
+  <rect x="220" y="380" width="55" height="35" rx="3" fill="#475569"/>
+  <rect x="360" y="390" width="60" height="38" rx="3" fill="#334155"/>
+  <rect x="510" y="380" width="55" height="35" rx="3" fill="#475569"/>
+
+  <!-- Coffee cups & notebooks -->
+  <circle cx="295" cy="400" r="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <circle cx="295" cy="400" r="6" fill="#78350f"/>
+  <rect x="445" y="395" width="30" height="20" rx="2" fill="#fef08a" stroke="#ca8a04"/>
+
+  <!-- Person 1 (Presenter, standing at right) -->
+  <ellipse cx="640" cy="270" rx="24" ry="28" fill="#fed7aa"/> <!-- Head -->
+  <path d="M 616 260 Q 640 240 664 260 Q 650 245 630 248 Z" fill="#451a03"/> <!-- Hair -->
+  <rect x="615" y="298" width="50" height="90" rx="10" fill="#1e40af"/> <!-- Suit Blazer -->
+  <polygon points="630,298 650,298 640,335" fill="#ffffff"/> <!-- Shirt -->
+  <polygon points="638,308 642,308 640,330" fill="#dc2626"/> <!-- Tie -->
+  <rect x="625" y="388" width="15" height="80" fill="#1e293b"/> <!-- Pants L -->
+  <rect x="645" y="388" width="15" height="80" fill="#1e293b"/> <!-- Pants R -->
+  <!-- Presenter Hand pointing to chart -->
+  <line x1="620" y1="320" x2="570" y2="280" stroke="#1e40af" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="565" cy="278" r="8" fill="#fed7aa"/>
+
+  <!-- Person 2 (Colleague left, seated) -->
+  <ellipse cx="180" cy="310" rx="22" ry="26" fill="#fcd34d"/>
+  <path d="M 158 305 Q 180 285 202 305 Q 190 288 170 292 Z" fill="#172554"/>
+  <rect x="155" y="336" width="50" height="60" rx="8" fill="#059669"/>
+  <!-- Glasses -->
+  <circle cx="173" cy="310" r="5" fill="none" stroke="#0f172a" stroke-width="2"/>
+  <circle cx="187" cy="310" r="5" fill="none" stroke="#0f172a" stroke-width="2"/>
+  <line x1="178" y1="310" x2="182" y2="310" stroke="#0f172a" stroke-width="2"/>
+
+  <!-- Person 3 (Colleague center-left, seated, taking notes) -->
+  <ellipse cx="320" cy="320" rx="22" ry="26" fill="#fed7aa"/>
+  <path d="M 298 315 Q 320 290 342 315 Z" fill="#7c2d12"/>
+  <rect x="295" y="346" width="50" height="50" rx="8" fill="#ea580c"/>
+
+  <!-- Person 4 (Colleague center-right, seated) -->
+  <ellipse cx="480" cy="315" rx="22" ry="26" fill="#fed7aa"/>
+  <path d="M 458 310 Q 480 290 502 310 Z" fill="#1e1b4b"/>
+  <rect x="455" y="341" width="50" height="55" rx="8" fill="#4f46e5"/>
+
+  <!-- Prompt Instruction Tag at top left -->
+  <rect x="20" y="450" width="340" height="35" rx="6" fill="#1e293b" opacity="0.9"/>
+  <text x="35" y="473" font-family="sans-serif" font-size="13" font-weight="bold" fill="#38bdf8">
+    ENT Speaking: Describe Image Prompt
+  </text>
+</svg>

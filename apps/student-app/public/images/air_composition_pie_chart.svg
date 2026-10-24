@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 340" width="100%" height="100%">
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="#ffffff" rx="16"/>
+  
+  <!-- Title -->
+  <text x="250" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="bold" fill="#1e293b" text-anchor="middle">
+    Approximate Composition of the Air
+  </text>
+  <text x="250" y="52" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="middle">
+    Atmospheric Gas Distribution (Percentage by Volume)
+  </text>
+
+  <!-- Pie Chart Slices Center: (170, 185), Radius: 105 -->
+  <!-- Nitrogen: 78% -> 280.8 degrees. Arc from 0 to 280.8 deg -->
+  <path d="M 170 185 L 170 80 A 105 105 0 1 1 71.2 220.5 Z" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+  
+  <!-- Oxygen: 21% -> 75.6 degrees. Arc from 280.8 to 356.4 deg -->
+  <path d="M 170 185 L 71.2 220.5 A 105 105 0 0 1 163.4 80.2 Z" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
+  
+  <!-- Other gases: 1% -> 3.6 degrees. Arc from 356.4 to 360 deg -->
+  <path d="M 170 185 L 163.4 80.2 A 105 105 0 0 1 170 80 Z" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
+
+  <!-- Percentage Labels on Pie -->
+  <text x="215" y="195" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="bold" fill="#ffffff" text-anchor="middle">78%</text>
+  <text x="100" y="160" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">21%</text>
+
+  <!-- Legend Box -->
+  <g transform="translate(320, 110)">
+    <!-- Nitrogen -->
+    <rect x="0" y="0" width="16" height="16" rx="4" fill="#2563eb"/>
+    <text x="24" y="13" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#1e293b">Nitrogen (78%)</text>
+    <text x="24" y="28" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#64748b">Most abundant gas</text>
+
+    <!-- Oxygen -->
+    <rect x="0" y="48" width="16" height="16" rx="4" fill="#10b981"/>
+    <text x="24" y="61" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#1e293b">Oxygen (21%)</text>
+    <text x="24" y="76" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#64748b">Essential for life</text>
+
+    <!-- Other Gases -->
+    <rect x="0" y="96" width="16" height="16" rx="4" fill="#f59e0b"/>
+    <text x="24" y="109" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#1e293b">Other gases (1%)</text>
+    <text x="24" y="124" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#64748b">Argon, CO2, Water vapor</text>
+  </g>
+
+  <!-- Footer Note -->
+  <text x="250" y="325" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">
+    ENTS Speaking Standard Test Item - Picture Description #03
+  </text>
+</svg>

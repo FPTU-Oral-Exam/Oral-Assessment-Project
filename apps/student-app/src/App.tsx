@@ -19,34 +19,9 @@ const App: React.FC = () => {
   const [sessionId, setSessionId] = useState<string>('');
   const [selectedExam, setSelectedExam] = useState<StudentExam | null>(null);
 
-  const handleLogin = async (authToken: string, authUser: import('@oralai/shared').User, examCode?: string) => {
+  const handleLogin = async (authToken: string, authUser: import('@oralai/shared').User) => {
     api.setToken(authToken);
     login(authToken, authUser);
-
-    try {
-      const availableExams = await api.getAvailableExams();
-      // Tìm bài thi ENTs Speaking (hoặc theo mã nếu có)
-      const targetExam = availableExams.find((e) => {
-        const examName = (e.name || (e as any).title || '').toLowerCase();
-        const titleMatch = examName.includes('ent') || examName.includes('speaking');
-        const codeMatch = examCode ? e.id.toLowerCase().includes(examCode.toLowerCase()) || examName.includes(examCode.toLowerCase()) : false;
-        return codeMatch || titleMatch;
-      }) || availableExams[0];
-
-      if (targetExam) {
-        setSelectedExam(targetExam);
-        // Tạo attempt mới để vào thi ngay
-        const session = await api.createSession(targetExam.id, true);
-        if (session && session.id) {
-          setSessionId(session.id);
-          setCurrentPage('exam-room');
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('Auto-start exam failed, falling back to exam list:', err);
-    }
-
     setCurrentPage('exam-list');
   };
 
@@ -57,8 +32,11 @@ const App: React.FC = () => {
     setCurrentPage('login');
   };
 
-  const handleStartExam = (newSessionId: string) => {
+  const handleStartExam = (newSessionId: string, exam?: StudentExam) => {
     setSessionId(newSessionId);
+    if (exam) {
+      setSelectedExam(exam);
+    }
     setCurrentPage('device-check');
   };
 

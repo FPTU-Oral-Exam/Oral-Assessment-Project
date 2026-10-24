@@ -17,7 +17,8 @@ from .db import get_db
 from .grading import GradingError, check_config
 from .models import (
     Assignment, Attempt, Audit, Course, CourseCandidate, CourseEnrollment,
-    Exam, ExamSession, ExamVariant, ScheduleSlot, SlotAssignment, Upload
+    Exam, ExamBatch, ExamEnrollment, ExamSession, ExamVariant, ScheduleSlot,
+    Section, SlotAssignment, Upload, User
 )
 from .practice import COURSE_ID
 from .retakes import ACTIVE, allowance, history_row, sessions_for
@@ -138,15 +139,71 @@ def available(db: Session = Depends(get_db), user=Depends(current_user)):
         snap = exam.snapshot or {}
         questions = snap.get("questions") or []
         course_obj = db.get(Course, exam.course_id)
+        course_code = course_obj.code if course_obj else ""
+
+        # Map Level information
+        LEVEL_MAP = {
+            "ENT001": {"level": "Level 1", "cefr": "A1", "title": "Level 1: Tiếng Anh Dự bị 1 (A1)", "format": "Part 1: Phỏng vấn (5 câu) + Part 2: Miêu tả tranh"},
+            "ENT104": {"level": "Level 2", "cefr": "A2", "title": "Level 2: Tiếng Anh Cơ sở 2 (A2)", "format": "Part 1: Phỏng vấn (5 câu) + Part 2: Miêu tả tranh"},
+            "ENT203": {"level": "Level 3", "cefr": "B1", "title": "Level 3: Tiếng Anh Giao tiếp 3 (B1)", "format": "Part 1: Đóng vai với Local AI (Role-play) + Part 2: Thảo luận sâu"},
+            "ENT303": {"level": "Level 4", "cefr": "B1+", "title": "Level 4: Tiếng Anh Học thuật 4 (B1+)", "format": "Part 1: Đóng vai với Local AI (Role-play) + Part 2: Thảo luận sâu"},
+            "ENT403": {"level": "Level 5", "cefr": "B2", "title": "Level 5: Tiếng Anh Nâng cao 5 (B2)", "format": "Part 1: Thuyết trình độc thoại (Long Run) + Part 2: Phản biện"},
+            "ENT503": {"level": "Level 6", "cefr": "B2+", "title": "Level 6: Tiếng Anh Biện luận 6 (B2+)", "format": "Part 1: Thuyết trình độc thoại (Long Run) + Part 2: Phản biện chuyên sâu"},
+        }
+        lvl = LEVEL_MAP.get(course_code, {
+            "level": "Speaking",
+            "cefr": "Standard",
+            "title": course_obj.name if course_obj else exam.name,
+            "format": "ENTs Speaking Assessment"
+        })
+
+        # Find assigned ScheduleSlot for this student & exam
+        slot_assign = db.scalar(
+            select(SlotAssignment)
+            .join(ScheduleSlot, ScheduleSlot.id == SlotAssignment.slot_id)
+            .where(ScheduleSlot.exam_id == exam.id, SlotAssignment.student_id == user.id)
+        )
+        slot_info = None
+        if slot_assign:
+            slot_obj = db.get(ScheduleSlot, slot_assign.slot_id)
+            if slot_obj:
+                teacher_obj = db.get(User, slot_obj.teacher_id) if slot_obj.teacher_id else None
+                batch_obj = db.get(ExamBatch, slot_obj.batch_id) if slot_obj.batch_id else None
+                slot_info = {
+                    "slot_id": slot_obj.id,
+                    "slot_number": slot_obj.slot_number,
+                    "batch_name": batch_obj.name if batch_obj else f"Ca {slot_obj.slot_number}",
+                    "room": slot_obj.room,
+                    "date": slot_obj.date,
+                    "start_time": slot_obj.start_time,
+                    "end_time": slot_obj.end_time,
+                    "teacher_name": teacher_obj.name if teacher_obj else "Cán bộ coi thi",
+                    "status": slot_obj.status,
+                }
+
+        # Resolve student class section
+        sec_code = db.scalar(
+            select(Section.code)
+            .join(ExamEnrollment, ExamEnrollment.section_id == Section.id)
+            .where(ExamEnrollment.student_id == user.id, Section.course_id == exam.course_id)
+        )
+
         result.append(
             {
                 "id": exam.id,
                 "name": exam.name,
                 "course_id": exam.course_id,
                 "course_name": course_obj.name if course_obj else "",
+                "course_code": course_code,
+                "level_number": lvl["level"],
+                "cefr_level": lvl["cefr"],
+                "level_title": lvl["title"],
+                "format_summary": lvl["format"],
+                "class_code": sec_code or "Lớp chung",
+                "slot_info": slot_info,
                 "practice": bool(snap.get("practice")),
                 "time_limit": exam.time_limit,
-                "question_count": len(questions) if questions else (exam.question_count or 3),
+                "question_count": len(questions) if questions else (exam.question_count or 2),
                 "session_id": session.id if session else None,
                 "status": session.status if session else "ASSIGNED",
                 **allowance(db, exam, user.id, sessions),
@@ -634,3 +691,123 @@ def student_result_detail(
             for a in attempts
         ],
     }
+
+
+@router.post("/roleplay/chat")
+def roleplay_chat(payload: s.RoleplayChatIn, db: Session = Depends(get_db), user=Depends(student)):
+    """Interactive multi-turn Role-play chat with Local AI (Ollama)."""
+    session = owned_session(db, payload.session_id, user)
+    scenario = (payload.scenario_code or "").upper()
+
+    if "ENT303" in scenario or "ETIQUETTE" in scenario:
+        persona_name = "Sarah (Workplace Advisor)"
+        system_prompt = (
+            "You are Sarah, an international workplace culture advisor at a multinational company in Vietnam. "
+            "A student exchange intern is having a B1+ role-play conversation with you to learn about business etiquette. "
+            "Context knowledge: "
+            "1. Greetings: A polite handshake, warm smile, and direct eye contact are standard. "
+            "2. Topics: Never ask colleagues about personal salary, marital status, or age. Keep small talk to hobbies, weather, or work projects. "
+            "3. Meeting etiquette: Arrive 5 minutes before scheduled start, silence smartphones, take notes actively. "
+            "4. Business dining: Wait until the host or senior manager invites everyone before taking food. "
+            "CRITICAL INSTRUCTIONS: "
+            "- Answer the student's question clearly in 1 or 2 natural sentences. "
+            "- Use accessible CEFR B1/B1+ level English. "
+            "- After answering, guide the student to ask the next question about taboos, meetings, or dining. "
+            "- Never produce a long monologue."
+        )
+        initial_greeting = "Hello! Nice to meet you. I'm Sarah, your workplace advisor. What would you like to ask about our office culture and business etiquette?"
+        tasks = [
+            {"id": "greeting", "label": "1. Chào hỏi & phong cách giao tiếp nơi công sở"},
+            {"id": "taboos", "label": "2. Các chủ đề tế nhị nên tránh (Taboo topics)"},
+            {"id": "meetings", "label": "3. Quy tắc tham gia cuộc họp & ghi chú"},
+            {"id": "dining", "label": "4. Văn hóa bàn ăn & giao lưu đối tác"},
+        ]
+    else:
+        persona_name = "Alex (Travel Coordinator)"
+        system_prompt = (
+            "You are Alex, a friendly student travel coordinator for the university's weekend trip to Da Nang. "
+            "A student is asking you questions to prepare for the trip. "
+            "Context knowledge: "
+            "1. Date & Departure: Saturday, 24th October, departing at 6:00 AM sharp from the University Main Gate. "
+            "2. Cost: 250,000 VND per student (covers round-trip bus, tour guide, and lunch). "
+            "3. Places to visit: Marble Mountains (Ngũ Hành Sơn) in the morning and My Khe Beach in the afternoon. "
+            "4. Items to bring: Valid Student ID card, umbrella or raincoat, comfortable walking sneakers, and water. "
+            "CRITICAL INSTRUCTIONS: "
+            "- Answer the student's question clearly and accurately in 1 or 2 natural sentences. "
+            "- Use accessible CEFR B1 level English. "
+            "- After answering, encourage them to ask the next question about cost, places, or preparation. "
+            "- Never produce a long monologue."
+        )
+        initial_greeting = "Good morning! Welcome to the Da Nang School Trip Info Desk. How can I help you with your trip today?"
+        tasks = [
+            {"id": "time", "label": "1. Ngày đi & giờ xe xuất phát"},
+            {"id": "price", "label": "2. Giá vé & các chi phí bao gồm"},
+            {"id": "places", "label": "3. Các địa điểm tham quan chính"},
+            {"id": "items", "label": "4. Đồ dùng cá nhân cần chuẩn bị & kết thúc"},
+        ]
+
+    # Turn 0 greeting
+    if not payload.user_message.strip() and payload.turn_index == 0:
+        return {
+            "persona": persona_name,
+            "reply": initial_greeting,
+            "turn_index": 0,
+            "is_final_turn": False,
+            "tasks": tasks,
+            "completed_task_ids": [],
+        }
+
+    # Call Ollama
+    cfg = settings()
+    messages = [{"role": "system", "content": system_prompt}]
+    for h in payload.history:
+        role = h.get("role", "user")
+        if role in ["user", "assistant"]:
+            messages.append({"role": role, "content": h.get("content", "")})
+    messages.append({"role": "user", "content": payload.user_message.strip()})
+
+    reply = ""
+    try:
+        import httpx
+        res = httpx.post(
+            cfg.local_llm_url.rstrip("/") + "/api/chat",
+            json={"model": "qwen2.5:7b", "messages": messages, "stream": False},
+            timeout=30.0,
+        )
+        if res.status_code == 200:
+            data = res.json()
+            reply = data.get("message", {}).get("content", "").strip()
+    except Exception:
+        pass
+
+    if not reply:
+        if payload.turn_index == 0:
+            reply = "The bus departs at 6:00 AM this Saturday from the main gate. What else would you like to know?"
+        elif payload.turn_index == 1:
+            reply = "The ticket is 250,000 VND per student, which includes travel, lunch, and entrance tickets. Are you interested in the destinations?"
+        elif payload.turn_index == 2:
+            reply = "We will visit Marble Mountains in the morning and My Khe Beach in the afternoon. Please bring your student ID and comfortable shoes!"
+        else:
+            reply = "You're all set! Thank you for registering, and see you this Saturday morning!"
+
+    full_text = (payload.user_message + " " + " ".join(h.get("content", "") for h in payload.history)).lower()
+    completed_task_ids = []
+    if any(k in full_text for k in ["time", "when", "depart", "leave", "date", "saturday", "greeting", "hello", "hi"]):
+        completed_task_ids.append(tasks[0]["id"])
+    if any(k in full_text for k in ["price", "cost", "how much", "ticket", "fee", "vnd", "taboo", "salary"]):
+        completed_task_ids.append(tasks[1]["id"])
+    if any(k in full_text for k in ["place", "where", "visit", "destination", "mountain", "beach", "meeting", "notes"]):
+        completed_task_ids.append(tasks[2]["id"])
+    if any(k in full_text for k in ["bring", "prepare", "need", "shoe", "id", "umbrella", "dining", "food", "thank"]):
+        completed_task_ids.append(tasks[3]["id"])
+
+    new_turn = payload.turn_index + 1
+    return {
+        "persona": persona_name,
+        "reply": reply,
+        "turn_index": new_turn,
+        "is_final_turn": new_turn >= 3,
+        "tasks": tasks,
+        "completed_task_ids": completed_task_ids,
+    }
+
